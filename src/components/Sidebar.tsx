@@ -1,7 +1,7 @@
 import React from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { X, LogOut, Settings, User, Camera, ChevronRight, Mail, Shield, Bell, Globe, Lock, Eye, ListFilter, Plus, Trash, RefreshCw } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { X, LogOut, Settings, User, Camera, ChevronRight, Mail, Shield, Bell, Globe, Lock, Eye, ListFilter, Plus, Trash, RefreshCw, GripVertical } from "lucide-react";
+import { motion, AnimatePresence, Reorder } from "motion/react";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -30,14 +30,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [tempNickname, setTempNickname] = React.useState(profile?.nickname || "");
   const [tempAccessCode, setTempAccessCode] = React.useState("");
 
-  const [editTaskTypes, setEditTaskTypes] = React.useState<string[]>(taskTypes);
-  const [editPriorities, setEditPriorities] = React.useState<string[]>(priorities);
-  const [editJobTitles, setEditJobTitles] = React.useState<string[]>(jobTitles);
+  const [editTaskTypes, setEditTaskTypes] = React.useState<{id: string, value: string}[]>([]);
+  const [editPriorities, setEditPriorities] = React.useState<{id: string, value: string}[]>([]);
+  const [editJobTitles, setEditJobTitles] = React.useState<{id: string, value: string}[]>([]);
 
   React.useEffect(() => {
-    setEditTaskTypes(taskTypes);
-    setEditPriorities(priorities);
-    setEditJobTitles(jobTitles);
+    setEditTaskTypes(taskTypes.map(t => ({id: Math.random().toString(), value: t})));
+    setEditPriorities(priorities.map(t => ({id: Math.random().toString(), value: t})));
+    setEditJobTitles(jobTitles.map(t => ({id: Math.random().toString(), value: t})));
   }, [taskTypes, priorities, jobTitles]);
 
   React.useEffect(() => {
@@ -56,9 +56,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       updateAccessCode(tempAccessCode);
       alert("접속 코드가 성공적으로 변경되었습니다.");
     } else if (activeSubModal === "categories") {
-      updateTaskTypes(editTaskTypes);
-      updatePriorities(editPriorities);
-      updateJobTitles(editJobTitles);
+      updateTaskTypes(editTaskTypes.map(t => t.value));
+      updatePriorities(editPriorities.map(t => t.value));
+      updateJobTitles(editJobTitles.map(t => t.value));
       alert("항목 설정이 저장되었습니다.");
     }
     setActiveSubModal(null);
@@ -173,28 +173,34 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div className="space-y-4">
                   <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest px-1">작업 유형 목록</label>
                   <div className="space-y-2">
-                    {editTaskTypes.map((type, idx) => (
-                      <div key={idx} className="flex gap-2">
-                        <input 
-                          type="text"
-                          value={type}
-                          onChange={(e) => {
-                            const newTypes = [...editTaskTypes];
-                            newTypes[idx] = e.target.value;
-                            setEditTaskTypes(newTypes);
-                          }}
-                          className="flex-1 bg-[#2d2d2d] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-                        />
-                        <button 
-                          onClick={() => setEditTaskTypes(editTaskTypes.filter((_, i) => i !== idx))}
-                          className="p-2 bg-red-500/10 text-red-500 rounded-xl"
-                        >
-                          <Trash className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                    <Reorder.Group axis="y" values={editTaskTypes} onReorder={setEditTaskTypes} className="space-y-2">
+                      {editTaskTypes.map((item, idx) => (
+                        <Reorder.Item key={item.id} value={item} className="flex gap-2 relative z-10 w-full bg-[#1e1e1e]">
+                          <div className="flex flex-col gap-1 cursor-grab active:cursor-grabbing justify-center px-1 text-gray-500 hover:text-white">
+                            <GripVertical className="w-5 h-5 flex-shrink-0" />
+                          </div>
+                          <input 
+                            type="text"
+                            value={item.value}
+                            onChange={(e) => {
+                              const newTypes = [...editTaskTypes];
+                              newTypes[idx] = { ...newTypes[idx], value: e.target.value };
+                              setEditTaskTypes(newTypes);
+                            }}
+                            className="flex-1 bg-[#2d2d2d] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 min-w-0"
+                          />
+                          <button 
+                            onClick={() => setEditTaskTypes(editTaskTypes.filter((_, i) => i !== idx))}
+                            className="p-2 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center h-full self-center flex-shrink-0"
+                            style={{ height: "42px" }}
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </Reorder.Item>
+                      ))}
+                    </Reorder.Group>
                     <button 
-                      onClick={() => setEditTaskTypes([...editTaskTypes, ""])}
+                      onClick={() => setEditTaskTypes([...editTaskTypes, {id: Math.random().toString(), value: ""}])}
                       className="w-full py-2 border border-dashed border-white/10 rounded-xl text-xs text-gray-500 flex items-center justify-center gap-2 hover:bg-white/5"
                     >
                       <Plus className="w-3 h-3" /> 항목 추가
@@ -206,28 +212,34 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div className="space-y-4">
                   <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest px-1">우선순위 목록</label>
                   <div className="space-y-2">
-                    {editPriorities.map((p, idx) => (
-                      <div key={idx} className="flex gap-2">
-                        <input 
-                          type="text"
-                          value={p}
-                          onChange={(e) => {
-                            const newP = [...editPriorities];
-                            newP[idx] = e.target.value;
-                            setEditPriorities(newP);
-                          }}
-                          className="flex-1 bg-[#2d2d2d] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-                        />
-                        <button 
-                          onClick={() => setEditPriorities(editPriorities.filter((_, i) => i !== idx))}
-                          className="p-2 bg-red-500/10 text-red-500 rounded-xl"
-                        >
-                          <Trash className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                    <Reorder.Group axis="y" values={editPriorities} onReorder={setEditPriorities} className="space-y-2">
+                      {editPriorities.map((item, idx) => (
+                        <Reorder.Item key={item.id} value={item} className="flex gap-2 relative z-10 w-full bg-[#1e1e1e]">
+                          <div className="flex flex-col gap-1 cursor-grab active:cursor-grabbing justify-center px-1 text-gray-500 hover:text-white">
+                            <GripVertical className="w-5 h-5 flex-shrink-0" />
+                          </div>
+                          <input 
+                            type="text"
+                            value={item.value}
+                            onChange={(e) => {
+                              const newP = [...editPriorities];
+                              newP[idx] = { ...newP[idx], value: e.target.value };
+                              setEditPriorities(newP);
+                            }}
+                            className="flex-1 bg-[#2d2d2d] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 min-w-0"
+                          />
+                          <button 
+                            onClick={() => setEditPriorities(editPriorities.filter((_, i) => i !== idx))}
+                            className="p-2 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center h-full self-center flex-shrink-0"
+                            style={{ height: "42px" }}
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </Reorder.Item>
+                      ))}
+                    </Reorder.Group>
                     <button 
-                      onClick={() => setEditPriorities([...editPriorities, ""])}
+                      onClick={() => setEditPriorities([...editPriorities, {id: Math.random().toString(), value: ""}])}
                       className="w-full py-2 border border-dashed border-white/10 rounded-xl text-xs text-gray-500 flex items-center justify-center gap-2 hover:bg-white/5"
                     >
                       <Plus className="w-3 h-3" /> 항목 추가
@@ -239,28 +251,34 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div className="space-y-4">
                   <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest px-1">직책 목록</label>
                   <div className="space-y-2">
-                    {editJobTitles.map((title, idx) => (
-                      <div key={idx} className="flex gap-2">
-                        <input 
-                          type="text"
-                          value={title}
-                          onChange={(e) => {
-                            const newTitles = [...editJobTitles];
-                            newTitles[idx] = e.target.value;
-                            setEditJobTitles(newTitles);
-                          }}
-                          className="flex-1 bg-[#2d2d2d] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-                        />
-                        <button 
-                          onClick={() => setEditJobTitles(editJobTitles.filter((_, i) => i !== idx))}
-                          className="p-2 bg-red-500/10 text-red-500 rounded-xl"
-                        >
-                          <Trash className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                    <Reorder.Group axis="y" values={editJobTitles} onReorder={setEditJobTitles} className="space-y-2">
+                      {editJobTitles.map((item, idx) => (
+                        <Reorder.Item key={item.id} value={item} className="flex gap-2 relative z-10 w-full bg-[#1e1e1e]">
+                          <div className="flex flex-col gap-1 cursor-grab active:cursor-grabbing justify-center px-1 text-gray-500 hover:text-white">
+                            <GripVertical className="w-5 h-5 flex-shrink-0" />
+                          </div>
+                          <input 
+                            type="text"
+                            value={item.value}
+                            onChange={(e) => {
+                              const newTitles = [...editJobTitles];
+                              newTitles[idx] = { ...newTitles[idx], value: e.target.value };
+                              setEditJobTitles(newTitles);
+                            }}
+                            className="flex-1 bg-[#2d2d2d] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 min-w-0"
+                          />
+                          <button 
+                            onClick={() => setEditJobTitles(editJobTitles.filter((_, i) => i !== idx))}
+                            className="p-2 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center h-full self-center flex-shrink-0"
+                            style={{ height: "42px" }}
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </Reorder.Item>
+                      ))}
+                    </Reorder.Group>
                     <button 
-                      onClick={() => setEditJobTitles([...editJobTitles, ""])}
+                      onClick={() => setEditJobTitles([...editJobTitles, {id: Math.random().toString(), value: ""}])}
                       className="w-full py-2 border border-dashed border-white/10 rounded-xl text-xs text-gray-500 flex items-center justify-center gap-2 hover:bg-white/5"
                     >
                       <Plus className="w-3 h-3" /> 항목 추가
