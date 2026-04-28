@@ -8,10 +8,23 @@ export function NotificationManager({ tasks }: { tasks: Task[] }) {
   const prevTasksRef = useRef<Task[]>(tasks);
   const notifiedKeysRef = useRef<Set<string>>(new Set());
 
-  const sendPush = (title: string, body: string) => {
+  const sendPush = async (title: string, body: string) => {
     if (!notificationSettings?.pushEnabled) return;
     if ("Notification" in window && Notification.permission === "granted") {
-      new Notification(title, { body, icon: "https://www.google.com/favicon.ico" });
+      try {
+        if (navigator.serviceWorker) {
+          // getRegistration is safer than waiting for .ready if not registered properly, but ready works if registered.
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg && reg.showNotification) {
+            await reg.showNotification(title, { body, icon: "/favicon.ico" });
+            return;
+          }
+        }
+        // Fallback for browsers that support the Notification constructor directly
+        new Notification(title, { body, icon: "/favicon.ico" });
+      } catch (err) {
+        console.error("Push notification failed:", err);
+      }
     }
   };
 

@@ -66,7 +66,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   const requestNotificationPermission = async () => {
     if (!("Notification" in window)) {
-      alert("이 브라우저는 알림 기능을 지원하지 않습니다.");
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS) {
+        alert("iOS에서는 Safari 브라우저로 접속한 뒤 '홈 화면에 추가'를 해야만 알림을 지원합니다.\n\nSafari에서 이 사이트를 열고 [공유] 버튼 > [홈 화면에 추가]를 진행해주세요.");
+      } else {
+        alert("이 브라우저는 알림 기능을 지원하지 않습니다.");
+      }
       return;
     }
     
