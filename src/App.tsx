@@ -104,7 +104,7 @@ export default function App() {
         setView={setView}
         filterAssignee={filterAssignee}
         setFilterAssignee={setFilterAssignee}
-        assignees={activeAssignees}
+        assignees={allAssignees}
         onMenuClick={() => setIsSidebarOpen(true)}
       />
 
