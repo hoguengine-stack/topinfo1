@@ -7,9 +7,10 @@ interface TaskTableProps {
   tasks: Task[];
   onEdit: (task: Task) => void;
   onAdd: () => void;
+  onToggleComplete?: (task: Task) => void;
 }
 
-export function TaskTable({ tasks, onEdit, onAdd }: TaskTableProps) {
+export function TaskTable({ tasks, onEdit, onAdd, onToggleComplete }: TaskTableProps) {
   const [statusFilter, setStatusFilter] = useState<string>("전체");
   const [typeFilter, setTypeFilter] = useState<string>("전체");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("전체");
@@ -170,10 +171,19 @@ export function TaskTable({ tasks, onEdit, onAdd }: TaskTableProps) {
                     {task.title}
                   </h3>
                 </div>
-                <div className="flex items-center gap-1.5 text-gray-500 text-[10px]">
-                  <Calendar className="w-3 h-3" />
-                  <span>{task.dueDate}</span>
-                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onToggleComplete) onToggleComplete(task);
+                  }}
+                  className={`flex items-center justify-center w-6 h-6 rounded-full border-2 transition-colors ${
+                    isCompleted 
+                      ? "border-emerald-500 bg-emerald-500 text-[#1e1e1e]" 
+                      : "border-gray-500 hover:border-emerald-500 text-transparent hover:text-emerald-500/50"
+                  }`}
+                >
+                  {isCompleted && <CheckCircle2 className="w-6 h-6" />}
+                </button>
               </div>
 
               <div className="flex items-center justify-between">

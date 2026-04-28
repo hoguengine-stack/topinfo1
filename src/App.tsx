@@ -9,6 +9,7 @@ import { AuthScreens } from "./components/AuthScreens";
 import { useAuth } from "./contexts/AuthContext";
 import { Sidebar } from "./components/Sidebar";
 import { TodayTasksNotification } from "./components/TodayTasksNotification";
+import { NotificationManager } from "./components/NotificationManager";
 import { NoteEditor } from "./components/NoteEditor";
 
 export default function App() {
@@ -85,6 +86,10 @@ export default function App() {
     setIsModalOpen(true);
   };
 
+  const handleToggleComplete = (task: Task) => {
+    updateTask(task.id, { status: task.status === "완료" ? "예정" : "완료" });
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-app-bg flex items-center justify-center">
@@ -117,6 +122,7 @@ export default function App() {
               tasks={filteredTasks}
               onEdit={handleEdit}
               onAdd={handleAdd}
+              onToggleComplete={handleToggleComplete}
             />
           </div>
         ) : view === "calendar" ? (
@@ -129,13 +135,20 @@ export default function App() {
           </div>
         ) : (
           <div key="shared-note-container" className="h-[calc(100vh-120px)]">
-            <NoteEditor docPath="notes/shared_note" title="공유 노트" isShared={true} />
+            <NoteEditor 
+              docPath="notes/shared_note" 
+              title="공유 노트" 
+              isShared={true} 
+              completedTasks={tasks.filter(t => t.status === "완료").sort((a,b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())}
+              onToggleComplete={handleToggleComplete}
+            />
           </div>
         )}
       </main>
 
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <TodayTasksNotification tasks={tasks} />
+      <NotificationManager tasks={tasks} />
 
       {isModalOpen && (
         <TaskModal

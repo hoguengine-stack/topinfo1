@@ -11,7 +11,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { 
     user, profile, logout, updateProfilePicture, updateJobTitle, updateNickname, updateAccessCode,
-    taskTypes, priorities, jobTitles, updateTaskTypes, updatePriorities, updateJobTitles, forceRefreshAllPCs
+    taskTypes, priorities, jobTitles, notificationSettings, updateTaskTypes, updatePriorities, updateJobTitles, updateNotificationSettings, forceRefreshAllPCs
   } = useAuth();
   const [activeSubModal, setActiveSubModal] = React.useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = React.useState(() => {
@@ -27,9 +27,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       document.documentElement.classList.remove("dark");
     }
   };
-  const [notificationsEnabled, setNotificationsEnabled] = React.useState(() => {
-    return "Notification" in window && Notification.permission === "granted";
-  });
   const [tempNickname, setTempNickname] = React.useState(profile?.nickname || "");
   const [tempAccessCode, setTempAccessCode] = React.useState("");
 
@@ -44,8 +41,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   }, [taskTypes, priorities, jobTitles]);
 
   React.useEffect(() => {
-    if ("Notification" in window) {
-      setNotificationsEnabled(Notification.permission === "granted");
+    if ("Notification" in window && Notification.permission === "granted" && !notificationSettings.pushEnabled) {
+      // Keep state in sync if permission is granted but settings say off? 
+      // Actually we just read from notificationSettings.pushEnabled
     }
   }, []);
 
@@ -77,21 +75,20 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       return;
     }
 
-    if (notificationsEnabled) {
-      // If already enabled, just toggle UI state (simulated off)
-      setNotificationsEnabled(false);
+    if (notificationSettings.pushEnabled) {
+      updateNotificationSettings({ ...notificationSettings, pushEnabled: false });
       return;
     }
 
     const permission = await Notification.requestPermission();
     if (permission === "granted") {
-      setNotificationsEnabled(true);
+      updateNotificationSettings({ ...notificationSettings, pushEnabled: true });
       new Notification("알림 설정 완료", {
-        body: "이제 모바일 환경에서도 실시간 알림을 받으실 수 있습니다.",
+        body: "이제 실시간 알림을 받으실 수 있습니다.",
         icon: "https://www.google.com/favicon.ico"
       });
     } else {
-      setNotificationsEnabled(false);
+      updateNotificationSettings({ ...notificationSettings, pushEnabled: false });
     }
   };
 
@@ -99,7 +96,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     if (!activeSubModal) return null;
 
     const title = activeSubModal === "profile" ? "프로필 정보 수정" : 
-                  activeSubModal === "settings" ? "앱 설정" : 
+                  activeSubModal === "settings" ? "알림설정" : 
                   activeSubModal === "categories" ? "항목 관리 설정" :
                   "보안 및 개인정보";
 
@@ -270,39 +267,39 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
             {activeSubModal === "settings" && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-[#2d2d2d] rounded-2xl border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <Bell className="w-5 h-5 text-emerald-500" />
-                    <span className="text-sm text-white font-medium">푸시 알림</span>
+                <div className="flex flex-col gap-3 p-4 bg-[#2d2d2d] rounded-2xl border border-white/5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Bell className="w-5 h-5 text-emerald-500" />
+                      <span className="text-sm text-white font-medium">푸시 알림</span>
+                    </div>
+                    <button 
+                      onClick={requestNotificationPermission}
+                      className={`w-10 h-6 rounded-full relative transition-colors ${notificationSettings.pushEnabled ? "bg-emerald-500" : "bg-gray-600"}`}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${notificationSettings.pushEnabled ? "right-1" : "left-1"}`} />
+                    </button>
                   </div>
-                  <button 
-                    onClick={requestNotificationPermission}
-                    className={`w-10 h-6 rounded-full relative transition-colors ${notificationsEnabled ? "bg-emerald-500" : "bg-gray-600"}`}
-                  >
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${notificationsEnabled ? "right-1" : "left-1"}`} />
-                  </button>
-                </div>
-                {/* 
-                <div className="flex items-center justify-between p-4 bg-[#2d2d2d] rounded-2xl border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <Globe className="w-5 h-5 text-blue-500" />
-                    <span className="text-sm text-white font-medium">언어 설정</span>
+                  
+                  <div className="pt-3 border-t border-white/10 space-y-3">
+                    <label className={`flex items-center justify-between text-sm ${notificationSettings.pushEnabled ? 'text-gray-300' : 'text-gray-500'}`}>
+                      <span>마감일 임박 알림 (1시간 전)</span>
+                      <input type="checkbox" disabled={!notificationSettings.pushEnabled} checked={notificationSettings.notifyBeforeDeadline} onChange={(e) => updateNotificationSettings({...notificationSettings, notifyBeforeDeadline: e.target.checked})} className="accent-emerald-500 w-4 h-4 cursor-pointer disabled:opacity-50" />
+                    </label>
+                    <label className={`flex items-center justify-between text-sm ${notificationSettings.pushEnabled ? 'text-gray-300' : 'text-gray-500'}`}>
+                      <span>기한초과 경고 (1시간 뒤)</span>
+                      <input type="checkbox" disabled={!notificationSettings.pushEnabled} checked={notificationSettings.notifyOverdue} onChange={(e) => updateNotificationSettings({...notificationSettings, notifyOverdue: e.target.checked})} className="accent-emerald-500 w-4 h-4 cursor-pointer disabled:opacity-50" />
+                    </label>
+                    <label className={`flex items-center justify-between text-sm ${notificationSettings.pushEnabled ? 'text-gray-300' : 'text-gray-500'}`}>
+                      <span>일정 시작 전 리마인드 (30분 전)</span>
+                      <input type="checkbox" disabled={!notificationSettings.pushEnabled} checked={notificationSettings.notifyBeforeStart} onChange={(e) => updateNotificationSettings({...notificationSettings, notifyBeforeStart: e.target.checked})} className="accent-emerald-500 w-4 h-4 cursor-pointer disabled:opacity-50" />
+                    </label>
+                    <label className={`flex items-center justify-between text-sm ${notificationSettings.pushEnabled ? 'text-gray-300' : 'text-gray-500'}`}>
+                      <span>새로운 업무 생성/완료 시</span>
+                      <input type="checkbox" disabled={!notificationSettings.pushEnabled} checked={notificationSettings.notifyNewTask} onChange={(e) => updateNotificationSettings({...notificationSettings, notifyNewTask: e.target.checked})} className="accent-emerald-500 w-4 h-4 cursor-pointer disabled:opacity-50" />
+                    </label>
                   </div>
-                  <span className="text-xs text-gray-500">한국어</span>
                 </div>
-                <div className="flex items-center justify-between p-4 bg-[#2d2d2d] rounded-2xl border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <Eye className="w-5 h-5 text-purple-500" />
-                    <span className="text-sm text-white font-medium">다크 모드</span>
-                  </div>
-                  <button 
-                    onClick={toggleDarkMode}
-                    className={`w-10 h-6 rounded-full relative transition-colors ${isDarkMode ? "bg-emerald-500" : "bg-gray-600"}`}
-                  >
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isDarkMode ? "right-1" : "left-1"}`} />
-                  </button>
-                </div>
-                */}
                 <div className="pt-4 text-center">
                   <p className="text-[10px] text-gray-600">앱 버전 1.0.4 (Build 20240303)</p>
                 </div>
@@ -449,25 +446,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] mb-4 px-1">설정</label>
                   <div className="bg-[#1e1e1e] rounded-2xl overflow-hidden border border-white/5 mb-4">
                     <button 
-                      onClick={async () => {
-                        if (window.confirm("모든 기기의 화면을 새로고침하여 앱을 최신 상태로 동기화하시겠습니까?")) {
-                          await forceRefreshAllPCs();
-                        }
-                      }}
-                      className="w-full p-4 flex items-center justify-between text-sm text-emerald-400 hover:bg-white/5 transition-colors border-b border-white/5 font-medium"
-                    >
-                      <div className="flex items-center gap-3">
-                        <RefreshCw className="w-4 h-4" />
-                        기능 업데이트 및 전체 PC 화면 새로고침 (동기화)
-                      </div>
-                    </button>
-                    <button 
                       onClick={() => setActiveSubModal("settings")}
                       className="w-full p-4 flex items-center justify-between text-sm text-gray-300 hover:bg-white/5 transition-colors border-b border-white/5"
                     >
                       <div className="flex items-center gap-3">
                         <Settings className="w-4 h-4 text-gray-500" />
-                        앱 설정
+                        알림설정
                       </div>
                       <ChevronRight className="w-4 h-4 text-gray-600" />
                     </button>

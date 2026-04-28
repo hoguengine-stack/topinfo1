@@ -12,9 +12,10 @@ import { db, auth } from "../firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { 
   Bold, Italic, Underline as UnderlineIcon, Link as LinkIcon, 
-  Loader2, CheckSquare
+  Loader2, CheckSquare, CheckCircle2, RotateCcw
 } from "lucide-react";
 import { Extension } from "@tiptap/core";
+import { Task } from "../types";
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -104,9 +105,11 @@ interface NoteEditorProps {
   title: string;
   placeholder?: string;
   isShared?: boolean;
+  completedTasks?: Task[];
+  onToggleComplete?: (task: Task) => void;
 }
 
-export function NoteEditor({ docPath, title, placeholder = "내용을 입력하세요...", isShared = false }: NoteEditorProps) {
+export function NoteEditor({ docPath, title, placeholder = "내용을 입력하세요...", isShared = false, completedTasks, onToggleComplete }: NoteEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -200,8 +203,9 @@ export function NoteEditor({ docPath, title, placeholder = "내용을 입력하�
   const fontSizes = ["12px", "14px", "16px", "18px", "20px", "24px", "32px"];
 
   return (
-    <div className="flex flex-col h-full bg-[#1e1e1e] overflow-hidden">
-      {/* Toolbar */}
+    <div className={`flex h-full w-full bg-app-bg ${isShared ? "flex-row gap-4 px-2" : "flex-col"}`}>
+      <div className={`flex flex-col bg-[#1e1e1e] overflow-hidden ${isShared ? "rounded-2xl border border-white/5 shadow-2xl flex-1 mt-2" : "h-full"}`}>
+        {/* Toolbar */}
       <div className="p-2 border-b border-white/5 bg-[#252525] flex flex-wrap gap-1 items-center sticky top-0 z-10">
         <div className="flex items-center gap-1 border-r border-white/10 pr-2 mr-1">
           <button
@@ -344,6 +348,49 @@ export function NoteEditor({ docPath, title, placeholder = "내용을 입력하�
           display: inline;
         }
       `}} />
+      </div>
+      
+      {isShared && (
+        <div className="w-80 flex flex-col bg-[#1e1e1e] overflow-hidden rounded-2xl border border-white/5 shadow-2xl mt-2 flex-shrink-0">
+          <div className="p-4 border-b border-white/5 bg-[#252525] flex items-center justify-between">
+            <h3 className="text-white font-bold text-sm tracking-wide">완료된 작업</h3>
+            <div className="bg-emerald-500/20 text-emerald-500 text-[10px] font-bold px-2 py-0.5 rounded-full">
+              {completedTasks?.length || 0}
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+            {completedTasks?.length === 0 ? (
+              <div className="text-center text-gray-500 text-xs py-10">완료된 작업이 없습니다</div>
+            ) : (
+              completedTasks?.map(task => (
+                <div key={task.id} className="bg-[#252525] rounded-xl p-3 border border-white/5 flex gap-3 opacity-70 hover:opacity-100 transition-opacity">
+                  <div className="pt-0.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm text-gray-300 font-medium truncate mb-1 line-through decoration-emerald-500/30">{task.title}</h4>
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      <span className="text-[10px] px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded-md truncate max-w-[80px] border border-white/5">
+                        {task.assignee}
+                      </span>
+                      <span className="text-[10px] text-gray-500">{task.updatedAt.split("T")[0]}</span>
+                    </div>
+                  </div>
+                  {onToggleComplete && (
+                    <button 
+                      onClick={() => onToggleComplete(task)}
+                      className="ml-auto flex-shrink-0 w-6 h-6 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors self-center"
+                      title="완료 취소"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

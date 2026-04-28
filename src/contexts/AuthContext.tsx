@@ -26,6 +26,22 @@ export interface LockoutState {
   lockoutUntil: number | null;
 }
 
+export interface NotificationSettings {
+  pushEnabled: boolean;
+  notifyBeforeDeadline: boolean;
+  notifyOverdue: boolean;
+  notifyBeforeStart: boolean;
+  notifyNewTask: boolean;
+}
+
+export const defaultNotificationSettings: NotificationSettings = {
+  pushEnabled: false,
+  notifyBeforeDeadline: true,
+  notifyOverdue: true,
+  notifyBeforeStart: true,
+  notifyNewTask: true,
+};
+
 export interface VerifyResult {
   success: boolean;
   locked?: boolean;
@@ -39,6 +55,7 @@ interface AuthContextType {
   isAccessCodeVerified: boolean;
   isLoading: boolean;
   lockoutState: LockoutState;
+  notificationSettings: NotificationSettings;
   taskTypes: string[];
   priorities: string[];
   jobTitles: string[];
@@ -53,6 +70,7 @@ interface AuthContextType {
   updateTaskTypes: (types: string[]) => void;
   updatePriorities: (priorities: string[]) => void;
   updateJobTitles: (titles: string[]) => void;
+  updateNotificationSettings: (settings: NotificationSettings) => void;
   forceRefreshAllPCs: () => Promise<void>;
 }
 
@@ -68,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [taskTypes, setTaskTypes] = useState<string[]>(["설치", "점검", "수리", "휴대용단말기", "기타"]);
   const [priorities, setPriorities] = useState<string[]>(["긴급", "높음", "보통", "낮음"]);
   const [jobTitles, setJobTitles] = useState<string[]>(["현장 관리자", "팀장", "엔지니어", "실장"]);
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(defaultNotificationSettings);
   const [accessCode, setAccessCode] = useState<string>("kicckmk");
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -125,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data.taskTypes) setTaskTypes(data.taskTypes);
         if (data.priorities) setPriorities(data.priorities);
         if (data.jobTitles) setJobTitles(data.jobTitles);
+        if (data.notificationSettings) setNotificationSettings({ ...defaultNotificationSettings, ...data.notificationSettings });
         if (data.accessCode) setAccessCode(data.accessCode);
         if (data.lockoutState) setLockoutState(data.lockoutState);
       } else {
@@ -134,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           taskTypes: ["설치", "점검", "수리", "휴대용단말기", "기타"],
           priorities: ["긴급", "높음", "보통", "낮음"],
           jobTitles: ["현장 관리자", "팀장", "엔지니어", "실장"],
+          notificationSettings: defaultNotificationSettings,
           accessCode: "kicckmk",
           lockoutState: { failedAttempts: 0, lockoutTier: 0, lockoutUntil: null }
         };
@@ -278,6 +299,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateNotificationSettings = async (settings: NotificationSettings) => {
+    setNotificationSettings(settings);
+    if (user) {
+      await updateDoc(doc(db, "users", user.sub), { notificationSettings: settings });
+    }
+  };
+
   const forceRefreshAllPCs = async () => {
     try {
       const versionRef = doc(db, "system", "version");
@@ -295,6 +323,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAccessCodeVerified,
         isLoading,
         lockoutState,
+        notificationSettings,
         taskTypes,
         priorities,
         jobTitles,
@@ -309,6 +338,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateTaskTypes,
         updatePriorities,
         updateJobTitles,
+        updateNotificationSettings,
         forceRefreshAllPCs,
       }}
     >
