@@ -205,7 +205,7 @@ export function TaskModal({
   assignees,
 }: TaskModalProps) {
   const { profile, taskTypes, taskTypeColors, priorities } = useAuth();
-  const displayTaskTypes = React.useMemo(() => Array.from(new Set(["설치", ...taskTypes])), [taskTypes]);
+  const displayTaskTypes = React.useMemo(() => taskTypes.length > 0 ? taskTypes : ["설치"], [taskTypes]);
   const isSiljang = profile?.jobTitle === "실장";
   
   const [formData, setFormData] = useState<Partial<Task>>({

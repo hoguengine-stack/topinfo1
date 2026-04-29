@@ -42,7 +42,7 @@ export function CalendarView({ tasks, onEdit, defaultExpanded = false }: Calenda
   };
 
   const selectedDayTasks = selectedDate 
-    ? tasks.filter(t => isSameDay(parseISO(t.dueDate), selectedDate) && (t.showOnCalendar !== false))
+    ? tasks.filter(t => isSameDay(parseISO(t.dueDate), selectedDate) && (t.showOnCalendar !== false) && t.status !== "완료")
     : [];
 
   const renderHeader = () => {
@@ -117,7 +117,7 @@ export function CalendarView({ tasks, onEdit, defaultExpanded = false }: Calenda
       const weekEnd = addDays(day, 6);
       
       const parsedTasks = tasks
-        .filter(t => t.showOnCalendar !== false)
+        .filter(t => t.showOnCalendar !== false && t.status !== "완료")
         .map(t => {
           const due = startOfDay(parseISO(t.dueDate));
           let start = t.createdAt ? startOfDay(parseISO(t.createdAt)) : due;
