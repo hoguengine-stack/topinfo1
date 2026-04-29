@@ -11,7 +11,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { 
     user, profile, logout, updateProfilePicture, updateJobTitle, updateNickname, updateAccessCode,
-    taskTypes, priorities, jobTitles, notificationSettings, updateTaskTypes, updatePriorities, updateJobTitles, updateNotificationSettings, forceRefreshAllPCs
+    taskTypes, taskTypeColors, priorities, jobTitles, notificationSettings, updateTaskTypes, updateTaskTypeColors, updatePriorities, updateJobTitles, updateNotificationSettings, forceRefreshAllPCs
   } = useAuth();
   const [activeSubModal, setActiveSubModal] = React.useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = React.useState(() => {
@@ -30,12 +30,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [tempNickname, setTempNickname] = React.useState(profile?.nickname || "");
   const [tempAccessCode, setTempAccessCode] = React.useState("");
 
-  const [editTaskTypes, setEditTaskTypes] = React.useState<{id: string, value: string}[]>([]);
+  const [editTaskTypes, setEditTaskTypes] = React.useState<{id: string, value: string, color: string}[]>([]);
   const [editPriorities, setEditPriorities] = React.useState<{id: string, value: string}[]>([]);
   const [editJobTitles, setEditJobTitles] = React.useState<{id: string, value: string}[]>([]);
 
   React.useEffect(() => {
-    setEditTaskTypes(taskTypes.map(t => ({id: Math.random().toString(), value: t})));
+    setEditTaskTypes(taskTypes.map(t => ({id: Math.random().toString(), value: t, color: taskTypeColors?.[t] || "#10b981"})));
     setEditPriorities(priorities.map(t => ({id: Math.random().toString(), value: t})));
     setEditJobTitles(jobTitles.map(t => ({id: Math.random().toString(), value: t})));
   }, [taskTypes, priorities, jobTitles]);
@@ -57,6 +57,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       alert("접속 코드가 성공적으로 변경되었습니다.");
     } else if (activeSubModal === "categories") {
       updateTaskTypes(editTaskTypes.map(t => t.value));
+      const newColors: Record<string, string> = {};
+      editTaskTypes.forEach(t => {
+        if (t.value.trim()) newColors[t.value] = t.color;
+      });
+      updateTaskTypeColors(newColors);
       updatePriorities(editPriorities.map(t => t.value));
       updateJobTitles(editJobTitles.map(t => t.value));
       alert("항목 설정이 저장되었습니다.");
@@ -180,6 +185,17 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             <GripVertical className="w-5 h-5 flex-shrink-0" />
                           </div>
                           <input 
+                            type="color"
+                            value={item.color}
+                            onChange={(e) => {
+                              const newTypes = [...editTaskTypes];
+                              newTypes[idx] = { ...newTypes[idx], color: e.target.value };
+                              setEditTaskTypes(newTypes);
+                            }}
+                            className="w-10 h-[42px] bg-transparent border-0 self-center flex-shrink-0 cursor-pointer p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-xl outline-none"
+                            title="색상 선택"
+                          />
+                          <input 
                             type="text"
                             value={item.value}
                             onChange={(e) => {
@@ -200,7 +216,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       ))}
                     </Reorder.Group>
                     <button 
-                      onClick={() => setEditTaskTypes([...editTaskTypes, {id: Math.random().toString(), value: ""}])}
+                      onClick={() => setEditTaskTypes([...editTaskTypes, {id: Math.random().toString(), value: "", color: "#10b981"}])}
                       className="w-full py-2 border border-dashed border-white/10 rounded-xl text-xs text-gray-500 flex items-center justify-center gap-2 hover:bg-white/5"
                     >
                       <Plus className="w-3 h-3" /> 항목 추가

@@ -57,6 +57,7 @@ interface AuthContextType {
   lockoutState: LockoutState;
   notificationSettings: NotificationSettings;
   taskTypes: string[];
+  taskTypeColors: Record<string, string>;
   priorities: string[];
   jobTitles: string[];
   login: () => Promise<void>;
@@ -68,6 +69,7 @@ interface AuthContextType {
   updateNickname: (nickname: string) => void;
   updateAccessCode: (newCode: string) => void;
   updateTaskTypes: (types: string[]) => void;
+  updateTaskTypeColors: (colors: Record<string, string>) => void;
   updatePriorities: (priorities: string[]) => void;
   updateJobTitles: (titles: string[]) => void;
   updateNotificationSettings: (settings: NotificationSettings) => void;
@@ -76,6 +78,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const defaultTaskTypeColors = {
+  "용지": "#10b981", // emerald-500
+  "설치": "#3b82f6", // blue-500
+  "점검": "#eab308", // yellow-500
+  "수리": "#ef4444", // red-500
+  "휴대용단말기": "#6b7280", // gray-500
+  "기타": "#8b5cf6" // purple-500
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -83,7 +94,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return localStorage.getItem("isAccessCodeVerified") === "true";
   });
   const [lockoutState, setLockoutState] = useState<LockoutState>({ failedAttempts: 0, lockoutTier: 0, lockoutUntil: null });
-  const [taskTypes, setTaskTypes] = useState<string[]>(["설치", "점검", "수리", "휴대용단말기", "기타"]);
+  const [taskTypes, setTaskTypes] = useState<string[]>(["용지", "설치", "점검", "수리", "휴대용단말기", "기타"]);
+  const [taskTypeColors, setTaskTypeColors] = useState<Record<string, string>>(defaultTaskTypeColors);
   const [priorities, setPriorities] = useState<string[]>(["긴급", "높음", "보통", "낮음"]);
   const [jobTitles, setJobTitles] = useState<string[]>(["현장 관리자", "팀장", "엔지니어", "실장"]);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(defaultNotificationSettings);
@@ -142,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = docSnap.data();
         if (data.profile) setProfile(data.profile);
         if (data.taskTypes) setTaskTypes(data.taskTypes);
+        if (data.taskTypeColors) setTaskTypeColors({ ...defaultTaskTypeColors, ...data.taskTypeColors });
         if (data.priorities) setPriorities(data.priorities);
         if (data.jobTitles) setJobTitles(data.jobTitles);
         if (data.notificationSettings) setNotificationSettings({ ...defaultNotificationSettings, ...data.notificationSettings });
@@ -151,7 +164,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Initialize default user document
         const defaultData = {
           profile: { nickname: user.name, picture: user.picture, jobTitle: "현장 관리자" },
-          taskTypes: ["설치", "점검", "수리", "휴대용단말기", "기타"],
+          taskTypes: ["용지", "설치", "점검", "수리", "휴대용단말기", "기타"],
+          taskTypeColors: defaultTaskTypeColors,
           priorities: ["긴급", "높음", "보통", "낮음"],
           jobTitles: ["현장 관리자", "팀장", "엔지니어", "실장"],
           notificationSettings: defaultNotificationSettings,
@@ -291,6 +305,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateTaskTypeColors = async (colors: Record<string, string>) => {
+    setTaskTypeColors(colors);
+    if (user) {
+      await updateDoc(doc(db, "users", user.sub), { taskTypeColors: colors });
+    }
+  };
+
   const updatePriorities = async (p: string[]) => {
     setPriorities(p);
     if (user) {
@@ -331,6 +352,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         lockoutState,
         notificationSettings,
         taskTypes,
+        taskTypeColors,
         priorities,
         jobTitles,
         login,
@@ -342,6 +364,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateNickname,
         updateAccessCode,
         updateTaskTypes,
+        updateTaskTypeColors,
         updatePriorities,
         updateJobTitles,
         updateNotificationSettings,

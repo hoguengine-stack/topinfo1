@@ -204,7 +204,7 @@ export function TaskModal({
   task,
   assignees,
 }: TaskModalProps) {
-  const { profile, taskTypes, priorities } = useAuth();
+  const { profile, taskTypes, taskTypeColors, priorities } = useAuth();
   const displayTaskTypes = React.useMemo(() => Array.from(new Set(["설치", ...taskTypes])), [taskTypes]);
   const isSiljang = profile?.jobTitle === "실장";
   
@@ -259,6 +259,21 @@ export function TaskModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave(formData);
+    onClose();
+  };
+
+  const handleCompleteTask = () => {
+    if (!formData.title) {
+      alert("작업 이름을 입력해주세요.");
+      titleRef.current?.focus();
+      return;
+    }
+    
+    // Toggle completion status if already completed
+    const newStatus = formData.status === "완료" ? "예정" : "완료";
+    const updatedForm = { ...formData, status: newStatus as Status };
+    setFormData(updatedForm);
+    onSave(updatedForm);
     onClose();
   };
 
@@ -454,9 +469,10 @@ export function TaskModal({
                       onClick={() => setFormData({ ...formData, taskType: t as TaskType })}
                       className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
                         formData.taskType === t
-                          ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+                          ? "text-white shadow-lg"
                           : "bg-[#2d2d2d] text-gray-500 hover:bg-[#363636]"
                       }`}
+                      style={formData.taskType === t ? { backgroundColor: taskTypeColors?.[t] || '#10b981', boxShadow: `0 10px 15px -3px ${taskTypeColors?.[t] || '#10b981'}33` } : undefined}
                     >
                       {t}
                     </button>
@@ -653,22 +669,30 @@ export function TaskModal({
           </form>
         </div>
 
-        <div className="p-6 bg-[#1a1a1a] border-t border-white/10 flex gap-3">
+        <div className="p-6 bg-[#1a1a1a] border-t border-white/10 flex gap-2">
+          <button
+            type="button"
+            onClick={handleCompleteTask}
+            className={`flex-1 ${formData.status === "완료" ? "bg-gray-600 hover:bg-gray-500 shadow-gray-500/20" : "bg-emerald-500 hover:bg-emerald-400 shadow-emerald-500/20"} text-white font-bold py-4 rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 shadow-xl active:scale-95 transition-all text-[10px] sm:text-xs tracking-tighter`}
+          >
+            <Check className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+            <span>{formData.status === "완료" ? "완료 취소" : "작업완료하기"}</span>
+          </button>
           <button
             type="submit"
             form="task-form"
-            className="flex-1 bg-[#2d2d2d] hover:bg-[#363636] text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all border border-white/5"
+            className="flex-1 bg-[#2d2d2d] hover:bg-[#363636] text-white font-bold py-4 rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 active:scale-95 transition-all border border-white/5 text-[10px] sm:text-xs tracking-tighter"
           >
-            <Check className="w-5 h-5" />
-            작업 저장하기
+            <Check className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span>작업 저장하기</span>
           </button>
           <button
             type="button"
             onClick={handleSaveAndShare}
-            className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/20 active:scale-95 transition-all text-xs tracking-tighter"
+            className="flex-1 bg-[#2d2d2d] hover:bg-[#363636] text-white font-bold py-4 rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 active:scale-95 transition-all border border-white/5 text-[10px] sm:text-xs tracking-tighter"
           >
-            <Share2 className="w-5 h-5 text-white" />
-            저장 및 공유하기
+            <Share2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+            <span>저장 및 공유하기</span>
           </button>
         </div>
       </div>

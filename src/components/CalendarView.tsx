@@ -27,7 +27,7 @@ interface CalendarViewProps {
 }
 
 export function CalendarView({ tasks, onEdit, defaultExpanded = false }: CalendarViewProps) {
-  const { user } = useAuth();
+  const { user, taskTypeColors } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -110,34 +110,130 @@ export function CalendarView({ tasks, onEdit, defaultExpanded = false }: Calenda
       : addDays(startDate, 6);
 
     const rows = [];
-    let days = [];
     let day = startDate;
 
     while (day <= endDate) {
-      for (let i = 0; i < 7; i++) {
-        const cloneDay = day;
-        const isWeekend = i === 0 || i === 6;
-        
-        const dayTasks = tasks.filter((t) => {
-          if (t.showOnCalendar === false) return false;
+      const weekStart = day;
+      const weekEnd = addDays(day, 6);
+      
+      const parsedTasks = tasks
+        .filter(t => t.showOnCalendar !== false)
+        .map(t => {
           const due = startOfDay(parseISO(t.dueDate));
           let start = t.createdAt ? startOfDay(parseISO(t.createdAt)) : due;
           if (start > due) start = due;
-          
-          if (start.getTime() !== due.getTime()) {
-            return cloneDay >= start && cloneDay <= due;
-          }
-          return isSameDay(due, cloneDay);
-        });
+          return { task: t, start, due };
+        })
+        .filter(t => t.start <= weekEnd && t.due >= weekStart);
 
-        const isToday = isSameDay(day, new Date());
-        const isCurrentMonth = isSameMonth(day, monthStart);
+      parsedTasks.sort((a, b) => {
+        const aStart = a.start.getTime();
+        const bStart = b.start.getTime();
+        if (aStart !== bStart) return aStart - bStart;
+        const aDuration = a.due.getTime() - aStart;
+        const bDuration = b.due.getTime() - bStart;
+        return bDuration - aDuration;
+      });
+
+      const assignedSlots: Record<string, number> = {};
+      const slotOccupied: Record<number, boolean[]> = {};
+      let maxSlot = -1;
+
+      parsedTasks.forEach(({ task, start, due }) => {
+        const startDiff = Math.round((start.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24));
+        const dueDiff = Math.round((due.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24));
+        
+        const startIdx = Math.max(0, startDiff);
+        const endIdx = Math.min(6, dueDiff);
+        
+        let slotIndex = 0;
+        while (true) {
+          if (!slotOccupied[slotIndex]) {
+            slotOccupied[slotIndex] = Array(7).fill(false);
+          }
+          let canFit = true;
+          for (let k = startIdx; k <= endIdx; k++) {
+            if (slotOccupied[slotIndex][k]) {
+              canFit = false;
+              break;
+            }
+          }
+          if (canFit) {
+            for (let k = startIdx; k <= endIdx; k++) {
+              slotOccupied[slotIndex][k] = true;
+            }
+            assignedSlots[task.id] = slotIndex;
+            if (slotIndex > maxSlot) maxSlot = slotIndex;
+            break;
+          }
+          slotIndex++;
+        }
+      });
+
+      let days = [];
+      for (let i = 0; i < 7; i++) {
+        const cloneDay = addDays(weekStart, i);
+        const isWeekend = i === 0 || i === 6;
+        const isToday = isSameDay(cloneDay, new Date());
+        const isCurrentMonth = isSameMonth(cloneDay, monthStart);
+
+        const slotElements = [];
+        for (let s = 0; s <= maxSlot; s++) {
+          const taskIdForSlot = parsedTasks.find(pt => assignedSlots[pt.task.id] === s && pt.start <= cloneDay && pt.due >= cloneDay);
+          
+          if (!taskIdForSlot) {
+            slotElements.push(
+              <div key={`empty-${s}`} className="h-[22px] mb-1"></div>
+            );
+            continue;
+          }
+          
+          const t = taskIdForSlot;
+          const isSpan = t.start < t.due;
+          const isStartNode = isSameDay(cloneDay, t.start);
+          const isEndNode = isSameDay(cloneDay, t.due);
+
+          if (isSpan) {
+            slotElements.push(
+              <div
+                key={t.task.id}
+                className={`h-[22px] mb-1 text-[11px] md:text-xs font-medium py-1 px-1.5 truncate text-white flex items-center ${
+                  isStartNode ? "rounded-l" : ""
+                } ${isEndNode ? "rounded-r" : ""} ${
+                  (!isStartNode && !isEndNode) ? "text-transparent" : "z-10 relative"
+                } mx-0`}
+                style={{ 
+                  backgroundColor: taskTypeColors?.[t.task.taskType] || "#10b981",
+                  marginLeft: isStartNode ? '2px' : '-5px', 
+                  marginRight: isEndNode ? '2px' : '-5px',
+                }}
+              >
+                {isStartNode || cloneDay.getDay() === 0 ? t.task.title : "\u00A0"}
+              </div>
+            );
+          } else {
+            const color = taskTypeColors?.[t.task.taskType] || "#6b7280";
+            slotElements.push(
+              <div
+                key={t.task.id}
+                className={`h-[22px] mb-1 text-[11px] md:text-xs font-medium py-1 px-1.5 rounded truncate border mx-0.5 flex items-center`}
+                style={{
+                  color: color,
+                  borderColor: `${color}40`,
+                  backgroundColor: `${color}1a`
+                }}
+              >
+                {t.task.title}
+              </div>
+            );
+          }
+        }
 
         days.push(
           <div
-            key={day.toString()}
+            key={cloneDay.toString()}
             onClick={() => setSelectedDate(cloneDay)}
-            className={`min-h-[100px] h-auto p-1 border-b border-r border-white/5 transition-colors relative flex flex-col cursor-pointer active:bg-white/5 ${
+            className={`min-h-[100px] h-auto pb-1 pt-1 border-b border-r border-white/5 transition-colors relative flex flex-col cursor-pointer active:bg-white/5 overflow-hidden ${
               isWeekend ? "col-span-1" : "col-span-2"
             } ${
               !isCurrentMonth && isExpanded
@@ -151,60 +247,23 @@ export function CalendarView({ tasks, onEdit, defaultExpanded = false }: Calenda
                   isToday ? "bg-emerald-500 text-white" : ""
                 }`}
               >
-                {format(day, "d")}
+                {format(cloneDay, "d")}
               </span>
             </div>
-            <div className="flex flex-col gap-1 flex-1 relative">
-              {dayTasks.map((task) => {
-                const due = startOfDay(parseISO(task.dueDate));
-                const start = task.createdAt ? startOfDay(parseISO(task.createdAt)) : due;
-                
-                const isSpan = start < due;
-                const isStartNode = isSameDay(cloneDay, start);
-                const isEndNode = isSameDay(cloneDay, due);
-
-                if (isSpan) {
-                  return (
-                    <div
-                      key={task.id}
-                      className={`text-[11px] md:text-xs font-medium py-1 px-1.5 truncate bg-emerald-500/80 text-white ${
-                        isStartNode ? "rounded-l" : ""
-                      } ${isEndNode ? "rounded-r" : ""} ${
-                        (!isStartNode && !isEndNode) ? "text-transparent" : ""
-                      } mx-0`}
-                      style={{ 
-                        marginLeft: isStartNode ? '2px' : '-4px', 
-                        marginRight: isEndNode ? '2px' : '-4px',
-                        zIndex: 10 
-                      }}
-                    >
-                      {isStartNode || cloneDay.getDay() === 0 ? task.title : "\u00A0"}
-                    </div>
-                  );
-                }
-
-                return (
-                  <div
-                    key={task.id}
-                    className={`text-[11px] md:text-xs font-medium py-1 px-1.5 rounded truncate border border-white/5 ${
-                      task.priority === "긴급" ? "bg-red-500/20 text-red-400" : "bg-gray-800 text-gray-400"
-                    }`}
-                  >
-                    {task.title}
-                  </div>
-                );
-              })}
+            <div className="flex flex-col flex-1 relative">
+              {slotElements}
             </div>
           </div>
         );
-        day = addDays(day, 1);
       }
+      
       rows.push(
         <div className="grid grid-cols-12" key={day.toString()}>
           {days}
         </div>
       );
-      days = [];
+      
+      day = addDays(day, 7);
       if (!isExpanded) break; // Only one week if not expanded
     }
     return <div className="bg-[#1e1e1e] border-l border-t border-white/5">{rows}</div>;
@@ -332,9 +391,14 @@ export function CalendarView({ tasks, onEdit, defaultExpanded = false }: Calenda
                     </div>
                     <div className="flex items-center justify-between text-xs text-gray-500">
                       <div className="flex gap-2">
-                        <span>{task.taskType}</span>
-                        <span>•</span>
-                        <span>{task.status}</span>
+                        <span
+                          className="px-2 py-0.5 rounded text-[10px] font-medium border"
+                          style={{ color: taskTypeColors?.[task.taskType] || "#6b7280", borderColor: `${taskTypeColors?.[task.taskType] || "#6b7280"}40`, backgroundColor: `${taskTypeColors?.[task.taskType] || "#6b7280"}1a` }}
+                        >
+                          {task.taskType}
+                        </span>
+                        <span className="self-center">•</span>
+                        <span className="self-center">{task.status}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />

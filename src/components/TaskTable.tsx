@@ -1,6 +1,7 @@
 import { Task } from "../types";
 import { Plus, Clock, Calendar, Filter, ArrowUpDown, User, Tag, CheckCircle2 } from "lucide-react";
 import { isPast, parseISO } from "date-fns";
+import { useAuth } from "../contexts/AuthContext";
 import React, { useState, useMemo } from "react";
 
 interface TaskTableProps {
@@ -11,6 +12,7 @@ interface TaskTableProps {
 }
 
 export function TaskTable({ tasks, onEdit, onAdd, onToggleComplete }: TaskTableProps) {
+  const { taskTypeColors } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>("전체");
   const [typeFilter, setTypeFilter] = useState<string>("전체");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("전체");
@@ -71,18 +73,7 @@ export function TaskTable({ tasks, onEdit, onAdd, onToggleComplete }: TaskTableP
   };
 
   const getTypeColor = (type: string) => {
-    switch (type) {
-      case "설치":
-        return "text-emerald-400 border-emerald-500/30 bg-emerald-500/10";
-      case "점검":
-        return "text-blue-400 border-blue-500/30 bg-blue-500/10";
-      case "수리":
-        return "text-orange-400 border-orange-500/30 bg-orange-500/10";
-      case "휴대용단말기":
-        return "text-purple-400 border-purple-500/30 bg-purple-500/10";
-      default:
-        return "text-gray-400 border-gray-500/30 bg-gray-500/10";
-    }
+    return taskTypeColors?.[type] || "#6b7280";
   };
 
   return (
@@ -189,8 +180,10 @@ export function TaskTable({ tasks, onEdit, onAdd, onToggleComplete }: TaskTableP
               <div className="flex items-center justify-between">
                 <div className="flex gap-2">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
-                    isCompleted ? "text-gray-600 border-gray-700 bg-gray-800/50" : getTypeColor(task.taskType)
-                  }`}>
+                    isCompleted ? "text-gray-600 border-gray-700 bg-gray-800/50" : ""
+                  }`}
+                  style={!isCompleted ? { color: getTypeColor(task.taskType), borderColor: `${getTypeColor(task.taskType)}40`, backgroundColor: `${getTypeColor(task.taskType)}1a` } : undefined}
+                  >
                     {task.taskType}
                   </span>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
