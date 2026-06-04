@@ -120,5 +120,37 @@ service cloud.firestore {
     match /system/{document=**} {
       allow read, write: if isAuthenticated();
     }
+
+    match /products/{id} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /cms_pages/{id} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /consultations/{id} {
+      allow read: if isAuthenticated();
+      allow create: if true;
+      allow update, delete: if isAuthenticated();
+    }
+
+    match /paper_requests/{id} {
+      allow read: if isAuthenticated();
+      allow create: if true;
+      allow update, delete: if isAuthenticated();
+    }
+
+    match /suggestions/{id} {
+      allow read, create: if true;
+      allow update, delete: if true; // Managed inside app with passwords for guests, or roles
+    }
+
+    match /resources/{id} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
   }
 }

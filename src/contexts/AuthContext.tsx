@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { auth, db, googleProvider } from "../firebase";
-import { signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, User as FirebaseUser } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
 
 interface User {
@@ -52,7 +52,10 @@ export interface VerifyResult {
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
+  isAdmin: boolean;
+  isEmployee: boolean;
   isAccessCodeVerified: boolean;
+  setIsAccessCodeVerified: (verified: boolean) => void;
   isLoading: boolean;
   lockoutState: LockoutState;
   notificationSettings: NotificationSettings;
@@ -61,6 +64,8 @@ interface AuthContextType {
   priorities: string[];
   jobTitles: string[];
   login: () => Promise<void>;
+  emailLogin: (email: string, pass: string) => Promise<void>;
+  emailSignUp: (email: string, pass: string, nickname: string, jobTitle: string) => Promise<void>;
   logout: () => Promise<void>;
   verifyAccessCode: (code: string) => VerifyResult;
   saveProfile: (nickname: string, picture: string, jobTitle?: string) => void;
@@ -90,6 +95,7 @@ const defaultTaskTypeColors = {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [isGoogleAdmin, setIsGoogleAdmin] = useState(false);
   const [isAccessCodeVerified, setIsAccessCodeVerified] = useState(() => {
     return localStorage.getItem("isAccessCodeVerified") === "true";
   });
@@ -103,6 +109,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const initTimeRef = useRef(Date.now());
+
+  const isAdmin = isGoogleAdmin || profile?.jobTitle === "실장";
+  const isEmployee = isGoogleAdmin || profile?.jobTitle === "실장" || profile?.jobTitle === "팀장" || profile?.jobTitle === "엔지니어";
 
   useEffect(() => {
     // Listen to system version changes for auto-reloading multiple PCs
@@ -130,9 +139,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: firebaseUser.email || "",
           email_verified: firebaseUser.emailVerified,
         });
+        
+        const isGoogle = firebaseUser.providerData.some(p => p.providerId === "google.com");
+        setIsGoogleAdmin(isGoogle);
+        if (isGoogle) {
+          setIsAccessCodeVerified(true);
+          localStorage.setItem("isAccessCodeVerified", "true");
+        }
       } else {
         setUser(null);
         setProfile(null);
+        setIsGoogleAdmin(false);
         setIsAccessCodeVerified(false);
         localStorage.removeItem("isAccessCodeVerified");
         setIsLoading(false);
@@ -152,7 +169,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onSnapshot(userRef, async (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data.profile) setProfile(data.profile);
+        if (data.profile) {
+          setProfile(data.profile);
+        }
         if (data.taskTypes) setTaskTypes(data.taskTypes);
         if (data.taskTypeColors) setTaskTypeColors({ ...defaultTaskTypeColors, ...data.taskTypeColors });
         if (data.priorities) setPriorities(data.priorities);
@@ -202,12 +221,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Login failed:", error);
+      throw error;
+    }
+  };
+
+  const emailLogin = async (email: string, pass: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (error) {
+      console.error("Email login failed:", error);
+      throw error;
+    }
+  };
+
+  const emailSignUp = async (email: string, pass: string, nickname: string, jobTitle: string) => {
+    try {
+      const res = await createUserWithEmailAndPassword(auth, email, pass);
+      if (res.user) {
+        const userRef = doc(db, "users", res.user.uid);
+        const defaultData = {
+          profile: { nickname, picture: "", jobTitle },
+          taskTypes: ["용지", "설치", "점검", "수리", "휴대용단말기", "기타"],
+          taskTypeColors: defaultTaskTypeColors,
+          priorities: ["긴급", "높음", "보통", "낮음"],
+          jobTitles: ["현장 관리자", "팀장", "엔지니어", "실장"],
+          notificationSettings: defaultNotificationSettings,
+          accessCode: "kicckmk",
+          lockoutState: { failedAttempts: 0, lockoutTier: 0, lockoutUntil: null }
+        };
+        await setDoc(userRef, defaultData);
+        // Explicitly set the profile in memory or let the snapshot hook update it.
+        setProfile({ nickname, picture: "", jobTitle });
+      }
+    } catch (error) {
+      console.error("Email signUp failed:", error);
+      throw error;
     }
   };
 
   const logout = async () => {
     try {
       await signOut(auth);
+      setIsGoogleAdmin(false);
       localStorage.removeItem("isAccessCodeVerified");
     } catch (error) {
       console.error("Logout failed:", error);
@@ -347,7 +402,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         profile,
+        isAdmin,
+        isEmployee,
         isAccessCodeVerified,
+        setIsAccessCodeVerified,
         isLoading,
         lockoutState,
         notificationSettings,
@@ -356,6 +414,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         priorities,
         jobTitles,
         login,
+        emailLogin,
+        emailSignUp,
         logout,
         verifyAccessCode,
         saveProfile,

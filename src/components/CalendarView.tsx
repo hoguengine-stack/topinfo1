@@ -120,8 +120,15 @@ export function CalendarView({ tasks, onEdit, defaultExpanded = false }: Calenda
         .filter(t => t.showOnCalendar !== false && t.status !== "완료")
         .map(t => {
           const due = startOfDay(parseISO(t.dueDate));
-          let start = t.createdAt ? startOfDay(parseISO(t.createdAt)) : due;
+          const created = t.createdAt ? startOfDay(parseISO(t.createdAt)) : due;
+          
+          // 등록일과 마감일이 같은 주에 있다면 생성일부터 표시 (이번주 지정 작업)
+          // 주가 다르다면 사용자가 직접 미래 날짜를 지정한 것으로 간주하여 마감일에만 표시
+          const isInSameWeek = isSameWeek(created, due, { weekStartsOn: 0 });
+          
+          let start = isInSameWeek ? created : due;
           if (start > due) start = due;
+
           return { task: t, start, due };
         })
         .filter(t => t.start <= weekEnd && t.due >= weekStart);
@@ -178,54 +185,56 @@ export function CalendarView({ tasks, onEdit, defaultExpanded = false }: Calenda
         const isCurrentMonth = isSameMonth(cloneDay, monthStart);
 
         const slotElements = [];
-        for (let s = 0; s <= maxSlot; s++) {
-          const taskIdForSlot = parsedTasks.find(pt => assignedSlots[pt.task.id] === s && pt.start <= cloneDay && pt.due >= cloneDay);
-          
-          if (!taskIdForSlot) {
-            slotElements.push(
-              <div key={`empty-${s}`} className="h-[22px] mb-1"></div>
-            );
-            continue;
-          }
-          
-          const t = taskIdForSlot;
-          const isSpan = t.start < t.due;
-          const isStartNode = isSameDay(cloneDay, t.start);
-          const isEndNode = isSameDay(cloneDay, t.due);
+        if (isCurrentMonth) {
+          for (let s = 0; s <= maxSlot; s++) {
+            const taskIdForSlot = parsedTasks.find(pt => assignedSlots[pt.task.id] === s && pt.start <= cloneDay && pt.due >= cloneDay);
+            
+            if (!taskIdForSlot) {
+              slotElements.push(
+                <div key={`empty-${s}`} className="h-[22px] mb-1"></div>
+              );
+              continue;
+            }
+            
+            const t = taskIdForSlot;
+            const isSpan = t.start < t.due;
+            const isStartNode = isSameDay(cloneDay, t.start);
+            const isEndNode = isSameDay(cloneDay, t.due);
 
-          if (isSpan) {
-            slotElements.push(
-              <div
-                key={t.task.id}
-                className={`h-[22px] mb-1 text-[11px] md:text-xs font-medium py-1 px-1.5 truncate text-white flex items-center ${
-                  isStartNode ? "rounded-l" : ""
-                } ${isEndNode ? "rounded-r" : ""} ${
-                  (!isStartNode && !isEndNode) ? "text-transparent" : "z-10 relative"
-                } mx-0`}
-                style={{ 
-                  backgroundColor: taskTypeColors?.[t.task.taskType] || "#10b981",
-                  marginLeft: isStartNode ? '2px' : '-5px', 
-                  marginRight: isEndNode ? '2px' : '-5px',
-                }}
-              >
-                {isStartNode || cloneDay.getDay() === 0 ? t.task.title : "\u00A0"}
-              </div>
-            );
-          } else {
-            const color = taskTypeColors?.[t.task.taskType] || "#6b7280";
-            slotElements.push(
-              <div
-                key={t.task.id}
-                className={`h-[22px] mb-1 text-[11px] md:text-xs font-medium py-1 px-1.5 rounded truncate border mx-0.5 flex items-center`}
-                style={{
-                  color: color,
-                  borderColor: `${color}40`,
-                  backgroundColor: `${color}1a`
-                }}
-              >
-                {t.task.title}
-              </div>
-            );
+            if (isSpan) {
+              slotElements.push(
+                <div
+                  key={t.task.id}
+                  className={`h-[22px] mb-1 text-[11px] md:text-xs font-medium py-1 px-1.5 truncate text-white flex items-center ${
+                    isStartNode ? "rounded-l" : ""
+                  } ${isEndNode ? "rounded-r" : ""} ${
+                    (!isStartNode && !isEndNode) ? "text-transparent" : "z-10 relative"
+                  } mx-0`}
+                  style={{ 
+                    backgroundColor: taskTypeColors?.[t.task.taskType] || "#10b981",
+                    marginLeft: isStartNode ? '2px' : '-5px', 
+                    marginRight: isEndNode ? '2px' : '-5px',
+                  }}
+                >
+                  {isStartNode || cloneDay.getDay() === 0 ? t.task.title : "\u00A0"}
+                </div>
+              );
+            } else {
+              const color = taskTypeColors?.[t.task.taskType] || "#6b7280";
+              slotElements.push(
+                <div
+                  key={t.task.id}
+                  className={`h-[22px] mb-1 text-[11px] md:text-xs font-medium py-1 px-1.5 rounded truncate border mx-0.5 flex items-center`}
+                  style={{
+                    color: color,
+                    borderColor: `${color}40`,
+                    backgroundColor: `${color}1a`
+                  }}
+                >
+                  {t.task.title}
+                </div>
+              );
+            }
           }
         }
 

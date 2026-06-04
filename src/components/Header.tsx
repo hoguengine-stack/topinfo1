@@ -4,16 +4,19 @@ import {
   Calendar as CalendarIcon,
   User,
   Menu,
+  AppWindow,
+  ClipboardList,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
 interface HeaderProps {
-  view: "list" | "calendar" | "personalNote" | "sharedNote";
-  setView: (view: "list" | "calendar" | "personalNote" | "sharedNote") => void;
+  view: "list" | "calendar" | "personalNote" | "sharedNote" | "consultations";
+  setView: (view: "list" | "calendar" | "personalNote" | "sharedNote" | "consultations") => void;
   filterAssignee: string | null;
   setFilterAssignee: (assignee: string | null) => void;
   assignees: string[];
   onMenuClick: () => void;
+  onBackToWebsite?: () => void;
 }
 
 export function Header({
@@ -23,6 +26,7 @@ export function Header({
   setFilterAssignee,
   assignees,
   onMenuClick,
+  onBackToWebsite,
 }: HeaderProps) {
   const { profile } = useAuth();
 
@@ -37,6 +41,15 @@ export function Header({
             <CheckCircle2 className="w-8 h-8 text-emerald-500" />
             <h1 className="text-lg font-bold tracking-tight">탑정보통신</h1>
           </button>
+          {onBackToWebsite && (
+            <button
+              onClick={onBackToWebsite}
+              className="ml-2 text-xs bg-[#10b981]/15 hover:bg-[#10b981]/25 border border-[#10b981]/30 text-emerald-400 font-black px-3.5 py-1.5 rounded-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5"
+            >
+              <AppWindow className="w-3.5 h-3.5" />
+              창전환 (프론트 화면)
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -124,6 +137,17 @@ export function Header({
         >
           <Menu className="w-4 h-4" />
           공유 노트
+        </button>
+        <button
+          onClick={() => setView("consultations")}
+          className={`flex items-center gap-2 pb-2 border-b-2 transition-colors shrink-0 ${
+            view === "consultations"
+              ? "border-emerald-500 text-text-primary"
+              : "border-transparent text-[#a855f7] hover:text-[#d8b4fe]"
+          }`}
+        >
+          <ClipboardList className="w-4 h-4" />
+          가맹상담/용지신청 내역
         </button>
       </div>
     </div>

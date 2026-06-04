@@ -204,9 +204,9 @@ export function TaskModal({
   task,
   assignees,
 }: TaskModalProps) {
-  const { profile, taskTypes, taskTypeColors, priorities } = useAuth();
+  const { profile, taskTypes, taskTypeColors, priorities, isAdmin } = useAuth();
   const displayTaskTypes = React.useMemo(() => taskTypes.length > 0 ? taskTypes : ["설치"], [taskTypes]);
-  const isSiljang = profile?.jobTitle === "실장";
+  const isSiljang = isAdmin;
   
   const [formData, setFormData] = useState<Partial<Task>>({
     title: "",
@@ -651,8 +651,8 @@ export function TaskModal({
               </div>
             </div>
 
-            {/* Show on Calendar Toggle (Only for 실장) */}
-            {profile?.jobTitle === "실장" && (
+            {/* Show on Calendar Toggle (Only for 실장/Admin) */}
+            {isAdmin && (
               <div className="flex items-center justify-between p-5 bg-[#2d2d2d] rounded-2xl border border-white/5">
                 <div>
                   <label className="block text-sm font-bold text-white mb-1">달력에 등록</label>
