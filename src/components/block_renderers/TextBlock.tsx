@@ -24,6 +24,7 @@ export const TextBlock: React.FC<TextBlockProps> = ({
   db,
 }) => {
   const textWidth = block.blockWidth || "max-w-2xl";
+  const textAlignClass = block.align === "left" ? "text-left" : block.align === "right" ? "text-right" : "text-center";
 
   return (
     <section 
@@ -38,7 +39,7 @@ export const TextBlock: React.FC<TextBlockProps> = ({
       }`}
     >
       {isEditModeActive ? (
-        <div className="space-y-4 w-full text-left" onClick={(e) => e.stopPropagation()}>
+        <div className={`space-y-4 w-full ${textAlignClass}`} onClick={(e) => e.stopPropagation()}>
           <input
             type="text"
             value={block.title || ""}
@@ -62,7 +63,7 @@ export const TextBlock: React.FC<TextBlockProps> = ({
                 setActiveEditTarget({ type: "text", pageId: page.id, page, blockId: block.id, block, selectedElement: "title" });
               }
             }}
-            className="w-full text-xl font-bold text-slate-900 border-b pb-2 mb-4 focus:ring-1 focus:ring-blue-500 hover:bg-slate-50 rounded-lg p-1 focus:outline-none"
+            className={`w-full text-xl font-bold text-slate-900 border-b pb-2 mb-4 focus:ring-1 focus:ring-blue-500 hover:bg-slate-50 rounded-lg p-1 focus:outline-none ${textAlignClass}`}
             placeholder="본문 타이틀"
           />
           <textarea
@@ -87,7 +88,7 @@ export const TextBlock: React.FC<TextBlockProps> = ({
                 setActiveEditTarget({ type: "text", pageId: page.id, page, blockId: block.id, block, selectedElement: "content" });
               }
             }}
-            className="w-full text-slate-600 text-sm leading-relaxed font-sans bg-transparent border-0 focus:ring-1 focus:ring-blue-500 resize-none p-2 focus:outline-none hover:bg-slate-100 rounded-xl"
+            className={`w-full text-slate-600 text-sm leading-relaxed font-sans bg-transparent border-0 focus:ring-1 focus:ring-blue-500 resize-none p-2 focus:outline-none hover:bg-slate-100 rounded-xl ${textAlignClass}`}
             rows={Math.max(4, (block.content || "").split('\n').length)}
             placeholder="본문 내용을 입력하십시오."
           />
@@ -95,11 +96,11 @@ export const TextBlock: React.FC<TextBlockProps> = ({
       ) : (
         <>
           {block.title && (
-            <h3 className="text-xl font-bold text-slate-900 border-b pb-4 mb-4 text-left">
+            <h3 className={`text-xl font-bold text-slate-900 border-b pb-4 mb-4 ${textAlignClass}`}>
               {block.title}
             </h3>
           )}
-          <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap text-left">
+          <p className={`text-slate-600 text-sm leading-relaxed whitespace-pre-wrap ${textAlignClass}`}>
             {block.content || "여기에 본문 내용을 작성해 보십시오."}
           </p>
         </>

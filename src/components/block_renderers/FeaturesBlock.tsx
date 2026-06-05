@@ -72,6 +72,9 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
   const defaultTitleColor = isCardDark ? "text-white" : "text-slate-800";
   const defaultDescColor = isCardDark ? "text-slate-300" : "text-slate-500";
   
+  const headerAlignClass = block.align === "left" ? "text-left mr-auto ml-0" : block.align === "right" ? "text-right ml-auto mr-0" : "text-center mx-auto";
+  const headerTextAlign = block.align === "left" ? "text-left" : block.align === "right" ? "text-right" : "text-center";
+
   return (
     <section className="space-y-8 w-full">
       <div 
@@ -80,7 +83,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
             setActiveEditTarget({ type: "features", pageId: page.id, page, blockId: block.id, block, selectedElement: "block" });
           }
         }}
-        className={`text-center max-w-xl mx-auto space-y-3 ${
+        className={`${headerAlignClass} max-w-xl space-y-3 ${
           isEditModeActive ? "cursor-pointer hover:ring-2 hover:ring-blue-500 hover:ring-dashed rounded-3xl p-3 transition" : ""
         }`}
       >
@@ -109,7 +112,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                   setActiveEditTarget({ type: "features", pageId: page.id, page, blockId: block.id, block, selectedElement: "title" });
                 }
               }}
-              className={`w-full text-center bg-transparent border-0 focus:ring-1 focus:ring-blue-500 p-1 focus:outline-none font-extrabold text-slate-950 tracking-tight rounded-lg hover:bg-blue-50/10 ${block.titleSize || "text-xl md:text-3xl"}`}
+              className={`w-full ${headerTextAlign} bg-transparent border-0 focus:ring-1 focus:ring-blue-500 p-1 focus:outline-none font-extrabold text-slate-950 tracking-tight rounded-lg hover:bg-blue-50/10 ${block.titleSize || "text-xl md:text-3xl"}`}
               placeholder="기능카드 영역 대제목"
             />
             <input
@@ -135,14 +138,14 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                   setActiveEditTarget({ type: "features", pageId: page.id, page, blockId: block.id, block, selectedElement: "subtitle" });
                 }
               }}
-              className="w-full text-center bg-transparent border-0 focus:ring-1 focus:ring-blue-500 p-1 focus:outline-none text-slate-500 text-sm rounded-lg hover:bg-blue-50/10"
+              className={`w-full ${headerTextAlign} bg-transparent border-0 focus:ring-1 focus:ring-blue-500 p-1 focus:outline-none text-slate-500 text-sm rounded-lg hover:bg-blue-50/10`}
               placeholder="기능카드 영역 상세 설명"
             />
           </div>
         ) : (
           <>
-            <h2 className={block.titleSize || "text-xl md:text-3xl font-extrabold text-slate-950 tracking-tight text-center"}>{block.title || "타이틀 없음"}</h2>
-            <p className="text-slate-500 text-sm mt-3 text-center">{block.subtitle || "한 줄 메리트 설명 정렬과 기능을 드래그 또는 HUD로 자유롭게 편집하세요"}</p>
+            <h2 className={`${block.titleSize || "text-xl md:text-3xl font-extrabold text-slate-950 tracking-tight"} ${headerTextAlign}`}>{block.title || "타이틀 없음"}</h2>
+            <p className={`text-slate-500 text-sm mt-3 ${headerTextAlign}`}>{block.subtitle || "한 줄 메리트 설명 정렬과 기능을 드래그 또는 HUD로 자유롭게 편집하세요"}</p>
           </>
         )}
       </div>

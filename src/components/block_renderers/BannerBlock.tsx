@@ -213,8 +213,10 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
         const b2FontSize = block.button2FontSize ? (/^\d+$/.test(block.button2FontSize) ? `${block.button2FontSize}px` : block.button2FontSize) : (block.elementSizes?.["buttons"]?.fontSize || undefined);
         const b2LetterSpacing = block.button2LetterSpacing || undefined;
  
+        const buttonsAlignClass = block.align ? (block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center") : (isCenterLayout ? "justify-center" : "justify-start");
+
         content = (
-          <div className="shrink-0 flex flex-wrap gap-4 items-center w-full md:w-auto mt-4 md:mt-2">
+          <div className={`shrink-0 flex flex-wrap gap-4 items-center w-full md:w-auto mt-4 md:mt-2 ${buttonsAlignClass}`}>
             {block.buttonText && (
               isEditModeActive ? (
                 <div 
@@ -484,6 +486,20 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
     objectFit: "contain",
   };
 
+  const bannerAlignClass = block.align 
+    ? (block.align === "left" ? "flex-col items-start text-left gap-6" : block.align === "right" ? "flex-col items-end text-right gap-6" : "flex-col items-center text-center gap-6")
+    : (block.blockAlign 
+        ? block.blockAlign 
+        : isCenterLayout 
+          ? "flex-col items-center text-center gap-6" 
+          : isLeftColumnLayout 
+            ? "flex-col items-start text-left gap-6" 
+            : "flex-col md:flex-row md:items-center justify-between gap-8 text-left");
+
+  const bannerTextAlignClass = block.align 
+    ? (block.align === "left" ? "items-start text-left" : block.align === "right" ? "items-end text-right" : "items-center text-center")
+    : (isCenterLayout ? "items-center text-center" : isLeftColumnLayout ? "items-start text-left" : "items-start text-left");
+
   return (
     <section 
       onClick={(e) => {
@@ -495,15 +511,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
       style={bannerStyle}
       className={`text-white rounded-3xl p-8 md:p-12 shadow-lg shadow-slate-955/20 transition-all ${bannerBg} flex relative w-full overflow-hidden ${
         isEditModeActive ? "cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-dashed" : ""
-      } ${
-        block.blockAlign 
-          ? block.blockAlign 
-          : isCenterLayout 
-            ? "flex-col items-center text-center gap-6" 
-            : isLeftColumnLayout 
-              ? "flex-col items-start text-left gap-6" 
-              : "flex-col md:flex-row md:items-center justify-between gap-8 text-left"
-      }`}
+      } ${bannerAlignClass}`}
     >
       {/* Visual Watermark background effect */}
       {hasWatermark && (
@@ -554,9 +562,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
           )}
         </div>
       ) : (
-        <div className={`flex-1 space-y-4 w-full flex flex-col ${
-          isCenterLayout ? "items-center text-center" : isLeftColumnLayout ? "items-start text-left" : "items-start text-left"
-        }`} onClick={(e) => isEditModeActive && e.stopPropagation()}>
+        <div className={`flex-1 space-y-4 w-full flex flex-col ${bannerTextAlignClass}`} onClick={(e) => isEditModeActive && e.stopPropagation()}>
           
           {/* Inline Image on TOP */}
           {block.bannerLayout === "inline" && block.imageUrl && block.bannerImagePosition === "top" && (

@@ -43,59 +43,64 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
     return merged.map((el) => {
       let content = null;
       if (el === "badge" && block.badge !== "") {
+        const alignClass = block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center";
         content = (
-          <div 
-            style={{
-              fontSize: block.elementSizes?.["badge"]?.fontSize || undefined,
-              width: block.elementSizes?.["badge"]?.width || undefined,
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-5/30 text-blue-600 rounded-full text-xs font-semibold select-none"
-          >
-            {block.badgeIconUrl ? (
-              <img 
-                src={block.badgeIconUrl} 
-                alt="badge icon" 
-                referrerPolicy="no-referrer"
-                className="w-4 h-4 object-contain rounded shrink-0" 
-              />
-            ) : (
-              <Sparkles className="w-3.5 h-3.5 shrink-0 text-amber-500 animate-pulse" /> 
-            )}
-            {isEditModeActive ? (
-              <input
-                type="text"
-                value={block.badge || ""}
-                onChange={async (e) => {
-                  const newVal = e.target.value;
-                  const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, badge: newVal } : b);
-                  setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                  if (activeEditTarget && activeEditTarget.blockId === block.id) {
-                    setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, badge: newVal } as CMSBlock } : null);
-                  }
-                  await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isEditModeActive) {
-                    setActiveEditTarget({ type: "hero", pageId: page.id, page, blockId: block.id, block, selectedElement: "badge" });
-                  }
-                }}
-                onFocus={() => {
-                  if (isEditModeActive) {
-                    setActiveEditTarget({ type: "hero", pageId: page.id, page, blockId: block.id, block, selectedElement: "badge" });
-                  }
-                }}
-                className="bg-transparent border-0 focus:ring-0 p-0 font-extrabold focus:outline-none text-blue-600 text-xs text-center min-w-[60px]"
-                style={{ width: `${Math.max(4, (block.badge || "").length) * 8}px` }}
-              />
-            ) : (
-              block.badge
-            )}
+          <div className={`flex ${alignClass} w-full`}>
+            <div 
+              style={{
+                fontSize: block.elementSizes?.["badge"]?.fontSize || undefined,
+                width: block.elementSizes?.["badge"]?.width || undefined,
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-5/30 text-blue-600 rounded-full text-xs font-semibold select-none"
+            >
+              {block.badgeIconUrl ? (
+                <img 
+                  src={block.badgeIconUrl} 
+                  alt="badge icon" 
+                  referrerPolicy="no-referrer"
+                  className="w-4 h-4 object-contain rounded shrink-0" 
+                />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5 shrink-0 text-amber-500 animate-pulse" /> 
+              )}
+              {isEditModeActive ? (
+                <input
+                  type="text"
+                  value={block.badge || ""}
+                  onChange={async (e) => {
+                    const newVal = e.target.value;
+                    const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, badge: newVal } : b);
+                    setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
+                    if (activeEditTarget && activeEditTarget.blockId === block.id) {
+                      setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, badge: newVal } as CMSBlock } : null);
+                    }
+                    await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isEditModeActive) {
+                      setActiveEditTarget({ type: "hero", pageId: page.id, page, blockId: block.id, block, selectedElement: "badge" });
+                    }
+                  }}
+                  onFocus={() => {
+                    if (isEditModeActive) {
+                      setActiveEditTarget({ type: "hero", pageId: page.id, page, blockId: block.id, block, selectedElement: "badge" });
+                    }
+                  }}
+                  className="bg-transparent border-0 focus:ring-0 p-0 font-extrabold focus:outline-none text-blue-600 text-xs text-center min-w-[60px]"
+                  style={{ width: `${Math.max(4, (block.badge || "").length) * 8}px` }}
+                />
+              ) : (
+                block.badge
+              )}
+            </div>
           </div>
         );
       } else if (el === "title" && block.title !== "") {
         const titleSize = block.titleSize || "text-4xl md:text-6xl font-black";
         const titleColor = block.titleColor || "text-slate-900";
+        const textAlignClass = block.align === "left" ? "text-left" : block.align === "right" ? "text-right" : "text-center";
+        const alignMxClass = block.align === "left" ? "mr-auto ml-0" : block.align === "right" ? "ml-auto mr-0" : "mx-auto";
 
         content = isEditModeActive ? (
           <textarea
@@ -125,7 +130,7 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
               letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["title"]?.width || undefined,
             }}
-            className={`w-full text-center bg-transparent border-0 focus:ring-1 focus:ring-blue-500 p-2 rounded-xl focus:outline-none resize-none leading-tight font-sans mx-auto ${titleColor} ${titleSize}`}
+            className={`w-full ${textAlignClass} bg-transparent border-0 focus:ring-1 focus:ring-blue-500 p-2 rounded-xl focus:outline-none resize-none leading-tight font-sans ${alignMxClass} ${titleColor} ${titleSize}`}
             rows={Math.max(2, (block.title || "").split('\n').reduce((acc, val) => acc + Math.max(1, Math.ceil(val.length / 28)), 0))}
             placeholder="메인 대제목 타이틀"
           />
@@ -136,12 +141,15 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
               letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["title"]?.width || undefined,
             }}
-            className={`${titleSize} leading-tight whitespace-pre-line tracking-tight inline-block w-full text-center ${titleColor}`}
+            className={`${titleSize} leading-tight whitespace-pre-line tracking-tight inline-block w-full ${textAlignClass} ${titleColor}`}
           >
             {block.title}
           </h1>
         );
       } else if (el === "subtitle" && block.subtitle !== "") {
+        const textAlignClass = block.align === "left" ? "text-left" : block.align === "right" ? "text-right" : "text-center";
+        const alignMxClass = block.align === "left" ? "mr-auto ml-0" : block.align === "right" ? "ml-auto mr-0" : "mx-auto";
+
         content = isEditModeActive ? (
           <textarea
             value={block.subtitle || ""}
@@ -170,7 +178,7 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
               letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["subtitle"]?.width || undefined,
             }}
-            className="w-full text-center text-slate-500 text-sm md:text-base mt-4 leading-relaxed font-sans bg-transparent border-0 focus:ring-1 focus:ring-blue-500 resize-none p-2 focus:outline-none hover:bg-blue-50/10 rounded-xl mx-auto"
+            className={`w-full ${textAlignClass} text-slate-500 text-sm md:text-base mt-4 leading-relaxed font-sans bg-transparent border-0 focus:ring-1 focus:ring-blue-500 resize-none p-2 focus:outline-none hover:bg-blue-50/10 rounded-xl ${alignMxClass}`}
             rows={Math.max(2, (block.subtitle || "").split('\n').reduce((acc, val) => acc + Math.max(1, Math.ceil(val.length / 45)), 0))}
             placeholder="상세 보조 설명문을 작성하세요."
           />
@@ -181,7 +189,7 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
               letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["subtitle"]?.width || undefined,
             }}
-            className="text-slate-500 text-base md:text-lg mt-6 leading-relaxed whitespace-pre-line font-sans mx-auto"
+            className={`text-slate-500 text-base md:text-lg mt-6 leading-relaxed whitespace-pre-line font-sans ${textAlignClass} ${alignMxClass}`}
           >
             {block.subtitle}
           </p>
@@ -210,7 +218,7 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
         const b2LetterSpacing = block.button2LetterSpacing || undefined;
 
         content = (
-          <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className={`pt-4 flex flex-col sm:flex-row items-center ${block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center"} gap-4`}>
             {block.buttonText && (
               isEditModeActive ? (
                 <div
@@ -459,6 +467,8 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
     });
   };
 
+  const sectionAlignClass = block.align === "left" ? "text-left" : block.align === "right" ? "text-right" : "text-center";
+
   return (
     <section 
       onClick={(e) => {
@@ -467,7 +477,7 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
           setActiveEditTarget({ type: "hero", pageId: page.id, page, blockId: block.id, block, selectedElement: "block" });
         }
       }}
-      className={`text-center md:py-10 ${block.blockWidth || "max-w-5xl"} mx-auto space-y-4 relative ${
+      className={`w-full ${sectionAlignClass} md:py-10 ${block.blockWidth || "max-w-5xl"} mx-auto space-y-4 relative ${
         isEditModeActive ? "cursor-pointer hover:ring-2 hover:ring-blue-500 hover:ring-dashed hover:bg-blue-50/5 rounded-3xl p-6 transition" : ""
       }`}
     >
