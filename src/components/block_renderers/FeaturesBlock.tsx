@@ -72,8 +72,14 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
   const defaultTitleColor = isCardDark ? "text-white" : "text-slate-800";
   const defaultDescColor = isCardDark ? "text-slate-300" : "text-slate-500";
   
-  const headerAlignClass = block.align === "left" ? "text-left mr-auto ml-0" : block.align === "right" ? "text-right ml-auto mr-0" : "text-center mx-auto";
-  const headerTextAlign = block.align === "left" ? "text-left" : block.align === "right" ? "text-right" : "text-center";
+  const titleAlign = block.titleAlign || block.align || "center";
+  const subtitleAlign = block.subtitleAlign || block.align || "center";
+
+  const titleTextAlign = titleAlign === "left" ? "text-left" : titleAlign === "right" ? "text-right" : "text-center";
+  const titleMxClass = titleAlign === "left" ? "mr-auto ml-0" : titleAlign === "right" ? "ml-auto mr-0" : "mx-auto";
+
+  const subtitleTextAlign = subtitleAlign === "left" ? "text-left" : subtitleAlign === "right" ? "text-right" : "text-center";
+  const subtitleMxClass = subtitleAlign === "left" ? "mr-auto ml-0" : subtitleAlign === "right" ? "ml-auto mr-0" : "mx-auto";
 
   return (
     <section className="space-y-8 w-full">
@@ -83,7 +89,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
             setActiveEditTarget({ type: "features", pageId: page.id, page, blockId: block.id, block, selectedElement: "block" });
           }
         }}
-        className={`${headerAlignClass} max-w-xl space-y-3 ${
+        className={`w-full max-w-xl mx-auto space-y-3 ${
           isEditModeActive ? "cursor-pointer hover:ring-2 hover:ring-blue-500 hover:ring-dashed rounded-3xl p-3 transition" : ""
         }`}
       >
@@ -109,10 +115,14 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
               }}
               onFocus={() => {
                 if (isEditModeActive) {
-                  setActiveEditTarget({ type: "features", pageId: page.id, page, blockId: block.id, block, selectedElement: "title" });
+                   setActiveEditTarget({ type: "features", pageId: page.id, page, blockId: block.id, block, selectedElement: "title" });
                 }
               }}
-              className={`w-full ${headerTextAlign} bg-transparent border-0 focus:ring-1 focus:ring-blue-500 p-1 focus:outline-none font-extrabold text-slate-950 tracking-tight rounded-lg hover:bg-blue-50/10 ${block.titleSize || "text-xl md:text-3xl"}`}
+              style={{
+                fontSize: block.titleFontSize ? `${block.titleFontSize}pt` : undefined,
+                letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
+              }}
+              className={`w-full ${titleTextAlign} ${titleMxClass} bg-transparent border-0 focus:ring-1 focus:ring-blue-500 p-1 focus:outline-none rounded-lg hover:bg-blue-50/10 ${block.titleSize || "text-xl md:text-3xl font-extrabold tracking-tight"} ${block.titleColor || "text-slate-950"}`}
               placeholder="기능카드 영역 대제목"
             />
             <input
@@ -138,14 +148,34 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                   setActiveEditTarget({ type: "features", pageId: page.id, page, blockId: block.id, block, selectedElement: "subtitle" });
                 }
               }}
-              className={`w-full ${headerTextAlign} bg-transparent border-0 focus:ring-1 focus:ring-blue-500 p-1 focus:outline-none text-slate-500 text-sm rounded-lg hover:bg-blue-50/10`}
+              style={{
+                fontSize: block.subtitleFontSize ? `${block.subtitleFontSize}pt` : undefined,
+                letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
+              }}
+              className={`w-full ${subtitleTextAlign} ${subtitleMxClass} bg-transparent border-0 focus:ring-1 focus:ring-blue-500 p-1 focus:outline-none rounded-lg hover:bg-blue-50/10 ${block.subtitleSize || "text-sm"} ${block.subtitleColor || "text-slate-500"}`}
               placeholder="기능카드 영역 상세 설명"
             />
           </div>
         ) : (
           <>
-            <h2 className={`${block.titleSize || "text-xl md:text-3xl font-extrabold text-slate-950 tracking-tight"} ${headerTextAlign}`}>{block.title || "타이틀 없음"}</h2>
-            <p className={`text-slate-500 text-sm mt-3 ${headerTextAlign}`}>{block.subtitle || "한 줄 메리트 설명 정렬과 기능을 드래그 또는 HUD로 자유롭게 편집하세요"}</p>
+            <h2 
+              style={{
+                fontSize: block.titleFontSize ? `${block.titleFontSize}pt` : undefined,
+                letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
+              }}
+              className={`${block.titleSize || "text-xl md:text-3xl font-extrabold tracking-tight"} ${block.titleColor || "text-slate-950"} ${titleTextAlign} ${titleMxClass} block w-full`}
+            >
+              {block.title || "타이틀 없음"}
+            </h2>
+            <p 
+              style={{
+                fontSize: block.subtitleFontSize ? `${block.subtitleFontSize}pt` : undefined,
+                letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
+              }}
+              className={`${block.subtitleSize || "text-sm"} ${block.subtitleColor || "text-slate-500"} mt-3 ${subtitleTextAlign} ${subtitleMxClass} block w-full`}
+            >
+              {block.subtitle || "한 줄 메리트 설명 정렬과 기능을 드래그 또는 HUD로 자유롭게 편집하세요"}
+            </p>
           </>
         )}
       </div>

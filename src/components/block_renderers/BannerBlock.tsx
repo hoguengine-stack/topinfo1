@@ -32,6 +32,10 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
   handleLinkClick,
   db,
 }) => {
+  const isCenterLayout = block.layoutStyle === "column_center";
+  const isLeftColumnLayout = block.layoutStyle === "column_left";
+  const bannerBg = block.bgColor || "bg-slate-900";
+
   const renderBannerSubElements = (block: CMSBlock, blockIdx: number) => {
     const list = block.elementOrder || ["badge", "title", "subtitle", "buttons", "iconImageUrl"];
     const mandatory = ["badge", "title", "subtitle", "buttons", "iconImageUrl"];
@@ -43,8 +47,11 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
     return merged.map((el) => {
       let content = null;
       if (el === "badge" && block.badge) {
+        const badgeAlign = block.badgeAlign || block.align || (isCenterLayout ? "center" : "left");
+        const badgeJustifyClass = badgeAlign === "left" ? "justify-start" : badgeAlign === "right" ? "justify-end" : "justify-center";
         content = (
           <div
+            className={`flex w-full ${badgeJustifyClass}`}
             style={{
               fontSize: block.elementSizes?.["badge"]?.fontSize || undefined,
               width: block.elementSizes?.["badge"]?.width || undefined,
@@ -97,6 +104,8 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
       } else if (el === "title" && block.title !== "") {
         const titleSize = block.titleSize || "text-2xl md:text-3xl font-black";
         const titleColor = block.titleColor || "text-white";
+        const titleAlign = block.titleAlign || block.align || (isCenterLayout ? "center" : "left");
+        const titleAlignClass = titleAlign === "left" ? "text-left" : titleAlign === "right" ? "text-right" : "text-center";
  
         content = isEditModeActive ? (
           <textarea
@@ -126,7 +135,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
               letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["title"]?.width || undefined,
             }}
-            className={`w-full bg-white/10 hover:bg-white/20 border border-transparent focus:ring-1 focus:ring-blue-400 p-2 rounded-xl focus:outline-none resize-none leading-normal font-sans text-white ${titleSize}`}
+            className={`w-full bg-white/10 hover:bg-white/20 border border-transparent focus:ring-1 focus:ring-blue-400 p-2 rounded-xl focus:outline-none resize-none leading-normal font-sans text-white ${titleSize} ${titleAlignClass}`}
             rows={Math.max(2, (block.title || "").split('\n').reduce((acc, val) => acc + Math.max(1, Math.ceil(val.length / 28)), 0))}
             placeholder="배너 메인 타이틀"
           />
@@ -137,7 +146,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
               letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["title"]?.width || undefined,
             }}
-            className={`${titleSize} leading-normal whitespace-pre-line ${titleColor}`}
+            className={`${titleSize} leading-normal whitespace-pre-line w-full block ${titleColor} ${titleAlignClass}`}
           >
             {block.title || "배너 타이틀을 입력하세요"}
           </h3>
@@ -145,6 +154,9 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
       } else if (el === "subtitle" && block.subtitle !== "") {
         const subtitleSize = block.subtitleSize || "text-sm";
         const subtitleColor = block.subtitleColor || "text-slate-400";
+        const subtitleAlign = block.subtitleAlign || block.align || (isCenterLayout ? "center" : "left");
+        const subtitleAlignClass = subtitleAlign === "left" ? "text-left" : subtitleAlign === "right" ? "text-right" : "text-center";
+        const subtitleMxClass = subtitleAlign === "left" ? "mr-auto ml-0" : subtitleAlign === "right" ? "ml-auto mr-0" : "mx-auto";
  
         content = isEditModeActive ? (
           <textarea
@@ -174,7 +186,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
               letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["subtitle"]?.width || undefined,
             }}
-            className={`w-full bg-white/10 hover:bg-white/20 border border-transparent focus:ring-1 focus:ring-blue-400 p-2 rounded-xl focus:outline-none resize-none leading-relaxed font-sans max-w-2xl ${subtitleSize} ${subtitleColor}`}
+            className={`w-full bg-white/10 hover:bg-white/20 border border-transparent focus:ring-1 focus:ring-blue-400 p-2 rounded-xl focus:outline-none resize-none leading-relaxed font-sans max-w-2xl ${subtitleSize} ${subtitleColor} ${subtitleAlignClass} ${subtitleMxClass}`}
             rows={Math.max(2, (block.subtitle || "").split('\n').reduce((acc, val) => acc + Math.max(1, Math.ceil(val.length / 45)), 0))}
             placeholder="배너 상세 설명"
           />
@@ -185,7 +197,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
               letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["subtitle"]?.width || undefined,
             }}
-            className={`${subtitleSize} ${subtitleColor} leading-relaxed max-w-2xl`}
+            className={`${subtitleSize} ${subtitleColor} leading-relaxed max-w-2xl w-full block ${subtitleAlignClass} ${subtitleMxClass}`}
           >
             {block.subtitle || "이곳에 배너의 상세 소개 한 줄 메릿을 작성하세요"}
           </p>
@@ -213,7 +225,8 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
         const b2FontSize = block.button2FontSize ? (/^\d+$/.test(block.button2FontSize) ? `${block.button2FontSize}px` : block.button2FontSize) : (block.elementSizes?.["buttons"]?.fontSize || undefined);
         const b2LetterSpacing = block.button2LetterSpacing || undefined;
  
-        const buttonsAlignClass = block.align ? (block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center") : (isCenterLayout ? "justify-center" : "justify-start");
+        const buttonsAlign = block.buttonsAlign || block.align || (isCenterLayout ? "center" : "left");
+        const buttonsAlignClass = buttonsAlign === "left" ? "justify-start" : buttonsAlign === "right" ? "justify-end" : "justify-center";
 
         content = (
           <div className={`shrink-0 flex flex-wrap gap-4 items-center w-full md:w-auto mt-4 md:mt-2 ${buttonsAlignClass}`}>
@@ -421,10 +434,19 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
 
       if (!content) return null;
 
+      const elAlign = el === "badge" ? (block.badgeAlign || block.align || (isCenterLayout ? "center" : "left"))
+                    : el === "title" ? (block.titleAlign || block.align || (isCenterLayout ? "center" : "left"))
+                    : el === "subtitle" ? (block.subtitleAlign || block.align || (isCenterLayout ? "center" : "left"))
+                    : el === "buttons" ? (block.buttonsAlign || block.align || (isCenterLayout ? "center" : "left"))
+                    : el === "iconImageUrl" ? (block.align || (isCenterLayout ? "center" : "left"))
+                    : (block.align || "center");
+
+      const subAlignClass = elAlign === "left" ? "items-start text-left" : elAlign === "right" ? "items-end text-right" : "items-center text-center";
+
       return (
         <div
           key={el}
-          className={`w-full group/sub transition ${
+          className={`w-full flex flex-col group/sub transition ${subAlignClass} ${
             isEditModeActive 
               ? "hover:outline hover:outline-dashed hover:outline-blue-400 p-1.5 rounded-lg relative cursor-default" 
               : ""
@@ -461,10 +483,6 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
     });
   };
 
-  const isCenterLayout = block.layoutStyle === "column_center";
-  const isLeftColumnLayout = block.layoutStyle === "column_left";
-
-  const bannerBg = block.bgColor || "bg-slate-900";
   const hasSideImage = block.bannerLayout === "side-image" && block.imageUrl;
   const hasBgImage = block.bannerLayout === "bg-image" && block.imageUrl;
   const hasWatermark = block.bannerLayout === "watermark" && block.imageUrl;

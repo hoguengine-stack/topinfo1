@@ -483,17 +483,43 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
 
   const block = activeEditTarget.block;
 
+  const getCurrentAlignFieldAndValue = () => {
+    if (!block) return { field: "align" as const, value: "center" as const };
+    const sel = activeEditTarget?.selectedElement;
+    if (sel === "badge") {
+      return { field: "badgeAlign" as const, value: block.badgeAlign || block.align || "center" };
+    }
+    if (sel === "title") {
+      return { field: "titleAlign" as const, value: block.titleAlign || block.align || "center" };
+    }
+    if (sel === "subtitle") {
+      return { field: "subtitleAlign" as const, value: block.subtitleAlign || block.align || "center" };
+    }
+    if (sel === "content") {
+      return { field: "contentAlign" as const, value: block.contentAlign || block.align || "center" };
+    }
+    if (sel === "buttons") {
+      return { field: "buttonsAlign" as const, value: block.buttonsAlign || block.align || "center" };
+    }
+    return { field: "align" as const, value: block.align || "center" };
+  };
+
   // Toolbar Click switches context to the selected aspect of the block
   const handleToolbarClick = (type: "bg" | "align" | "size" | "color" | "keyboard" | "layout") => {
     if (!activeEditTarget) return;
     
-    let elementToSelect = "block";
-    if (type === "size" || type === "color") {
-      elementToSelect = "title";
-    } else if (type === "keyboard") {
-      elementToSelect = (activeEditTarget.type === "text" || activeEditTarget.type === "image") ? "content" : "title";
-    } else {
+    let elementToSelect = activeEditTarget.selectedElement || "block";
+    
+    if (type === "bg") {
       elementToSelect = "block";
+    } else if (type === "layout") {
+      if (elementToSelect === "block") {
+        elementToSelect = "image";
+      }
+    } else {
+      if (elementToSelect === "block") {
+        elementToSelect = (activeEditTarget.type === "text" || activeEditTarget.type === "image") ? "content" : "title";
+      }
     }
 
     setActiveEditTarget({
@@ -527,8 +553,6 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
   };
 
   const renderSelectedElementSettings = () => {
-    if (!block) return null;
-
     // 1. NAV MENU
     if (activeEditTarget.type === "nav") {
       return (
@@ -544,6 +568,8 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
         </div>
       );
     }
+
+    if (!block) return null;
 
     // 2. CARD ITEM (Features)
     if (activeEditTarget.type === "card" && activeEditTarget.itemIndex !== undefined) {
@@ -606,83 +632,141 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
       );
     }
 
-    // 3. BADGE
-    if (selectedElement === "badge") {
-      return (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 mb-1">상단 배지 (Badge) 대표문구</label>
-            <input
-              type="text"
-              value={block.badge || ""}
-              onChange={(e) => handleUpdateField({ badge: e.target.value })}
-              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-850 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
-              placeholder="예: 최우수 가맹 비즈니스 선정"
-            />
-          </div>
+    // 3. UNIFIED TEXT ELEMENTS (Badge, Title, Subtitle, Content)
+    const isTextElement = ["badge", "title", "subtitle", "content"].includes(selectedElement);
+    if (isTextElement) {
+      let textField = "title";
+      let textLabel = "✍️ 텍스트";
+      let alignField = "titleAlign";
+      let fontSizeField = "titleFontSize";
+      let letterSpacingField = "titleLetterSpacing";
+      let sizeField = "titleSize";
+      let colorField = "titleColor";
 
-          <div className="pt-1">
-            <ImageUploader 
-              label="🛡️ 배지 왼쪽 커스텀 아이콘 (SVG/PNG/JPG)"
-              value={block.badgeIconUrl || ""}
-              onChange={(val) => handleUpdateField({ badgeIconUrl: val })}
-              placeholder="배지 글자 왼쪽에 표시될 아이콘"
-              id="hud-badge-icon-uploader"
-            />
-          </div>
-        </div>
-      );
-    }
+      if (selectedElement === "badge") {
+        textField = "badge";
+        textLabel = "🛡️ 상단 배지";
+        alignField = "badgeAlign";
+        fontSizeField = "badgeFontSize";
+        letterSpacingField = "badgeLetterSpacing";
+        sizeField = "badgeSize";
+        colorField = "badgeColor";
+      } else if (selectedElement === "title") {
+        textField = "title";
+        textLabel = "✍️ 메인 대제목";
+        alignField = "titleAlign";
+        fontSizeField = "titleFontSize";
+        letterSpacingField = "titleLetterSpacing";
+        sizeField = "titleSize";
+        colorField = "titleColor";
+      } else if (selectedElement === "subtitle") {
+        textField = "subtitle";
+        textLabel = "📝 보조 설명문";
+        alignField = "subtitleAlign";
+        fontSizeField = "subtitleFontSize";
+        letterSpacingField = "subtitleLetterSpacing";
+        sizeField = "subtitleSize";
+        colorField = "subtitleColor";
+      } else if (selectedElement === "content") {
+        textField = "content";
+        textLabel = "📄 본문 내용";
+        alignField = "contentAlign";
+        fontSizeField = "contentFontSize";
+        letterSpacingField = "contentLetterSpacing";
+        sizeField = "contentSize";
+        colorField = "contentColor";
+      }
 
-    // 4. TITLE
-    if (selectedElement === "title") {
       return (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 mb-1">메인 대제목 문장</label>
+            <label className="block text-[10px] font-bold text-slate-400 mb-1">{textLabel} 문구 내용</label>
             <textarea
-              rows={2}
-              value={block.title || ""}
-              onChange={(e) => handleUpdateField({ title: e.target.value })}
-              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-850 dark:text-white font-medium focus:outline-none text-xs"
-              placeholder="중앙 핵심 메인 타이틀"
+              rows={textField === "content" ? 5 : 2}
+              value={block[textField as keyof CMSBlock] as string || ""}
+              onChange={(e) => handleUpdateField({ [textField]: e.target.value })}
+              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-850 dark:text-white font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs font-sans leading-normal"
+              placeholder={`${textLabel} 문구를 입력하세요.`}
             />
           </div>
 
+          {selectedElement === "badge" && (
+            <div className="pt-1">
+              <ImageUploader 
+                label="🛡️ 배지 왼쪽 커스텀 아이콘 (SVG/PNG/JPG)"
+                value={block.badgeIconUrl || ""}
+                onChange={(val) => handleUpdateField({ badgeIconUrl: val })}
+                placeholder="배지 글자 왼쪽에 표시될 아이콘"
+                id="hud-badge-icon-uploader"
+              />
+            </div>
+          )}
+
+          {/* Alignment */}
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-850">
+            <span className="block text-[10px] font-bold text-slate-400 mb-1">🏁 개별 정렬방향 조절</span>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { align: "left", label: "왼쪽 정렬", icon: AlignLeft },
+                { align: "center", label: "가운데", icon: AlignCenter },
+                { align: "right", label: "오른쪽 정렬", icon: AlignRight }
+              ].map((alignItem) => {
+                const Icon = alignItem.icon;
+                const currentAlignVal = block[alignField as keyof CMSBlock] || block.align || "center";
+                return (
+                  <button
+                    key={alignItem.align}
+                    onClick={() => handleUpdateField({ [alignField]: alignItem.align as any })}
+                    className={`py-1.5 px-1 rounded-lg border flex items-center justify-center gap-1 transition text-[10px] font-bold ${
+                      currentAlignVal === alignItem.align
+                        ? "border-blue-500 bg-blue-50/10 text-blue-600 dark:text-blue-400 font-bold scale-[1.01]"
+                        : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-600 dark:text-slate-300"
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{alignItem.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Font Sizes & Sliders */}
           <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-850">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-400">📐 대제목 글자 크기 조절 (pt)</span>
+              <span className="text-[10px] font-bold text-slate-400">📐 글자 크기 조절 (pt)</span>
               <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-md font-mono font-bold">
-                {block.titleFontSize || "기본값"} {block.titleFontSize ? "pt" : ""}
+                {(block[fontSizeField as keyof CMSBlock] as string) || "기본값"} {(block[fontSizeField as keyof CMSBlock] as string) ? "pt" : ""}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <input
                 type="range"
-                min="8"
+                min="6"
                 max="72"
                 step="1"
-                value={block.titleFontSize || "28"}
-                onChange={(e) => handleUpdateField({ titleFontSize: e.target.value })}
+                value={(block[fontSizeField as keyof CMSBlock] as string) || (selectedElement === "title" ? "28" : selectedElement === "subtitle" ? "14" : "12")}
+                onChange={(e) => handleUpdateField({ [fontSizeField]: e.target.value })}
                 className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600"
               />
               <input
                 type="number"
-                min="8"
+                min="6"
                 max="100"
-                value={block.titleFontSize || ""}
-                onChange={(e) => handleUpdateField({ titleFontSize: e.target.value })}
+                value={(block[fontSizeField as keyof CMSBlock] as string) || ""}
+                onChange={(e) => handleUpdateField({ [fontSizeField]: e.target.value })}
                 className="w-16 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-1.5 py-1 text-slate-850 dark:text-white text-center text-xs focus:outline-none"
                 placeholder="자동"
               />
             </div>
           </div>
 
+          {/* Letter Spacing */}
           <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-850">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-400">↔️ 대제목 자간 (Letter-spacing, px)</span>
+              <span className="text-[10px] font-bold text-slate-400">↔️ 자간 조절 (Letter-spacing, px)</span>
               <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-md font-mono font-bold">
-                {block.titleLetterSpacing || "0"} px
+                {(block[letterSpacingField as keyof CMSBlock] as string) || "0"} px
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -691,8 +775,8 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                 min="-10"
                 max="30"
                 step="0.5"
-                value={block.titleLetterSpacing || "0"}
-                onChange={(e) => handleUpdateField({ titleLetterSpacing: e.target.value })}
+                value={(block[letterSpacingField as keyof CMSBlock] as string) || "0"}
+                onChange={(e) => handleUpdateField({ [letterSpacingField]: e.target.value })}
                 className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600"
               />
               <input
@@ -700,25 +784,26 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                 min="-20"
                 max="50"
                 step="0.5"
-                value={block.titleLetterSpacing || "0"}
-                onChange={(e) => handleUpdateField({ titleLetterSpacing: e.target.value })}
+                value={(block[letterSpacingField as keyof CMSBlock] as string) || "0"}
+                onChange={(e) => handleUpdateField({ [letterSpacingField]: e.target.value })}
                 className="w-16 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-1.5 py-1 text-slate-850 dark:text-white text-center text-xs focus:outline-none"
                 placeholder="0"
               />
             </div>
           </div>
 
+          {/* Style Presets */}
           <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-850">
-            <span className="block text-[10px] font-bold text-slate-400">대제목 대표 스타일 프리셋</span>
+            <span className="block text-[10px] font-bold text-slate-400">대표 스타일 크기 프리셋 (Tailwind)</span>
             <div className="grid grid-cols-2 gap-1.5">
               {sizePresets.map((size) => (
                 <button
                   key={size.value}
-                  onClick={() => handleUpdateField({ titleSize: size.value })}
-                  className={`px-2 py-1 rounded-lg border text-[10.5px] text-left font-semibold transition ${
-                    block.titleSize === size.value
+                  onClick={() => handleUpdateField({ [sizeField]: size.value })}
+                  className={`px-2 py-1.5 rounded-lg border text-[10px] text-left font-semibold transition ${
+                    block[sizeField as keyof CMSBlock] === size.value
                       ? "border-blue-500 bg-blue-50/10 text-blue-600 dark:text-blue-400 font-bold"
-                      : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                      : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-700 dark:text-slate-300"
                   }`}
                 >
                   {size.label}
@@ -727,100 +812,24 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
             </div>
           </div>
 
+          {/* Font Color */}
           <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-850">
-            <span className="block text-[10px] font-bold text-slate-400">대제목 글짜 강조 색상</span>
+            <span className="block text-[10px] font-bold text-slate-400">글자 강조 전용 색상</span>
             <div className="grid grid-cols-2 gap-1.5">
               {fgColorsList.map((fg) => (
                 <button
                   key={fg.value}
-                  onClick={() => handleUpdateField({ titleColor: fg.value })}
-                  className={`px-2 py-1 rounded-lg border text-left text-[10.5px] font-semibold transition flex items-center justify-between ${
-                    block.titleColor === fg.value
-                      ? "border-blue-500 bg-blue-50/10 text-blue-600"
-                      : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  onClick={() => handleUpdateField({ [colorField]: fg.value })}
+                  className={`px-2.5 py-1.5 rounded-lg border text-left text-[10px] font-semibold transition flex items-center justify-between ${
+                    block[colorField as keyof CMSBlock] === fg.value
+                      ? "border-blue-500 bg-blue-50/10 text-blue-600 dark:text-blue-400"
+                      : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-700 dark:text-slate-300"
                   }`}
                 >
                   <span>{fg.label}</span>
-                  <span className={`w-3.5 h-3.5 rounded-full border ${fg.value.replace("text-", "bg-")}`} />
+                  <span className={`w-3 h-3 rounded-full border ${fg.value.replace("text-", "bg-")}`} />
                 </button>
               ))}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // 5. SUBTITLE
-    if (selectedElement === "subtitle") {
-      return (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 mb-1">상세 보조 설명문 문구</label>
-            <textarea
-              rows={3}
-              value={block.subtitle || ""}
-              onChange={(e) => handleUpdateField({ subtitle: e.target.value })}
-              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-850 dark:text-white focus:outline-none text-xs"
-              placeholder="상세 정보를 보충하는 상세 가이드 설명글"
-            />
-          </div>
-
-          <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-850">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-400">📐 보조설명문 글자 크기 조절 (pt)</span>
-              <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-md font-mono font-bold">
-                {block.subtitleFontSize || "기본값"} {block.subtitleFontSize ? "pt" : ""}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="6"
-                max="48"
-                step="1"
-                value={block.subtitleFontSize || "14"}
-                onChange={(e) => handleUpdateField({ subtitleFontSize: e.target.value })}
-                className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600"
-              />
-              <input
-                type="number"
-                min="6"
-                max="100"
-                value={block.subtitleFontSize || ""}
-                onChange={(e) => handleUpdateField({ subtitleFontSize: e.target.value })}
-                className="w-16 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-1.5 py-1 text-slate-850 dark:text-white text-center text-xs focus:outline-none"
-                placeholder="자동"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-850">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-400">↔️ 보조설명문 자간 (Letter-spacing, px)</span>
-              <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-md font-mono font-bold">
-                {block.subtitleLetterSpacing || "0"} px
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="-10"
-                max="30"
-                step="0.5"
-                value={block.subtitleLetterSpacing || "0"}
-                onChange={(e) => handleUpdateField({ subtitleLetterSpacing: e.target.value })}
-                className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600"
-              />
-              <input
-                type="number"
-                min="-20"
-                max="50"
-                step="0.5"
-                value={block.subtitleLetterSpacing || "0"}
-                onChange={(e) => handleUpdateField({ subtitleLetterSpacing: e.target.value })}
-                className="w-16 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-1.5 py-1 text-slate-850 dark:text-white text-center text-xs focus:outline-none"
-                placeholder="0"
-              />
             </div>
           </div>
         </div>
@@ -1267,23 +1276,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
       );
     }
 
-    // 10. CONTENT
-    if (selectedElement === "content") {
-      return (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 mb-1">상세 대본문 내용 (Content)</label>
-            <textarea
-              rows={6}
-              value={block.content || ""}
-              onChange={(e) => handleUpdateField({ content: e.target.value })}
-              className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 text-slate-850 dark:text-white focus:outline-none font-sans text-xs"
-              placeholder="내용을 정렬해 보세요."
-            />
-          </div>
-        </div>
-      );
-    }
+
 
     // 11. DIVIDER
     if (selectedElement === "divider") {
@@ -1349,12 +1342,13 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
               { align: "right", label: "오른쪽", icon: AlignRight }
             ].map((alignItem) => {
               const Icon = alignItem.icon;
+              const { field, value: currentAlignVal } = getCurrentAlignFieldAndValue();
               return (
                 <button
                   key={alignItem.align}
-                  onClick={() => handleUpdateField({ align: alignItem.align as any })}
+                  onClick={() => handleUpdateField({ [field]: alignItem.align as any })}
                   className={`py-1.5 px-0.5 rounded-xl border flex flex-col items-center gap-1 transition text-[10px] font-semibold ${
-                    block.align === alignItem.align
+                    currentAlignVal === alignItem.align
                       ? "border-blue-500 bg-blue-50/15 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400"
                       : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
                   }`}
@@ -1632,12 +1626,13 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                     { align: "right", label: "오른쪽 정렬", icon: AlignRight }
                   ].map((alignItem) => {
                     const Icon = alignItem.icon;
+                    const { field, value: currentAlignVal } = getCurrentAlignFieldAndValue();
                     return (
                       <button
                         key={alignItem.align}
-                        onClick={() => handleUpdateField({ align: alignItem.align as any })}
+                        onClick={() => handleUpdateField({ [field]: alignItem.align as any })}
                         className={`py-2 px-1 rounded-xl border flex flex-col items-center gap-1.5 transition text-[11px] font-semibold ${
-                          block.align === alignItem.align
+                          currentAlignVal === alignItem.align
                             ? "border-blue-500 bg-blue-50/15 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400"
                             : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
                         }`}

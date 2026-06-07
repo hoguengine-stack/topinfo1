@@ -93,6 +93,11 @@ export interface CMSBlock {
   content?: string;
   imageUrl?: string;
   align?: "left" | "center" | "right";
+  titleAlign?: "left" | "center" | "right";
+  subtitleAlign?: "left" | "center" | "right";
+  badgeAlign?: "left" | "center" | "right";
+  contentAlign?: "left" | "center" | "right";
+  buttonsAlign?: "left" | "center" | "right";
   buttonText?: string;
   buttonLink?: string;
   badge?: string;
@@ -108,6 +113,10 @@ export interface CMSBlock {
   subtitleColor?: string;
   subtitleFontSize?: string;
   subtitleLetterSpacing?: string;
+  contentSize?: string;
+  contentColor?: string;
+  contentFontSize?: string;
+  contentLetterSpacing?: string;
   layoutStyle?: string;
   bgColor?: string;
   button2Text?: string;

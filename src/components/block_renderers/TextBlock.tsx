@@ -24,7 +24,16 @@ export const TextBlock: React.FC<TextBlockProps> = ({
   db,
 }) => {
   const textWidth = block.blockWidth || "max-w-2xl";
-  const textAlignClass = block.align === "left" ? "text-left" : block.align === "right" ? "text-right" : "text-center";
+  const titleAlign = block.titleAlign || block.align || "left";
+  const contentAlign = block.contentAlign || block.align || "left";
+
+  const titleAlignClass = titleAlign === "left" ? "text-left" : titleAlign === "right" ? "text-right" : "text-center";
+  const contentAlignClass = contentAlign === "left" ? "text-left" : contentAlign === "right" ? "text-right" : "text-center";
+
+  const titleSize = block.titleSize || "text-xl font-bold";
+  const titleColor = block.titleColor || "text-slate-900";
+  const contentSize = block.contentSize || block.subtitleSize || "text-sm";
+  const contentColor = block.contentColor || block.subtitleColor || "text-slate-600";
 
   return (
     <section 
@@ -39,7 +48,7 @@ export const TextBlock: React.FC<TextBlockProps> = ({
       }`}
     >
       {isEditModeActive ? (
-        <div className={`space-y-4 w-full ${textAlignClass}`} onClick={(e) => e.stopPropagation()}>
+        <div className="space-y-4 w-full" onClick={(e) => e.stopPropagation()}>
           <input
             type="text"
             value={block.title || ""}
@@ -63,7 +72,11 @@ export const TextBlock: React.FC<TextBlockProps> = ({
                 setActiveEditTarget({ type: "text", pageId: page.id, page, blockId: block.id, block, selectedElement: "title" });
               }
             }}
-            className={`w-full text-xl font-bold text-slate-900 border-b pb-2 mb-4 focus:ring-1 focus:ring-blue-500 hover:bg-slate-50 rounded-lg p-1 focus:outline-none ${textAlignClass}`}
+            style={{
+              fontSize: block.titleFontSize ? `${block.titleFontSize}pt` : undefined,
+              letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
+            }}
+            className={`w-full ${titleSize} ${titleColor} border-b pb-2 mb-4 focus:ring-1 focus:ring-blue-500 hover:bg-slate-50 rounded-lg p-1 focus:outline-none ${titleAlignClass}`}
             placeholder="본문 타이틀"
           />
           <textarea
@@ -88,7 +101,11 @@ export const TextBlock: React.FC<TextBlockProps> = ({
                 setActiveEditTarget({ type: "text", pageId: page.id, page, blockId: block.id, block, selectedElement: "content" });
               }
             }}
-            className={`w-full text-slate-600 text-sm leading-relaxed font-sans bg-transparent border-0 focus:ring-1 focus:ring-blue-500 resize-none p-2 focus:outline-none hover:bg-slate-100 rounded-xl ${textAlignClass}`}
+            style={{
+              fontSize: block.contentFontSize ? `${block.contentFontSize}pt` : undefined,
+              letterSpacing: block.contentLetterSpacing ? `${block.contentLetterSpacing}px` : undefined,
+            }}
+            className={`w-full ${contentColor} ${contentSize} leading-relaxed font-sans bg-transparent border-0 focus:ring-1 focus:ring-blue-500 resize-none p-2 focus:outline-none hover:bg-slate-100 rounded-xl ${contentAlignClass}`}
             rows={Math.max(4, (block.content || "").split('\n').length)}
             placeholder="본문 내용을 입력하십시오."
           />
@@ -96,11 +113,23 @@ export const TextBlock: React.FC<TextBlockProps> = ({
       ) : (
         <>
           {block.title && (
-            <h3 className={`text-xl font-bold text-slate-900 border-b pb-4 mb-4 ${textAlignClass}`}>
+            <h3 
+              style={{
+                fontSize: block.titleFontSize ? `${block.titleFontSize}pt` : undefined,
+                letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
+              }}
+              className={`${titleSize} ${titleColor} border-b pb-4 mb-4 ${titleAlignClass}`}
+            >
               {block.title}
             </h3>
           )}
-          <p className={`text-slate-600 text-sm leading-relaxed whitespace-pre-wrap ${textAlignClass}`}>
+          <p 
+            style={{
+              fontSize: block.contentFontSize ? `${block.contentFontSize}pt` : undefined,
+              letterSpacing: block.contentLetterSpacing ? `${block.contentLetterSpacing}px` : undefined,
+            }}
+            className={`${contentColor} ${contentSize} leading-relaxed whitespace-pre-wrap ${contentAlignClass}`}
+          >
             {block.content || "여기에 본문 내용을 작성해 보십시오."}
           </p>
         </>

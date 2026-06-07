@@ -43,7 +43,8 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
     return merged.map((el) => {
       let content = null;
       if (el === "badge" && block.badge !== "") {
-        const alignClass = block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center";
+        const badgeAlign = block.badgeAlign || block.align || "center";
+        const alignClass = badgeAlign === "left" ? "justify-start" : badgeAlign === "right" ? "justify-end" : "justify-center";
         content = (
           <div className={`flex ${alignClass} w-full`}>
             <div 
@@ -99,8 +100,9 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
       } else if (el === "title" && block.title !== "") {
         const titleSize = block.titleSize || "text-4xl md:text-6xl font-black";
         const titleColor = block.titleColor || "text-slate-900";
-        const textAlignClass = block.align === "left" ? "text-left" : block.align === "right" ? "text-right" : "text-center";
-        const alignMxClass = block.align === "left" ? "mr-auto ml-0" : block.align === "right" ? "ml-auto mr-0" : "mx-auto";
+        const titleAlign = block.titleAlign || block.align || "center";
+        const textAlignClass = titleAlign === "left" ? "text-left" : titleAlign === "right" ? "text-right" : "text-center";
+        const alignMxClass = titleAlign === "left" ? "mr-auto ml-0" : titleAlign === "right" ? "ml-auto mr-0" : "mx-auto";
 
         content = isEditModeActive ? (
           <textarea
@@ -147,8 +149,11 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
           </h1>
         );
       } else if (el === "subtitle" && block.subtitle !== "") {
-        const textAlignClass = block.align === "left" ? "text-left" : block.align === "right" ? "text-right" : "text-center";
-        const alignMxClass = block.align === "left" ? "mr-auto ml-0" : block.align === "right" ? "ml-auto mr-0" : "mx-auto";
+        const subtitleAlign = block.subtitleAlign || block.align || "center";
+        const textAlignClass = subtitleAlign === "left" ? "text-left" : subtitleAlign === "right" ? "text-right" : "text-center";
+        const alignMxClass = subtitleAlign === "left" ? "mr-auto ml-0" : subtitleAlign === "right" ? "ml-auto mr-0" : "mx-auto";
+        const subtitleSize = block.subtitleSize || "text-sm md:text-base";
+        const subtitleColor = block.subtitleColor || "text-slate-500";
 
         content = isEditModeActive ? (
           <textarea
@@ -178,7 +183,7 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
               letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["subtitle"]?.width || undefined,
             }}
-            className={`w-full ${textAlignClass} text-slate-500 text-sm md:text-base mt-4 leading-relaxed font-sans bg-transparent border-0 focus:ring-1 focus:ring-blue-500 resize-none p-2 focus:outline-none hover:bg-blue-50/10 rounded-xl ${alignMxClass}`}
+            className={`w-full ${textAlignClass} ${subtitleColor} ${subtitleSize} mt-4 leading-relaxed font-sans bg-transparent border-0 focus:ring-1 focus:ring-blue-500 resize-none p-2 focus:outline-none hover:bg-blue-50/10 rounded-xl ${alignMxClass}`}
             rows={Math.max(2, (block.subtitle || "").split('\n').reduce((acc, val) => acc + Math.max(1, Math.ceil(val.length / 45)), 0))}
             placeholder="상세 보조 설명문을 작성하세요."
           />
@@ -189,7 +194,7 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
               letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["subtitle"]?.width || undefined,
             }}
-            className={`text-slate-500 text-base md:text-lg mt-6 leading-relaxed whitespace-pre-line font-sans ${textAlignClass} ${alignMxClass}`}
+            className={`${subtitleColor} ${subtitleSize} mt-6 leading-relaxed whitespace-pre-line font-sans ${textAlignClass} ${alignMxClass}`}
           >
             {block.subtitle}
           </p>
@@ -217,8 +222,9 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
         const b2FontSize = block.button2FontSize ? (/^\d+$/.test(block.button2FontSize) ? `${block.button2FontSize}px` : block.button2FontSize) : (block.elementSizes?.["buttons"]?.fontSize || undefined);
         const b2LetterSpacing = block.button2LetterSpacing || undefined;
 
+        const buttonsAlign = block.buttonsAlign || block.align || "center";
         content = (
-          <div className={`pt-4 flex flex-col sm:flex-row items-center ${block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center"} gap-4`}>
+          <div className={`pt-4 flex flex-col sm:flex-row items-center ${buttonsAlign === "left" ? "justify-start" : buttonsAlign === "right" ? "justify-end" : "justify-center"} gap-4`}>
             {block.buttonText && (
               isEditModeActive ? (
                 <div
@@ -427,10 +433,19 @@ export const HeroBlock: React.FC<HeroBlockProps> = ({
 
       if (!content) return null;
 
+      const elAlign = el === "badge" ? (block.badgeAlign || block.align || "center")
+                    : el === "title" ? (block.titleAlign || block.align || "center")
+                    : el === "subtitle" ? (block.subtitleAlign || block.align || "center")
+                    : el === "buttons" ? (block.buttonsAlign || block.align || "center")
+                    : el === "iconImageUrl" ? (block.align || "center")
+                    : (block.align || "center");
+
+      const subAlignClass = elAlign === "left" ? "items-start text-left" : elAlign === "right" ? "items-end text-right" : "items-center text-center";
+
       return (
         <div
           key={el}
-          className={`w-full group/sub transition ${
+          className={`w-full flex flex-col group/sub transition ${subAlignClass} ${
             isEditModeActive 
               ? "hover:outline hover:outline-dashed hover:outline-blue-400 p-2 rounded-xl relative cursor-default" 
               : ""
