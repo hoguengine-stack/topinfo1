@@ -189,6 +189,7 @@ export interface CMSPage {
   blocks: CMSBlock[];
   isCustom: boolean;
   createdAt: string;
+  customBoardInitialized?: boolean;
 }
 
 export interface NavigationItemSettings {

@@ -5,6 +5,40 @@ import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { useAuth } from "../contexts/AuthContext";
 import { Lock, Unlock, Search, FileText, Download, Reply, Trash, CheckCircle2, FileDown, PlusCircle } from "lucide-react";
 
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, index);
+  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function getFileBaseName(fileName: string) {
+  const dotIndex = fileName.lastIndexOf(".");
+  return dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+}
+
+function getResourceFileType(file: File) {
+  const lowerName = file.name.toLowerCase();
+  const extension = lowerName.includes(".") ? lowerName.split(".").pop() || "file" : "file";
+  const upperExtension = extension.toUpperCase();
+
+  if (["zip", "rar", "7z"].includes(extension)) return `${upperExtension} / Driver`;
+  if (["exe", "msi"].includes(extension)) return `${upperExtension} / Installer`;
+  if (["pdf"].includes(extension)) return "PDF / Manual";
+  if (["doc", "docx", "hwp", "hwpx"].includes(extension)) return `${upperExtension} / Document`;
+  if (["jpg", "jpeg", "png", "webp"].includes(extension)) return `${upperExtension} / Image`;
+  return `${upperExtension} / File`;
+}
+
+function getSafeStorageFileName(fileName: string) {
+  return fileName
+    .trim()
+    .replace(/[\\/#?%*:|"<>]/g, "_")
+    .replace(/\s+/g, "_")
+    .slice(0, 120) || "resource-file";
+}
+
 // =========================================================================
 // 1. Suggestion Board Context & Provider
 // =========================================================================
@@ -28,6 +62,7 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockError, setUnlockError] = useState("");
   const [commentText, setCommentText] = useState("");
+  const [confirmDeletePostId, setConfirmDeletePostId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newPost, setNewPost] = useState({
     title: "",
@@ -114,10 +149,10 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
   };
 
   const handleDeletePost = async (postId: string) => {
-    if (!confirm("이 게시글을 정말로 삭제하시겠습니까?")) return;
     try {
       await deleteDoc(doc(db, "suggestions", postId));
       setSelectedPost(null);
+      setConfirmDeletePostId(null);
     } catch (err) {
       alert("삭제 실패");
     }
@@ -159,6 +194,8 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
       setUnlockError,
       commentText,
       setCommentText,
+      confirmDeletePostId,
+      setConfirmDeletePostId,
       isCreating,
       setIsCreating,
       newPost,
@@ -233,6 +270,8 @@ export function SuggestionBoardBody() {
     setUnlockError,
     commentText,
     setCommentText,
+    confirmDeletePostId,
+    setConfirmDeletePostId,
     isCreating,
     setIsCreating,
     newPost,
@@ -421,12 +460,41 @@ export function SuggestionBoardBody() {
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-bold text-slate-400">의견 상세내용</span>
                               {(isAdmin || post.authorId === user?.sub) && (
-                                <button
-                                  onClick={() => handleDeletePost(post.id)}
-                                  className="text-red-500 hover:text-red-700 text-xs font-bold flex items-center gap-1"
-                                >
-                                  <Trash className="w-3.5 h-3.5" /> 삭제하기
-                                </button>
+                                confirmDeletePostId === post.id ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeletePost(post.id);
+                                      }}
+                                      className="px-2.5 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition"
+                                    >
+                                      삭제 확정
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setConfirmDeletePostId(null);
+                                      }}
+                                      className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-500 text-xs font-bold hover:bg-slate-50 transition"
+                                    >
+                                      취소
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setConfirmDeletePostId(post.id);
+                                    }}
+                                    className="text-red-500 hover:text-red-700 text-xs font-bold flex items-center gap-1"
+                                  >
+                                    <Trash className="w-3.5 h-3.5" /> 삭제하기
+                                  </button>
+                                )
                               )}
                             </div>
                             <p className="text-slate-800 text-sm whitespace-pre-wrap mt-3 leading-relaxed">{post.content}</p>
@@ -512,7 +580,7 @@ export function useResourceBoard() {
 }
 
 export function ResourceBoardProvider({ children }: { children: React.ReactNode }) {
-  const { profile, isAdmin } = useAuth();
+  const { user, profile, isAdmin } = useAuth();
   const [resources, setResources] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -520,59 +588,88 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
     title: "",
     description: "",
     downloadUrl: "",
-    fileSize: "12.4 MB",
-    fileType: "ZIP / Driver",
+    fileSize: "",
+    fileType: "",
   });
 
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedFileName, setUploadedFileName] = useState("");
+  const [confirmDeleteResourceId, setConfirmDeleteResourceId] = useState<string | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.currentTarget;
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!user?.sub || !isAdmin) {
+      alert("관리자 인증이 완료된 계정만 자료 파일을 업로드할 수 있습니다.");
+      input.value = "";
+      return;
+    }
+
+    const fileSize = formatFileSize(file.size);
+    const fileType = getResourceFileType(file);
+    const title = getFileBaseName(file.name);
+
+    setNewResource((prev) => ({
+      ...prev,
+      downloadUrl: "",
+      fileSize,
+      fileType,
+      title: prev.title || title,
+    }));
 
     setUploadingFile(true);
     setUploadProgress(0);
     setUploadedFileName(file.name);
 
     try {
-      const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
+      const safeFileName = getSafeStorageFileName(file.name);
+      const storageRef = ref(storage, `resources/${user.sub}/${Date.now()}_${safeFileName}`);
       const uploadTask = uploadBytesResumable(storageRef, file);
 
       uploadTask.on(
         "state_changed",
         (snapshot) => {
           const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-          setUploadProgress(progress);
+          setUploadProgress(progress > 0 ? progress : 1);
         },
         (error) => {
-          console.error("Upload error:", error);
-          alert("파일 업로드 중 오류가 발생했습니다: " + error.message);
+          console.error("Upload error details:", error);
+          alert("파일 업로드 실패!\nFirebase Storage 보안 규칙 위반 또는 네트워크 접속 오류가 발생했을 수 있습니다.\n에러 내용: " + error.message);
           setUploadingFile(false);
+          setUploadProgress(0);
+          setUploadedFileName("");
+          input.value = "";
         },
         async () => {
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-
-          const sizeMB = (file.size / (1024 * 1024)).toFixed(1) + " MB";
-          const extension = file.name.split(".").pop()?.toUpperCase() || "FILE";
-          const typeStr = `${extension} / Document`;
-
-          setNewResource((prev) => ({
-            ...prev,
-            downloadUrl: downloadUrl,
-            fileSize: sizeMB,
-            fileType: file.name.endsWith(".zip") || file.name.endsWith(".rar") ? "ZIP / Driver" : typeStr,
-            title: prev.title || file.name.substring(0, file.name.lastIndexOf(".")) || file.name
-          }));
-
-          setUploadingFile(false);
+          try {
+            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            setNewResource((prev) => ({
+              ...prev,
+              downloadUrl,
+              fileSize,
+              fileType,
+            }));
+            setUploadProgress(100);
+          } catch (err: any) {
+            console.error("Error getting download URL:", err);
+            alert("다운로드 주소를 획득하는 데 실패했습니다: " + err.message);
+            setUploadedFileName("");
+          } finally {
+            setUploadingFile(false);
+            input.value = "";
+          }
         }
       );
     } catch (err: any) {
-      console.error(err);
-      alert("업로드 모듈 로딩 실패: " + err.message);
+      console.error("Upload initialization error:", err);
+      alert("업로드 모듈 초기화 실패: " + err.message);
       setUploadingFile(false);
+      setUploadProgress(0);
+      setUploadedFileName("");
+      input.value = "";
     }
   };
 
@@ -594,6 +691,14 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
       alert("제목과 설명 정보를 입력하세요.");
       return;
     }
+    if (uploadingFile) {
+      alert("파일 업로드가 완료된 뒤 등록해 주세요.");
+      return;
+    }
+    if (!newResource.downloadUrl) {
+      alert("로컬 파일 업로드를 완료하거나 다운로드 링크를 입력해 주세요.");
+      return;
+    }
 
     try {
       await addDoc(collection(db, "resources"), {
@@ -606,18 +711,18 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
         authorName: profile?.nickname || "대표 관리자",
       });
       setIsUploading(false);
-      setNewResource({ title: "", description: "", downloadUrl: "", fileSize: "12.4 MB", fileType: "ZIP / Driver" });
+      setNewResource({ title: "", description: "", downloadUrl: "", fileSize: "", fileType: "" });
       setUploadedFileName("");
+      setUploadProgress(0);
     } catch (err) {
       alert("자료 보관 실패");
     }
   };
 
-  const handleDeleteResource = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm("자료를 영구 폐기하시겠습니까?")) return;
+  const handleDeleteResource = async (id: string) => {
     try {
       await deleteDoc(doc(db, "resources", id));
+      setConfirmDeleteResourceId(null);
     } catch (err) {
       alert("삭제 실패");
     }
@@ -645,6 +750,8 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
       setUploadProgress,
       uploadedFileName,
       setUploadedFileName,
+      confirmDeleteResourceId,
+      setConfirmDeleteResourceId,
       handleFileChange,
       handleUpload,
       handleDeleteResource,
@@ -711,11 +818,15 @@ export function ResourceBoardBody() {
     uploadingFile,
     uploadProgress,
     uploadedFileName,
+    confirmDeleteResourceId,
+    setConfirmDeleteResourceId,
     handleFileChange,
     handleUpload,
     handleDeleteResource,
     filtered,
   } = useResourceBoard();
+
+  const canSubmitResource = !uploadingFile && Boolean(newResource.title && newResource.description && newResource.downloadUrl);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4 w-full">
@@ -737,7 +848,6 @@ export function ResourceBoardBody() {
               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">자료 제목명 *</label>
               <input
                 type="text"
-                required
                 placeholder="포스 기기 USB 드라이버 패키지"
                 value={newResource.title}
                 onChange={(e) => setNewResource({ ...newResource, title: e.target.value })}
@@ -749,7 +859,7 @@ export function ResourceBoardBody() {
               <div className="space-y-2">
                 <input
                   type="text"
-                  placeholder="http:// 또는 로컬 파일 업로드 시 자동 입력"
+                  placeholder="로컬 파일 업로드 완료 시 자동 입력"
                   value={newResource.downloadUrl}
                   onChange={(e) => setNewResource({ ...newResource, downloadUrl: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
@@ -772,7 +882,7 @@ export function ResourceBoardBody() {
                       업로드 중... ({uploadProgress}%)
                     </span>
                   )}
-                  {uploadedFileName && !uploadingFile && (
+                  {uploadedFileName && !uploadingFile && newResource.downloadUrl && (
                     <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5" /> {uploadedFileName} 완료
                     </span>
@@ -787,8 +897,10 @@ export function ResourceBoardBody() {
               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">파일 타입</label>
               <input
                 type="text"
+                placeholder="파일 선택 시 자동 입력"
                 value={newResource.fileType}
                 onChange={(e) => setNewResource({ ...newResource, fileType: e.target.value })}
+                readOnly={Boolean(uploadedFileName)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
               />
             </div>
@@ -796,8 +908,10 @@ export function ResourceBoardBody() {
               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">자료 파일 용량</label>
               <input
                 type="text"
+                placeholder="파일 선택 시 자동 입력"
                 value={newResource.fileSize}
                 onChange={(e) => setNewResource({ ...newResource, fileSize: e.target.value })}
+                readOnly={Boolean(uploadedFileName)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
               />
             </div>
@@ -817,9 +931,10 @@ export function ResourceBoardBody() {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl active:scale-[0.98] transition"
+            disabled={!canSubmitResource}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-2xl active:scale-[0.98] transition"
           >
-            신규 파일 등록 완료
+            {uploadingFile ? "파일 업로드 완료 대기 중..." : "신규 파일 등록 완료"}
           </button>
         </form>
       ) : null}
@@ -835,10 +950,39 @@ export function ResourceBoardBody() {
               key={item.id}
               className="bg-white border border-slate-150 rounded-3xl p-6 hover:shadow-md hover:border-slate-300 transition-all duration-300 flex items-start gap-4 relative group text-left"
             >
+              {confirmDeleteResourceId === item.id && (
+                <div className="absolute inset-0 z-30 bg-slate-950/90 rounded-3xl p-6 flex flex-col items-center justify-center text-center text-white">
+                  <Trash className="w-8 h-8 text-red-400 mb-2" />
+                  <p className="text-sm font-bold mb-1">자료를 영구 삭제하시겠습니까?</p>
+                  <p className="text-xs text-slate-300 mb-4 line-clamp-2">{item.title}</p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteResource(item.id);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition"
+                    >
+                      삭제 확정
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmDeleteResourceId(null);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition"
+                    >
+                      취소
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                 <FileText className="w-6 h-6" />
               </div>
-              <div className="flex-1 min-w-0 pr-8">
+              <div className="flex-1 min-w-0 pr-24">
                 <h4 className="font-bold text-slate-800 text-base truncate">{item.title}</h4>
                 <p className="text-slate-500 text-xs mt-1 leading-relaxed line-clamp-2">{item.description}</p>
                 <div className="flex items-center gap-3 mt-4 text-[11px] font-medium text-slate-400">
@@ -847,7 +991,7 @@ export function ResourceBoardBody() {
                   <span className="font-mono">{new Date(item.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
-              <div className="absolute right-6 top-6 flex flex-col gap-2">
+              <div className="absolute right-4 top-4 flex items-center gap-2">
                 <a
                   href={item.downloadUrl || "#"}
                   target="_blank"
@@ -859,8 +1003,12 @@ export function ResourceBoardBody() {
                 </a>
                 {isAdmin && (
                   <button
-                    onClick={(e) => handleDeleteResource(item.id, e)}
-                    className="w-10 h-10 rounded-full bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmDeleteResourceId(item.id);
+                    }}
+                    className="w-10 h-10 rounded-full bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-all"
                     title="자료 폐기"
                   >
                     <Trash className="w-4 h-4" />

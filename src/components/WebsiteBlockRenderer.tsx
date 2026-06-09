@@ -892,8 +892,8 @@ export const WebsiteBlockRenderer: React.FC<WebsiteBlockRendererProps> = ({
 
             {/* Block toolbar controls overlay (repositioned outside the block bounds) */}
             {showBlockToolbar && (
-              <div className="absolute top-[-36px] right-0 flex items-center gap-1.5 bg-slate-900/90 text-white rounded-xl p-1 z-30 opacity-70 hover:opacity-100 group-hover/block:opacity-100 transition-opacity border border-white/10 shadow-lg" style={{ backdropFilter: "blur(4px)" }}>
-                <span className="text-[10px] font-bold text-slate-300 px-1.5 capitalize">
+              <div className="absolute -top-14 right-0 max-w-[min(92vw,760px)] flex flex-wrap items-center justify-end gap-1.5 bg-slate-900/90 text-white rounded-xl p-1.5 z-40 opacity-85 hover:opacity-100 group-hover/block:opacity-100 transition-opacity border border-white/10 shadow-lg" style={{ backdropFilter: "blur(4px)" }}>
+                <span className="hidden sm:inline-flex text-[10px] font-bold text-slate-300 px-1.5 capitalize whitespace-nowrap">
                   {block.type === "hero"
                     ? "히어로 배너"
                     : block.type === "features"
@@ -964,20 +964,18 @@ export const WebsiteBlockRenderer: React.FC<WebsiteBlockRendererProps> = ({
                 >
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>
-                {block.type !== "custom_board" && (
-                  <button
-                    type="button"
-                    title="정말 삭제"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      handleDeleteBlock(page, blockIndex);
-                    }}
-                    className="p-1.5 bg-red-650 hover:bg-red-700 text-white rounded-lg transition"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  title="블록 삭제"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    handleDeleteBlock(page, blockIndex);
+                  }}
+                  className="p-1.5 bg-red-650 hover:bg-red-700 text-white rounded-lg transition"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
 
