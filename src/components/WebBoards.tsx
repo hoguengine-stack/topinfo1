@@ -1,16 +1,14 @@
 import React, { useState, useEffect, createContext, useContext } from "react";
-import { db, storage } from "../firebase";
+import { db } from "../firebase";
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
-import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { useAuth } from "../contexts/AuthContext";
 import { ResourceItem } from "../types";
 import {
-  buildResourceFileDraft,
   buildResourceRecord,
-  canDeleteResourceDocumentAfterStorageDeleteError,
-  getSafeStorageFileName,
+  buildStaticDownloadDraft,
+  StaticDownloadManifestItem,
 } from "../utils/resourceFiles";
-import { Lock, Unlock, Search, FileText, Download, Reply, Trash, CheckCircle2, FileDown, PlusCircle } from "lucide-react";
+import { Lock, Unlock, Search, FileText, Download, Reply, Trash, PlusCircle } from "lucide-react";
 
 // =========================================================================
 // 1. Suggestion Board Context & Provider
@@ -555,6 +553,7 @@ export function useResourceBoard() {
 export function ResourceBoardProvider({ children }: { children: React.ReactNode }) {
   const { user, profile, isAdmin } = useAuth();
   const [resources, setResources] = useState<ResourceItem[]>([]);
+  const [downloadManifest, setDownloadManifest] = useState<StaticDownloadManifestItem[]>([]);
   const [search, setSearch] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [newResource, setNewResource] = useState({
@@ -563,88 +562,20 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
     downloadUrl: "",
     fileSize: "",
     fileType: "",
-    storagePath: "",
   });
 
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadedFileName, setUploadedFileName] = useState("");
   const [confirmDeleteResourceId, setConfirmDeleteResourceId] = useState<string | null>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const input = e.currentTarget;
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!user?.sub || !isAdmin) {
-      alert("관리자 인증이 완료된 계정만 자료 파일을 업로드할 수 있습니다.");
-      input.value = "";
-      return;
-    }
-
-    const fileDraft = buildResourceFileDraft(file);
+  const handleDownloadPathChange = (value: string) => {
+    const draft = buildStaticDownloadDraft(value, "", downloadManifest);
 
     setNewResource((prev) => ({
       ...prev,
-      downloadUrl: "",
-      fileSize: fileDraft.fileSize,
-      fileType: fileDraft.fileType,
-      storagePath: "",
-      title: prev.title || fileDraft.title,
+      title: prev.title || draft.title,
+      downloadUrl: draft.downloadUrl,
+      fileSize: draft.fileSize || prev.fileSize,
+      fileType: draft.fileType || prev.fileType,
     }));
-
-    setUploadingFile(true);
-    setUploadProgress(0);
-    setUploadedFileName(file.name);
-
-    try {
-      const safeFileName = getSafeStorageFileName(file.name);
-      const storageRef = ref(storage, `resources/${user.sub}/${Date.now()}_${safeFileName}`);
-      const uploadTask = uploadBytesResumable(storageRef, file);
-
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-          setUploadProgress(progress > 0 ? progress : 1);
-        },
-        (error) => {
-          console.error("Upload error details:", error);
-          alert("파일 업로드 실패!\nFirebase Storage 보안 규칙 위반 또는 네트워크 접속 오류가 발생했을 수 있습니다.\n에러 내용: " + error.message);
-          setUploadingFile(false);
-          setUploadProgress(0);
-          setUploadedFileName("");
-          input.value = "";
-        },
-        async () => {
-          try {
-            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-            setNewResource((prev) => ({
-              ...prev,
-              downloadUrl,
-              fileSize: fileDraft.fileSize,
-              fileType: fileDraft.fileType,
-              storagePath: uploadTask.snapshot.ref.fullPath,
-            }));
-            setUploadProgress(100);
-          } catch (err: any) {
-            console.error("Error getting download URL:", err);
-            alert("다운로드 주소를 획득하는 데 실패했습니다: " + err.message);
-            setUploadedFileName("");
-          } finally {
-            setUploadingFile(false);
-            input.value = "";
-          }
-        }
-      );
-    } catch (err: any) {
-      console.error("Upload initialization error:", err);
-      alert("업로드 모듈 초기화 실패: " + err.message);
-      setUploadingFile(false);
-      setUploadProgress(0);
-      setUploadedFileName("");
-      input.value = "";
-    }
   };
 
   useEffect(() => {
@@ -659,18 +590,21 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    fetch("/downloads/manifest.json", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setDownloadManifest(Array.isArray(data) ? data : []))
+      .catch(() => setDownloadManifest([]));
+  }, []);
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newResource.title || !newResource.description) {
       alert("제목과 설명 정보를 입력하세요.");
       return;
     }
-    if (uploadingFile) {
-      alert("파일 업로드가 완료된 뒤 등록해 주세요.");
-      return;
-    }
     if (!newResource.downloadUrl) {
-      alert("로컬 파일 업로드를 완료하거나 다운로드 링크를 입력해 주세요.");
+      alert("GitHub 다운로드 경로 또는 외부 다운로드 링크를 입력해 주세요.");
       return;
     }
 
@@ -684,9 +618,7 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
         })
       );
       setIsUploading(false);
-      setNewResource({ title: "", description: "", downloadUrl: "", fileSize: "", fileType: "", storagePath: "" });
-      setUploadedFileName("");
-      setUploadProgress(0);
+      setNewResource({ title: "", description: "", downloadUrl: "", fileSize: "", fileType: "" });
     } catch (err) {
       alert("자료 보관 실패");
     }
@@ -694,17 +626,6 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
 
   const handleDeleteResource = async (item: ResourceItem) => {
     try {
-      if (item.storagePath) {
-        try {
-          await deleteObject(ref(storage, item.storagePath));
-        } catch (storageErr) {
-          console.warn("Resource storage file deletion failed:", storageErr);
-          if (!canDeleteResourceDocumentAfterStorageDeleteError(storageErr)) {
-            alert("파일 원본 삭제 권한 또는 네트워크 문제로 자료 문서를 보존했습니다. 파일 업로드 계정으로 다시 시도해 주세요.");
-            return;
-          }
-        }
-      }
       await deleteDoc(doc(db, "resources", item.id));
       setConfirmDeleteResourceId(null);
     } catch (err) {
@@ -728,15 +649,9 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
       setIsUploading,
       newResource,
       setNewResource,
-      uploadingFile,
-      setUploadingFile,
-      uploadProgress,
-      setUploadProgress,
-      uploadedFileName,
-      setUploadedFileName,
       confirmDeleteResourceId,
       setConfirmDeleteResourceId,
-      handleFileChange,
+      handleDownloadPathChange,
       handleUpload,
       handleDeleteResource,
       filtered,
@@ -765,7 +680,7 @@ export function ResourceBoardHeader() {
             onClick={() => setIsUploading(true)}
             className="self-start md:self-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-2xl shadow-md active:scale-95 transition flex items-center gap-2"
           >
-            <PlusCircle className="w-5 h-5" /> 엔지니어 파일 업로드
+            <PlusCircle className="w-5 h-5" /> GitHub 자료 링크 등록
           </button>
         )}
       </div>
@@ -799,18 +714,15 @@ export function ResourceBoardBody() {
     setIsUploading,
     newResource,
     setNewResource,
-    uploadingFile,
-    uploadProgress,
-    uploadedFileName,
     confirmDeleteResourceId,
     setConfirmDeleteResourceId,
-    handleFileChange,
+    handleDownloadPathChange,
     handleUpload,
     handleDeleteResource,
     filtered,
   } = useResourceBoard();
 
-  const canSubmitResource = !uploadingFile && Boolean(newResource.title && newResource.description && newResource.downloadUrl);
+  const canSubmitResource = Boolean(newResource.title && newResource.description && newResource.downloadUrl);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4 w-full">
@@ -839,39 +751,19 @@ export function ResourceBoardBody() {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">파일 다운로드 경로 링크 / 로컬 파일 업로드</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">GitHub 다운로드 경로 / 외부 링크 *</label>
               <div className="space-y-2">
                 <input
                   type="text"
-                  placeholder="로컬 파일 업로드 완료 시 자동 입력"
+                  placeholder="public/downloads/driver.zip 또는 /downloads/driver.zip"
                   value={newResource.downloadUrl}
-                  onChange={(e) => setNewResource({ ...newResource, downloadUrl: e.target.value })}
+                  onChange={(e) => handleDownloadPathChange(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
                 />
-                <div className="flex items-center gap-3">
-                  <input
-                    type="file"
-                    id="resource-file-upload-split"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  <label
-                    htmlFor="resource-file-upload-split"
-                    className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2.5 px-4 rounded-xl border border-slate-200 active:scale-95 transition flex items-center gap-1.5"
-                  >
-                    <FileDown className="w-3.5 h-3.5" /> 로컬 파일 선택하여 업로드
-                  </label>
-                  {uploadingFile && (
-                    <span className="text-xs text-blue-600 font-bold animate-pulse">
-                      업로드 중... ({uploadProgress}%)
-                    </span>
-                  )}
-                  {uploadedFileName && !uploadingFile && newResource.downloadUrl && (
-                    <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> {uploadedFileName} 완료
-                    </span>
-                  )}
-                </div>
+                <p className="text-[11px] leading-relaxed text-slate-400">
+                  파일은 작업폴더 <span className="font-mono text-slate-500">public/downloads</span>에 넣고 GitHub에 푸시합니다.
+                  경로를 입력하면 확장자 기준으로 파일 타입이 자동 반영되며, <span className="font-mono text-slate-500">manifest.json</span>에 있는 파일은 용량도 자동 반영됩니다.
+                </p>
               </div>
             </div>
           </div>
@@ -884,7 +776,6 @@ export function ResourceBoardBody() {
                 placeholder="파일 선택 시 자동 입력"
                 value={newResource.fileType}
                 onChange={(e) => setNewResource({ ...newResource, fileType: e.target.value })}
-                readOnly={Boolean(uploadedFileName)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
               />
             </div>
@@ -895,7 +786,6 @@ export function ResourceBoardBody() {
                 placeholder="파일 선택 시 자동 입력"
                 value={newResource.fileSize}
                 onChange={(e) => setNewResource({ ...newResource, fileSize: e.target.value })}
-                readOnly={Boolean(uploadedFileName)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
               />
             </div>
@@ -906,7 +796,7 @@ export function ResourceBoardBody() {
             <textarea
               required
               rows={3}
-              placeholder="USB 포트에 꽂은 이후 setup.exe 파일을 관리자 권한으로 실행해주십시오."
+              placeholder="파일 용도, 설치 방법, 다운로드 후 실행 안내를 적어주세요."
               value={newResource.description}
               onChange={(e) => setNewResource({ ...newResource, description: e.target.value })}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600 resize-none"
@@ -918,7 +808,7 @@ export function ResourceBoardBody() {
             disabled={!canSubmitResource}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-2xl active:scale-[0.98] transition"
           >
-            {uploadingFile ? "파일 업로드 완료 대기 중..." : "신규 파일 등록 완료"}
+            신규 파일 링크 등록 완료
           </button>
         </form>
       ) : null}

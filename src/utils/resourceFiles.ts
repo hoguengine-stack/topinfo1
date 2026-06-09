@@ -1,6 +1,5 @@
 export interface ResourceFileLike {
   name: string;
-  size: number;
   type?: string;
 }
 
@@ -10,7 +9,6 @@ export interface ResourceFormDraft {
   downloadUrl: string;
   fileSize: string;
   fileType: string;
-  storagePath?: string;
 }
 
 export interface ResourceRecord {
@@ -22,7 +20,13 @@ export interface ResourceRecord {
   createdAt: string;
   authorName: string;
   authorId?: string;
-  storagePath?: string;
+}
+
+export interface StaticDownloadManifestItem {
+  path: string;
+  size?: string;
+  type?: string;
+  title?: string;
 }
 
 export function formatResourceFileSize(bytes: number) {
@@ -51,22 +55,45 @@ export function getResourceFileType(file: ResourceFileLike) {
   return `${upperExtension} / File`;
 }
 
-export function getSafeStorageFileName(fileName: string) {
-  return (
-    fileName
-      .trim()
-      .replace(/[\\/#?%*:|"<>]/g, "_")
-      .replace(/\s+/g, "_")
-      .slice(0, 120) || "resource-file"
-  );
+function getFileNameFromUrlOrPath(value: string) {
+  const normalized = value.trim().replace(/\\/g, "/").split("?")[0].split("#")[0];
+  const lastSegment = normalized.split("/").filter(Boolean).pop() || normalized;
+
+  try {
+    return decodeURIComponent(lastSegment);
+  } catch {
+    return lastSegment;
+  }
 }
 
-export function buildResourceFileDraft(file: ResourceFileLike): ResourceFormDraft {
+export function normalizeStaticDownloadUrl(value: string) {
+  const trimmed = value.trim().replace(/\\/g, "/");
+  if (!trimmed) return "";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("/downloads/")) return encodeURI(trimmed);
+
+  const withoutPublic = trimmed.replace(/^\/?public\//, "");
+  const downloadPath = withoutPublic.startsWith("downloads/")
+    ? withoutPublic
+    : `downloads/${withoutPublic.replace(/^\/+/, "")}`;
+
+  return encodeURI(`/${downloadPath}`);
+}
+
+export function buildStaticDownloadDraft(
+  downloadPath: string,
+  fileSize = "",
+  manifest: StaticDownloadManifestItem[] = []
+): ResourceFormDraft {
+  const fileName = getFileNameFromUrlOrPath(downloadPath);
+  const downloadUrl = normalizeStaticDownloadUrl(downloadPath);
+  const manifestItem = manifest.find((item) => normalizeStaticDownloadUrl(item.path) === downloadUrl);
+
   return {
-    title: getFileBaseName(file.name),
-    downloadUrl: "",
-    fileSize: formatResourceFileSize(file.size),
-    fileType: getResourceFileType(file),
+    title: manifestItem?.title || getFileBaseName(fileName),
+    downloadUrl,
+    fileSize: manifestItem?.size || fileSize,
+    fileType: manifestItem?.type || getResourceFileType({ name: fileName }),
   };
 }
 
@@ -92,19 +119,5 @@ export function buildResourceRecord(
     record.authorId = options.authorId;
   }
 
-  if (!draft.storagePath) {
-    return record;
-  }
-
-  record.storagePath = draft.storagePath;
   return record;
-}
-
-export function canDeleteResourceDocumentAfterStorageDeleteError(error: unknown) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "storage/object-not-found"
-  );
 }

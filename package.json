@@ -9,6 +9,7 @@
     "start": "tsx server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist",
+    "downloads:manifest": "node scripts/generate-download-manifest.mjs",
     "test:cms": "tsx --test src/utils/cmsSettings.test.ts",
     "test:requests": "tsx --test src/utils/requestTasks.test.ts",
     "test:resources": "tsx --test src/utils/resourceFiles.test.ts",

@@ -18,8 +18,5 @@
       "database": "ai-studio-07e7f11b-9034-4c94-8392-c28f5c842f62",
       "rules": "firestore.rules"
     }
-  ],
-  "storage": {
-    "rules": "storage.rules"
-  }
+  ]
 }
