@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "test:cms": "tsx --test src/utils/cmsSettings.test.ts",
+    "test:requests": "tsx --test src/utils/requestTasks.test.ts",
+    "test": "npm run test:cms && npm run test:requests",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, runTransaction } from "firebase/firestore";
 import { Consultation, PaperRequest, Task, Priority, TaskType } from "../types";
+import { buildConsultationTask, buildPaperRequestTask } from "../utils/requestTasks";
 import { 
   Phone, User, Landmark, HelpCircle, Check, Trash2, 
   Sparkles, ClipboardList, Send, Calendar, CheckSquare, Plus, ArrowRight, CornerDownRight, Tag, AlertTriangle
@@ -31,6 +32,7 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
     return tomorrow.toISOString().split("T")[0];
   });
   const [taskMemo, setTaskMemo] = useState<string>("");
+  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     // Subscribe to Consultations
@@ -56,6 +58,12 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
       unsubPapers();
     };
   }, []);
+
+  useEffect(() => {
+    if (assignees.length > 0 && !assignees.includes(taskAssignee)) {
+      setTaskAssignee(assignees[0]);
+    }
+  }, [assignees, taskAssignee]);
 
   // Actions
   const handleToggleConsultStatus = async (id: string, current: "대기" | "완료") => {
@@ -102,72 +110,105 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
 
   // Convert to internal task
   const convertConsultToTask = async (c: Consultation) => {
+    if (c.linkedTaskId) {
+      alert("이미 작업관리 일감으로 등록된 상담 신청입니다.");
+      return;
+    }
+
+    setProcessingRequestId(c.id);
     try {
       const now = new Date().toISOString();
-      const title = `[가맨상담] ${c.businessName || c.customerName} - ${c.productOfInterest || "기기상담"}`;
-      const description = `신청자: ${c.customerName}\n연락처: ${c.contact}\n업종: ${c.businessType || "미지정"}\n문의제품: ${c.productOfInterest || "포스/단말기"}\n\n[고객문의 내용]\n${c.message}`;
-      
-      const taskData = {
-        title,
-        status: "예정" as const,
+      const taskRef = doc(collection(db, "tasks"));
+      const requestRef = doc(db, "consultations", c.id);
+      const taskData = buildConsultationTask(c, {
         assignee: taskAssignee,
         dueDate: taskDueDate,
         priority: taskPriority,
-        taskType: taskType,
-        description,
-        memo: taskMemo || "홈페이지 상담 신청 건에서 지능형 자동 연동 등록됨.",
+        taskType,
+        memo: taskMemo,
         authorId: currentUserId,
-        createdAt: now,
-        updatedAt: now,
-        showOnCalendar: true
-      };
+        now,
+      });
 
-      await addDoc(collection(db, "tasks"), taskData);
-      
-      // Mark consultation status as complete automatically
-      await updateDoc(doc(db, "consultations", c.id), { status: "완료" });
+      await runTransaction(db, async (transaction) => {
+        const requestSnap = await transaction.get(requestRef);
+        if (!requestSnap.exists()) {
+          throw new Error("request-not-found");
+        }
+
+        const latestRequest = requestSnap.data() as Consultation;
+        if (latestRequest.linkedTaskId) {
+          throw new Error("already-linked");
+        }
+
+        transaction.set(taskRef, taskData);
+        transaction.update(requestRef, {
+          status: "완료",
+          linkedTaskId: taskRef.id,
+          taskLinkedAt: now,
+          taskLinkedBy: currentUserId,
+        });
+      });
       
       setTaskFormOpenForId(null);
       setTaskMemo("");
-      alert(`'${taskAssignee}'님에게 '${title}' 설치/상담 태스크 일감이 정상 등록되었습니다.`);
+      alert(`'${taskAssignee}'님에게 '${taskData.title}' 작업이 정상 등록되었습니다.`);
     } catch (err) {
       console.error(err);
-      alert("일정 전산 등록 전송 오류");
+      alert(err instanceof Error && err.message === "already-linked" ? "이미 작업관리 일감으로 등록된 신청입니다." : "일정 전산 등록 전송 오류");
+    } finally {
+      setProcessingRequestId(null);
     }
   };
 
   const convertPaperToTask = async (p: PaperRequest) => {
+    if (p.linkedTaskId) {
+      alert("이미 작업관리 배송업무로 등록된 용지 요청입니다.");
+      return;
+    }
+
+    setProcessingRequestId(p.id);
     try {
       const now = new Date().toISOString();
-      const title = `[용지무상배송] ${p.customerName} - ${p.quantity}`;
-      const description = `수령처명: ${p.customerName}\n수령연락처: ${p.contact}\n배송주소: ${p.address}\n사용기종: ${p.deviceModel || "IC단말기"}\n요청수량: ${p.quantity}`;
-      
-      const taskData = {
-        title,
-        status: "예정" as const,
+      const taskRef = doc(collection(db, "tasks"));
+      const requestRef = doc(db, "paper_requests", p.id);
+      const taskData = buildPaperRequestTask(p, {
         assignee: taskAssignee,
         dueDate: taskDueDate,
         priority: taskPriority,
-        taskType: "용지" as const,
-        description,
-        memo: taskMemo || "감열 용지 무상 지원 연동 처리.",
+        memo: taskMemo,
         authorId: currentUserId,
-        createdAt: now,
-        updatedAt: now,
-        showOnCalendar: true
-      };
+        now,
+      });
 
-      await addDoc(collection(db, "tasks"), taskData);
+      await runTransaction(db, async (transaction) => {
+        const requestSnap = await transaction.get(requestRef);
+        if (!requestSnap.exists()) {
+          throw new Error("request-not-found");
+        }
 
-      // Mark paper request status as complete automatically
-      await updateDoc(doc(db, "paper_requests", p.id), { status: "완료" });
+        const latestRequest = requestSnap.data() as PaperRequest;
+        if (latestRequest.linkedTaskId) {
+          throw new Error("already-linked");
+        }
+
+        transaction.set(taskRef, taskData);
+        transaction.update(requestRef, {
+          status: "완료",
+          linkedTaskId: taskRef.id,
+          taskLinkedAt: now,
+          taskLinkedBy: currentUserId,
+        });
+      });
 
       setTaskFormOpenForId(null);
       setTaskMemo("");
       alert(`'${taskAssignee}'님에게 용지 출고 배송 태스크가 정상 연동되어 스케줄에 등록되었습니다.`);
     } catch (err) {
       console.error(err);
-      alert("배송 등록 전송 오류");
+      alert(err instanceof Error && err.message === "already-linked" ? "이미 작업관리 배송업무로 등록된 요청입니다." : "배송 등록 전송 오류");
+    } finally {
+      setProcessingRequestId(null);
     }
   };
 
@@ -320,13 +361,21 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
                         {c.status === "완료" ? "대기로 변경" : "완료 처리"}
                       </button>
 
-                      {c.status === "대기" && (
+                      {c.linkedTaskId ? (
+                        <span
+                          className="bg-blue-500/10 text-blue-300 text-xs font-bold px-2.5 py-1 rounded-md border border-blue-500/20"
+                          title={`작업 ID: ${c.linkedTaskId}`}
+                        >
+                          작업등록 완료
+                        </span>
+                      ) : c.status === "대기" && (
                         <button
                           onClick={() => setTaskFormOpenForId(isOpen ? null : c.id)}
+                          disabled={processingRequestId === c.id}
                           className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-2.5 py-1 rounded-md transition flex items-center gap-1 border border-blue-500"
                         >
                           <CheckSquare className="w-3 h-3" />
-                          {isOpen ? "닫기" : "전산 일감 등록"}
+                          {processingRequestId === c.id ? "등록 중" : isOpen ? "닫기" : "전산 일감 등록"}
                         </button>
                       )}
 
@@ -451,9 +500,10 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
                           <button
                             type="button"
                             onClick={() => convertConsultToTask(c)}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-1 hover:scale-[1.01]"
+                            disabled={processingRequestId === c.id}
+                            className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-bold flex items-center gap-1 hover:scale-[1.01]"
                           >
-                            <Send className="w-3.5 h-3.5" /> 현장 스케줄 일지로 전산 등록 확정
+                            <Send className="w-3.5 h-3.5" /> {processingRequestId === c.id ? "등록 중..." : "현장 스케줄 일지로 전산 등록 확정"}
                           </button>
                         </div>
                       </div>
@@ -502,7 +552,14 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
                         {p.status === "완료" ? "대기로 변경" : "택배 출고등록"}
                       </button>
 
-                      {p.status === "대기" && (
+                      {p.linkedTaskId ? (
+                        <span
+                          className="bg-emerald-500/10 text-emerald-300 text-xs font-bold px-2.5 py-1 rounded-md border border-emerald-500/20"
+                          title={`작업 ID: ${p.linkedTaskId}`}
+                        >
+                          배송업무 등록완료
+                        </span>
+                      ) : p.status === "대기" && (
                         <button
                           onClick={() => {
                             setTaskFormOpenForId(isOpen ? null : p.id);
@@ -510,10 +567,11 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
                             setTaskType("용지");
                             setTaskPriority("보통");
                           }}
+                          disabled={processingRequestId === p.id}
                           className="bg-emerald-600 hover:bg-emerald-700 text-slate-950 text-xs font-black px-2.5 py-1 rounded-md transition flex items-center gap-1 border border-emerald-500"
                         >
                           <Plus className="w-3 h-3" />
-                          {isOpen ? "닫기" : "배송업무 위임"}
+                          {processingRequestId === p.id ? "등록 중" : isOpen ? "닫기" : "배송업무 위임"}
                         </button>
                       )}
 
@@ -622,9 +680,10 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
                           <button
                             type="button"
                             onClick={() => convertPaperToTask(p)}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 px-4 py-2 rounded-lg font-black flex items-center gap-1 hover:scale-[1.01]"
+                            disabled={processingRequestId === p.id}
+                            className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed text-slate-950 px-4 py-2 rounded-lg font-black flex items-center gap-1 hover:scale-[1.01]"
                           >
-                            <Send className="w-3.5 h-3.5" /> 용지 출고 배송업무로 일정 등록 확정
+                            <Send className="w-3.5 h-3.5" /> {processingRequestId === p.id ? "등록 중..." : "용지 출고 배송업무로 일정 등록 확정"}
                           </button>
                         </div>
                       </div>

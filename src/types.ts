@@ -18,6 +18,9 @@ export interface Task {
   updatedAt: string;
   showOnCalendar?: boolean;
   attachments?: string[];
+  sourceCollection?: "consultations" | "paper_requests";
+  sourceId?: string;
+  sourceType?: "consultation" | "paper_request";
 }
 
 export interface Product {
@@ -42,6 +45,9 @@ export interface Consultation {
   message: string;
   status: "대기" | "완료";
   createdAt: string;
+  linkedTaskId?: string;
+  taskLinkedAt?: string;
+  taskLinkedBy?: string;
 }
 
 export interface PaperRequest {
@@ -53,6 +59,9 @@ export interface PaperRequest {
   quantity: string;
   status: "대기" | "완료";
   createdAt: string;
+  linkedTaskId?: string;
+  taskLinkedAt?: string;
+  taskLinkedBy?: string;
 }
 
 export interface Suggestion {
