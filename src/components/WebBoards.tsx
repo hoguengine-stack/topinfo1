@@ -1,11 +1,25 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, createContext, useContext } from "react";
 import { db, storage } from "../firebase";
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { useAuth } from "../contexts/AuthContext";
-import { Lock, Unlock, Eye, EyeOff, Search, FileText, Download, Reply, Trash, CheckCircle2, AlertTriangle, ChevronRight, FileDown, PlusCircle } from "lucide-react";
+import { Lock, Unlock, Search, FileText, Download, Reply, Trash, CheckCircle2, FileDown, PlusCircle } from "lucide-react";
 
-export function SuggestionBoard() {
+// =========================================================================
+// 1. Suggestion Board Context & Provider
+// =========================================================================
+
+const SuggestionBoardContext = createContext<any>(null);
+
+export function useSuggestionBoard() {
+  const context = useContext(SuggestionBoardContext);
+  if (!context) {
+    throw new Error("useSuggestionBoard must be used within a SuggestionBoardProvider");
+  }
+  return context;
+}
+
+export function SuggestionBoardProvider({ children }: { children: React.ReactNode }) {
   const { user, profile, isAdmin } = useAuth();
   const [posts, setPosts] = useState<any[]>([]);
   const [filteredPosts, setFilteredPosts] = useState<any[]>([]);
@@ -14,8 +28,6 @@ export function SuggestionBoard() {
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockError, setUnlockError] = useState("");
   const [commentText, setCommentText] = useState("");
-
-  // New Suggestion Form State
   const [isCreating, setIsCreating] = useState(false);
   const [newPost, setNewPost] = useState({
     title: "",
@@ -31,8 +43,7 @@ export function SuggestionBoard() {
       snap.forEach((d) => {
         items.push({ id: d.id, ...d.data() });
       });
-      // Sort by newest
-      items.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setPosts(items);
     });
     return () => unsub();
@@ -132,8 +143,47 @@ export function SuggestionBoard() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <SuggestionBoardContext.Provider value={{
+      user,
+      profile,
+      isAdmin,
+      posts,
+      filteredPosts,
+      search,
+      setSearch,
+      selectedPost,
+      setSelectedPost,
+      unlockPassword,
+      setUnlockPassword,
+      unlockError,
+      setUnlockError,
+      commentText,
+      setCommentText,
+      isCreating,
+      setIsCreating,
+      newPost,
+      setNewPost,
+      handleCreatePost,
+      handleAddReply,
+      handleDeletePost,
+      handleUnlockAndOpen,
+      canViewDetail,
+    }}>
+      {children}
+    </SuggestionBoardContext.Provider>
+  );
+}
+
+// =========================================================================
+// 2. Suggestion Board Split Components
+// =========================================================================
+
+export function SuggestionBoardHeader() {
+  const { isCreating, setIsCreating } = useSuggestionBoard();
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-6 w-full">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">건의 & 가맹점 의견제안</h2>
           <p className="text-slate-500 mt-2">대표님들의 소소한 건의 및 조언을 귀담아 들어 최고의 서비스를 제공하겠습니다.</p>
@@ -147,7 +197,55 @@ export function SuggestionBoard() {
           </button>
         )}
       </div>
+    </div>
+  );
+}
 
+export function SuggestionBoardSearch() {
+  const { search, setSearch } = useSuggestionBoard();
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-3 w-full">
+      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/60 rounded-2xl px-4 py-3">
+        <Search className="w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          placeholder="제목, 본문, 또는 가맹점명 검색"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="bg-transparent text-sm text-slate-800 placeholder-slate-400 focus:outline-none w-full"
+        />
+      </div>
+    </div>
+  );
+}
+
+export function SuggestionBoardBody() {
+  const {
+    user,
+    isAdmin,
+    filteredPosts,
+    selectedPost,
+    setSelectedPost,
+    unlockPassword,
+    setUnlockPassword,
+    unlockError,
+    setUnlockError,
+    commentText,
+    setCommentText,
+    isCreating,
+    setIsCreating,
+    newPost,
+    setNewPost,
+    handleCreatePost,
+    handleAddReply,
+    handleDeletePost,
+    handleUnlockAndOpen,
+    canViewDetail,
+  } = useSuggestionBoard();
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-4 w-full">
       {isCreating ? (
         <form onSubmit={handleCreatePost} className="bg-white border border-slate-200/80 p-6 md:p-8 rounded-3xl shadow-sm mb-10 space-y-5">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
@@ -240,18 +338,6 @@ export function SuggestionBoard() {
         </form>
       ) : null}
 
-      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/60 rounded-2xl px-4 py-3 mb-6">
-        <Search className="w-4 h-4 text-slate-400" />
-        <input
-          type="text"
-          placeholder="제목, 본문, 또는 가맹점명 검색"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="bg-transparent text-sm text-slate-800 placeholder-slate-400 focus:outline-none w-full"
-        />
-      </div>
-
-      {/* Suggestion Post List */}
       <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
         <div className="hidden md:grid grid-cols-12 px-6 py-4 bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
           <div className="col-span-1 text-center">글 번호</div>
@@ -265,7 +351,6 @@ export function SuggestionBoard() {
             <div className="py-12 text-center text-slate-400 text-sm">등록된 건의사항 의견이 존재하지 않습니다.</div>
           ) : (
             filteredPosts.map((post, idx) => {
-              const isLocked = post.isSecret && !isAdmin && post.authorId !== user?.sub && !post._unlocked;
               return (
                 <div key={post.id} className="hover:bg-slate-50 transition-colors">
                   <div
@@ -301,7 +386,6 @@ export function SuggestionBoard() {
                     </div>
                   </div>
 
-                  {/* Accordion Detail View */}
                   {selectedPost?.id === post.id && (
                     <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-6 md:px-12">
                       {!canViewDetail(post) ? (
@@ -348,7 +432,6 @@ export function SuggestionBoard() {
                             <p className="text-slate-800 text-sm whitespace-pre-wrap mt-3 leading-relaxed">{post.content}</p>
                           </div>
 
-                          {/* Reply / Comment Blocks */}
                           <div className="space-y-4">
                             <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest flex items-center gap-1.5">
                               <Reply className="w-3.5 h-3.5 rotate-180" /> 탑정보통신 전담 엔지니어 답변
@@ -372,7 +455,6 @@ export function SuggestionBoard() {
                               </div>
                             )}
 
-                            {/* Reply Input Form for admin */}
                             {isAdmin && (
                               <div className="mt-4 border-t border-slate-100 pt-4 flex gap-2">
                                 <input
@@ -405,7 +487,31 @@ export function SuggestionBoard() {
   );
 }
 
-export function ResourceBoard() {
+export function SuggestionBoard() {
+  return (
+    <SuggestionBoardProvider>
+      <SuggestionBoardHeader />
+      <SuggestionBoardSearch />
+      <SuggestionBoardBody />
+    </SuggestionBoardProvider>
+  );
+}
+
+// =========================================================================
+// 3. Resource Board Context & Provider
+// =========================================================================
+
+const ResourceBoardContext = createContext<any>(null);
+
+export function useResourceBoard() {
+  const context = useContext(ResourceBoardContext);
+  if (!context) {
+    throw new Error("useResourceBoard must be used within a ResourceBoardProvider");
+  }
+  return context;
+}
+
+export function ResourceBoardProvider({ children }: { children: React.ReactNode }) {
   const { profile, isAdmin } = useAuth();
   const [resources, setResources] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -476,7 +582,7 @@ export function ResourceBoard() {
       snap.forEach((d) => {
         items.push({ id: d.id, ...d.data() });
       });
-      items.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setResources(items);
     });
     return () => unsub();
@@ -523,8 +629,42 @@ export function ResourceBoard() {
   );
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <ResourceBoardContext.Provider value={{
+      profile,
+      isAdmin,
+      resources,
+      search,
+      setSearch,
+      isUploading,
+      setIsUploading,
+      newResource,
+      setNewResource,
+      uploadingFile,
+      setUploadingFile,
+      uploadProgress,
+      setUploadProgress,
+      uploadedFileName,
+      setUploadedFileName,
+      handleFileChange,
+      handleUpload,
+      handleDeleteResource,
+      filtered,
+    }}>
+      {children}
+    </ResourceBoardContext.Provider>
+  );
+}
+
+// =========================================================================
+// 4. Resource Board Split Components
+// =========================================================================
+
+export function ResourceBoardHeader() {
+  const { isAdmin, isUploading, setIsUploading } = useResourceBoard();
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-6 w-full">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">자료실 & 소프트웨어 다운로드</h2>
           <p className="text-slate-500 mt-2">탑정보통신의 가맹 전용 최신 드라이버, 세무 정산 프로그램, 간편 기기 매뉴얼입니다.</p>
@@ -538,7 +678,47 @@ export function ResourceBoard() {
           </button>
         )}
       </div>
+    </div>
+  );
+}
 
+export function ResourceBoardSearch() {
+  const { search, setSearch } = useResourceBoard();
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-3 w-full">
+      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/60 rounded-2xl px-4 py-3">
+        <Search className="w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          placeholder="검색할 유틸리티 드라이버, 매뉴얼 키워드 입력"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="bg-transparent text-sm text-slate-800 placeholder-slate-400 focus:outline-none w-full"
+        />
+      </div>
+    </div>
+  );
+}
+
+export function ResourceBoardBody() {
+  const {
+    isAdmin,
+    isUploading,
+    setIsUploading,
+    newResource,
+    setNewResource,
+    uploadingFile,
+    uploadProgress,
+    uploadedFileName,
+    handleFileChange,
+    handleUpload,
+    handleDeleteResource,
+    filtered,
+  } = useResourceBoard();
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-4 w-full">
       {isUploading ? (
         <form onSubmit={handleUpload} className="bg-white border border-slate-200/80 p-6 md:p-8 rounded-3xl shadow-sm mb-10 space-y-5">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
@@ -577,12 +757,12 @@ export function ResourceBoard() {
                 <div className="flex items-center gap-3">
                   <input
                     type="file"
-                    id="resource-file-upload"
+                    id="resource-file-upload-split"
                     onChange={handleFileChange}
                     className="hidden"
                   />
                   <label
-                    htmlFor="resource-file-upload"
+                    htmlFor="resource-file-upload-split"
                     className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2.5 px-4 rounded-xl border border-slate-200 active:scale-95 transition flex items-center gap-1.5"
                   >
                     <FileDown className="w-3.5 h-3.5" /> 로컬 파일 선택하여 업로드
@@ -644,17 +824,6 @@ export function ResourceBoard() {
         </form>
       ) : null}
 
-      <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/60 rounded-2xl px-4 py-3 mb-8">
-        <Search className="w-4 h-4 text-slate-400" />
-        <input
-          type="text"
-          placeholder="검색할 유틸리티 드라이버, 매뉴얼 키워드 입력"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="bg-transparent text-sm text-slate-800 placeholder-slate-400 focus:outline-none w-full"
-        />
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filtered.length === 0 ? (
           <div className="col-span-2 py-10 text-center text-slate-400 text-sm bg-white border border-slate-100 rounded-3xl">
@@ -664,7 +833,7 @@ export function ResourceBoard() {
           filtered.map((item) => (
             <div
               key={item.id}
-              className="bg-white border border-slate-150 rounded-3xl p-6 hover:shadow-md hover:border-slate-300 transition-all duration-300 flex items-start gap-4 relative group"
+              className="bg-white border border-slate-150 rounded-3xl p-6 hover:shadow-md hover:border-slate-300 transition-all duration-300 flex items-start gap-4 relative group text-left"
             >
               <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                 <FileText className="w-6 h-6" />
@@ -703,5 +872,15 @@ export function ResourceBoard() {
         )}
       </div>
     </div>
+  );
+}
+
+export function ResourceBoard() {
+  return (
+    <ResourceBoardProvider>
+      <ResourceBoardHeader />
+      <ResourceBoardSearch />
+      <ResourceBoardBody />
+    </ResourceBoardProvider>
   );
 }

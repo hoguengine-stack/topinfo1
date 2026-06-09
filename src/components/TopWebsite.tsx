@@ -249,7 +249,40 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         // 2. Ensure custom function pages have the custom_board block
         const customSlugs = ["products", "request_consult", "request_paper", "board_suggestions", "board_resources"];
         let nextBlocks = [...sanitizedBlocks];
-        if (customSlugs.includes(page.slug) && !nextBlocks.some(b => b.type === "custom_board")) {
+
+        if (page.slug === "board_resources" || page.slug === "board_suggestions") {
+          const hasOldCustomBoard = nextBlocks.some(b => b.type === "custom_board" && !b.boardPart);
+          const hasHeader = nextBlocks.some(b => b.type === "custom_board" && b.boardPart === "header");
+          const hasSearch = nextBlocks.some(b => b.type === "custom_board" && b.boardPart === "search");
+          const hasBody = nextBlocks.some(b => b.type === "custom_board" && b.boardPart === "body");
+
+          if (hasOldCustomBoard || !hasHeader || !hasSearch || !hasBody) {
+            nextBlocks = nextBlocks.filter(b => !(b.type === "custom_board" && !b.boardPart));
+
+            if (!nextBlocks.some(b => b.type === "custom_board" && b.boardPart === "header")) {
+              nextBlocks.push({
+                id: "custom_board_" + page.id + "_header",
+                type: "custom_board",
+                boardPart: "header"
+              });
+            }
+            if (!nextBlocks.some(b => b.type === "custom_board" && b.boardPart === "search")) {
+              nextBlocks.push({
+                id: "custom_board_" + page.id + "_search",
+                type: "custom_board",
+                boardPart: "search"
+              });
+            }
+            if (!nextBlocks.some(b => b.type === "custom_board" && b.boardPart === "body")) {
+              nextBlocks.push({
+                id: "custom_board_" + page.id + "_body",
+                type: "custom_board",
+                boardPart: "body"
+              });
+            }
+            pageModified = true;
+          }
+        } else if (customSlugs.includes(page.slug) && !nextBlocks.some(b => b.type === "custom_board")) {
           nextBlocks.push({
             id: "custom_board_" + page.id,
             type: "custom_board"
@@ -351,8 +384,19 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
               align: "center"
             },
             {
-              id: "custom_board_board_suggestions",
-              type: "custom_board"
+              id: "custom_board_board_suggestions_header",
+              type: "custom_board",
+              boardPart: "header"
+            },
+            {
+              id: "custom_board_board_suggestions_search",
+              type: "custom_board",
+              boardPart: "search"
+            },
+            {
+              id: "custom_board_board_suggestions_body",
+              type: "custom_board",
+              boardPart: "body"
             }
           ]
         },
@@ -373,8 +417,19 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
               align: "center"
             },
             {
-              id: "custom_board_board_resources",
-              type: "custom_board"
+              id: "custom_board_board_resources_header",
+              type: "custom_board",
+              boardPart: "header"
+            },
+            {
+              id: "custom_board_board_resources_search",
+              type: "custom_board",
+              boardPart: "search"
+            },
+            {
+              id: "custom_board_board_resources_body",
+              type: "custom_board",
+              boardPart: "body"
             }
           ]
         },

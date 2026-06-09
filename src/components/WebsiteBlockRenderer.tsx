@@ -14,7 +14,18 @@ import { ImageBlock } from "./block_renderers/ImageBlock";
 
 // Import custom page board/form components
 import { ConsultationForm, PaperRollRequestForm } from "./WebForms";
-import { SuggestionBoard, ResourceBoard } from "./WebBoards";
+import {
+  SuggestionBoard,
+  ResourceBoard,
+  SuggestionBoardProvider,
+  SuggestionBoardHeader,
+  SuggestionBoardSearch,
+  SuggestionBoardBody,
+  ResourceBoardProvider,
+  ResourceBoardHeader,
+  ResourceBoardSearch,
+  ResourceBoardBody,
+} from "./WebBoards";
 
 interface WebsiteBlockRendererProps {
   page: CMSPage;
@@ -448,7 +459,7 @@ export const WebsiteBlockRenderer: React.FC<WebsiteBlockRendererProps> = ({
     }
   };
 
-  return (
+  const renderContent = (
     <div
       id="block-renderer-container"
       onContextMenu={(e) => {
@@ -578,9 +589,15 @@ export const WebsiteBlockRenderer: React.FC<WebsiteBlockRendererProps> = ({
               return <PaperRollRequestForm />;
             }
             if (page.slug === "board_suggestions") {
+              if (block.boardPart === "header") return <SuggestionBoardHeader />;
+              if (block.boardPart === "search") return <SuggestionBoardSearch />;
+              if (block.boardPart === "body") return <SuggestionBoardBody />;
               return <SuggestionBoard />;
             }
             if (page.slug === "board_resources") {
+              if (block.boardPart === "header") return <ResourceBoardHeader />;
+              if (block.boardPart === "search") return <ResourceBoardSearch />;
+              if (block.boardPart === "body") return <ResourceBoardBody />;
               return <ResourceBoard />;
             }
             if (page.slug === "products") {
@@ -877,7 +894,21 @@ export const WebsiteBlockRenderer: React.FC<WebsiteBlockRendererProps> = ({
             {showBlockToolbar && (
               <div className="absolute top-[-36px] right-0 flex items-center gap-1.5 bg-slate-900/90 text-white rounded-xl p-1 z-30 opacity-70 hover:opacity-100 group-hover/block:opacity-100 transition-opacity border border-white/10 shadow-lg" style={{ backdropFilter: "blur(4px)" }}>
                 <span className="text-[10px] font-bold text-slate-300 px-1.5 capitalize">
-                  {block.type === "hero" ? "히어로 배너" : block.type === "features" ? "기능 카드" : block.type === "text" ? "줄글 섹션" : block.type === "custom_board" ? "본문 기능 보드" : "홍보 띠배너"}
+                  {block.type === "hero"
+                    ? "히어로 배너"
+                    : block.type === "features"
+                    ? "기능 카드"
+                    : block.type === "text"
+                    ? "줄글 섹션"
+                    : block.type === "custom_board"
+                    ? block.boardPart === "header"
+                      ? "보드 타이틀 헤더"
+                      : block.boardPart === "search"
+                      ? "보드 검색창"
+                      : block.boardPart === "body"
+                      ? "보드 목록 본문"
+                      : "본문 기능 보드"
+                    : "홍보 띠배너"}
                 </span>
                 {block.type !== "custom_board" && (
                   <>
@@ -1237,4 +1268,12 @@ export const WebsiteBlockRenderer: React.FC<WebsiteBlockRendererProps> = ({
       ))}
     </div>
   );
+
+  if (page.slug === "board_resources") {
+    return <ResourceBoardProvider>{renderContent}</ResourceBoardProvider>;
+  }
+  if (page.slug === "board_suggestions") {
+    return <SuggestionBoardProvider>{renderContent}</SuggestionBoardProvider>;
+  }
+  return renderContent;
 };
