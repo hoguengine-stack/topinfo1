@@ -7,6 +7,7 @@ import {
   Phone, User, Landmark, HelpCircle, Check, Trash2, 
   Sparkles, ClipboardList, Send, Calendar, CheckSquare, Plus, ArrowRight, CornerDownRight, Tag, AlertTriangle
 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
 interface BackConsultationsProps {
   assignees: string[];
@@ -20,6 +21,20 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
   
   // Filters
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "complete">("pending");
+
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   // Task integration form states
   const [taskFormOpenForId, setTaskFormOpenForId] = useState<string | null>(null);
@@ -72,9 +87,10 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
       await updateDoc(doc(db, "consultations", id), {
         status: current === "완료" ? "대기" : "완료"
       });
+      showToast(current === "완료" ? "대기 상태로 변경되었습니다." : "상담 완료 처리되었습니다.", "success");
     } catch (err) {
       console.error(err);
-      alert("상태 수정 실패");
+      showToast("상태 수정 실패", "error");
     }
   };
 
@@ -83,9 +99,10 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
       await updateDoc(doc(db, "paper_requests", id), {
         status: current === "완료" ? "대기" : "완료"
       });
+      showToast(current === "완료" ? "대기 상태로 변경되었습니다." : "용지 신청 처리완료되었습니다.", "success");
     } catch (err) {
       console.error(err);
-      alert("상태 수정 실패");
+      showToast("상태 수정 실패", "error");
     }
   };
 
@@ -98,9 +115,10 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
     try {
       await deleteDoc(doc(db, "consultations", id));
       setDeleteConfirmTarget(null);
+      showToast("상담 신청 내역이 삭제되었습니다.", "success");
     } catch (err) {
       console.error(err);
-      alert("삭제 실패");
+      showToast("삭제 실패", "error");
     }
   };
 
@@ -113,16 +131,17 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
     try {
       await deleteDoc(doc(db, "paper_requests", id));
       setDeleteConfirmTarget(null);
+      showToast("용지 신청 내역이 삭제되었습니다.", "success");
     } catch (err) {
       console.error(err);
-      alert("삭제 실패");
+      showToast("삭제 실패", "error");
     }
   };
 
   // Convert to internal task
   const convertConsultToTask = async (c: Consultation) => {
     if (c.linkedTaskId) {
-      alert("이미 작업관리 일감으로 등록된 상담 신청입니다.");
+      showToast("이미 작업관리 일감으로 등록된 상담 신청입니다.", "error");
       return;
     }
 
@@ -163,10 +182,10 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
       
       setTaskFormOpenForId(null);
       setTaskMemo("");
-      alert(`'${taskAssignee}'님에게 '${taskData.title}' 작업이 정상 등록되었습니다.`);
+      showToast(`'${taskAssignee}'님에게 '${taskData.title}' 작업이 등록되었습니다.`, "success");
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error && err.message === "already-linked" ? "이미 작업관리 일감으로 등록된 신청입니다." : "일정 전산 등록 전송 오류");
+      showToast(err instanceof Error && err.message === "already-linked" ? "이미 작업관리 일감으로 등록된 신청입니다." : "일정 전산 등록 전송 오류", "error");
     } finally {
       setProcessingRequestId(null);
     }
@@ -174,7 +193,7 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
 
   const convertPaperToTask = async (p: PaperRequest) => {
     if (p.linkedTaskId) {
-      alert("이미 작업관리 배송업무로 등록된 용지 요청입니다.");
+      showToast("이미 작업관리 배송업무로 등록된 용지 요청입니다.", "error");
       return;
     }
 
@@ -214,10 +233,10 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
 
       setTaskFormOpenForId(null);
       setTaskMemo("");
-      alert(`'${taskAssignee}'님에게 용지 출고 배송 태스크가 정상 연동되어 스케줄에 등록되었습니다.`);
+      showToast(`'${taskAssignee}'님에게 용지 출고 배송 태스크가 등록되었습니다.`, "success");
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error && err.message === "already-linked" ? "이미 작업관리 배송업무로 등록된 요청입니다." : "배송 등록 전송 오류");
+      showToast(err instanceof Error && err.message === "already-linked" ? "이미 작업관리 배송업무로 등록된 요청입니다." : "배송 등록 전송 오류", "error");
     } finally {
       setProcessingRequestId(null);
     }
@@ -738,6 +757,28 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
           )
         )}
       </div>
+
+      {/* Modern Toast Alert overlay */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="fixed bottom-6 right-6 z-[250]"
+          >
+            <div className={`flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border text-sm font-bold bg-[#1e1e1e]/90 backdrop-blur-md ${
+              toast.type === "success" 
+                ? "border-emerald-500/30 text-emerald-400" 
+                : "border-red-500/30 text-red-450"
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${toast.type === "success" ? "bg-emerald-400" : "bg-red-400"} animate-pulse`} />
+              {toast.message}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

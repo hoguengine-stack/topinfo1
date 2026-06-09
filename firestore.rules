@@ -96,13 +96,14 @@ service cloud.firestore {
 
     function isCorrectAccessCodeHash(accessCodeHash) {
       return (
-               exists(/databases/$(database)/documents/settings/security) &&
-               accessCodeHash == get(/databases/$(database)/documents/settings/security).data.accessCodeHash
-             ) ||
-             (
-               !exists(/databases/$(database)/documents/settings/security) &&
-               accessCodeHash == 'a8d04d9dac66d3342c1db8449a3fbbd7af969c159f33d5ee5797f67142a7950f'
-             );
+                exists(/databases/$(database)/documents/settings/security) &&
+                accessCodeHash == get(/databases/$(database)/documents/settings/security).data.accessCodeHash
+              ) ||
+              (
+                !exists(/databases/$(database)/documents/settings/security) &&
+                (accessCodeHash == 'a8d04d9dac66d3342c1db8449a3fbbd7af969c159f33d5ee5797f67142a7950f' ||
+                 accessCodeHash == '728505f26fc27ea05d071151bff070a98d90ef135f8399b689d4772d452af90d')
+              );
     }
 
     function hasValidAccessVerification(userId) {

@@ -72,6 +72,13 @@ export default function App() {
     }
   }, [viewMode]);
 
+  // Redirect to website view mode upon logout
+  useEffect(() => {
+    if (!user) {
+      setViewMode("website");
+    }
+  }, [user]);
+
   const filteredTasks = filterAssignee
     ? tasks.filter((t) => t.assignee === filterAssignee)
     : tasks;

@@ -323,7 +323,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    if (isLocal && code.trim() === "kicckmk") {
+    const normalizedCode = code.trim();
+    if (isLocal && (normalizedCode === "kicckmk" || normalizedCode === "2kicckmk")) {
       setIsAccessCodeVerified(true);
       localStorage.setItem("isAccessCodeVerified", "true");
       saveLockoutState({ failedAttempts: 0, lockoutTier: 0, lockoutUntil: null }).catch(() => {});
@@ -357,7 +358,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn("Verification write failed (likely invalid access code):", err);
 
         const isQuotaErr = err && (err.code === "resource-exhausted" || String(err.message || "").toLowerCase().includes("quota"));
-        if ((isQuotaErr || isLocal) && code.trim() === "kicckmk") {
+        if ((isQuotaErr || isLocal) && (normalizedCode === "kicckmk" || normalizedCode === "2kicckmk")) {
           setIsAccessCodeVerified(true);
           localStorage.setItem("isAccessCodeVerified", "true");
           return { success: true };

@@ -57,10 +57,10 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const { user } = useAuth();
+  const { user, isEmployee } = useAuth();
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !isEmployee) {
       setTasks([]);
       return;
     }
