@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Edit3, Menu, X, UserCircle, LogOut, LogIn
 } from "lucide-react";
@@ -46,6 +46,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   mobileMenuOpen,
   setMobileMenuOpen,
 }) => {
+  const [showProfilePopover, setShowProfilePopover] = useState(false);
   const primaryPages = getOrderedVisiblePages(pages, navigationSettings, [
     "home",
     "products",
@@ -212,22 +213,65 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
             <div className="w-px h-5 bg-slate-200 mx-1.5" />
 
             {user ? (
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 relative">
                 <div
                   className="flex items-center gap-1.5 cursor-pointer text-slate-700 hover:text-blue-600 transition"
                   onClick={() => {
                     if (isEmployee) {
                       handleLinkClick("admin");
                     } else {
-                      alert("프로필: " + profile?.nickname + " (" + profile?.jobTitle + ")");
+                      setShowProfilePopover(!showProfilePopover);
                     }
                   }}
                   title={isEmployee ? "관리자 포털 정보" : "내 정보"}
                 >
                   <UserCircle className="w-5 h-5 text-slate-500" />
-                  <span className="text-xs font-extrabold shrink-0">{profile?.nickname || "대표주님"}</span>
+                  <span className="text-xs font-extrabold shrink-0">{profile?.nickname || user?.name || "대표주님"}</span>
                   {isEmployee && <span className="bg-blue-50 text-blue-600 text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0">임직원</span>}
                 </div>
+
+                {showProfilePopover && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-100 rounded-2xl shadow-xl p-4 z-[300] text-slate-800">
+                    <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                      <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
+                        <UserCircle className="w-6 h-6 text-blue-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-extrabold truncate">{profile?.nickname || user?.name || "대표주님"}</h4>
+                        <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
+                      </div>
+                    </div>
+                    <div className="py-2 space-y-1.5 text-[11px] text-slate-600">
+                      <div className="flex justify-between">
+                        <span className="font-bold">회원 등급</span>
+                        <span className="font-medium text-slate-500">{isEmployee ? "임직원" : "일반 가맹점주"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="font-bold">직책 / 권한</span>
+                        <span className="font-medium text-slate-500">{profile?.jobTitle || "일반 가맹점주"}</span>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100 flex gap-2">
+                      <button
+                        onClick={() => setShowProfilePopover(false)}
+                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold py-2 rounded-xl transition"
+                      >
+                        닫기
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowProfilePopover(false);
+                          logout();
+                          handleLinkClick("home");
+                        }}
+                        className="flex-1 bg-red-50 hover:bg-red-100 text-red-650 text-[10px] font-bold py-2 rounded-xl transition"
+                      >
+                        로그아웃
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   onClick={() => {
                     logout();
@@ -291,7 +335,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
           <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
             {user ? (
               <div className="flex items-center justify-between px-4">
-                <span className="text-xs font-bold text-slate-700">{profile?.nickname} 대표님</span>
+                <span className="text-xs font-bold text-slate-700">{profile?.nickname || user?.name || "대표주님"} 대표님</span>
                 <button onClick={() => { setMobileMenuOpen(false); logout(); handleLinkClick("home"); }} className="text-red-500 font-bold text-xs">로그아웃</button>
               </div>
             ) : (
