@@ -82,16 +82,14 @@ service cloud.firestore {
       return isGoogleProvider() &&
              request.auth.uid == uid &&
              exists(/databases/$(database)/documents/users/$(uid)) &&
-             get(/databases/$(database)/documents/users/$(uid)).data.isAccessCodeVerified == true &&
-             (get(/databases/$(database)/documents/users/$(uid)).data.profile.jobTitle in ['실장', '팀장', '엔지니어']);
+             get(/databases/$(database)/documents/users/$(uid)).data.isAccessCodeVerified == true;
     }
 
     function isAdmin(uid) {
       return isGoogleProvider() &&
              request.auth.uid == uid &&
              exists(/databases/$(database)/documents/users/$(uid)) &&
-             get(/databases/$(database)/documents/users/$(uid)).data.isAccessCodeVerified == true &&
-             get(/databases/$(database)/documents/users/$(uid)).data.profile.jobTitle == '실장';
+             get(/databases/$(database)/documents/users/$(uid)).data.isAccessCodeVerified == true;
     }
 
     function isCorrectAccessCodeHash(accessCodeHash) {
@@ -126,17 +124,8 @@ service cloud.firestore {
               request.resource.data.accessCode == resource.data.accessCode);
     }
 
-    function isValidJobTitle(userId) {
-      return !('profile' in request.resource.data) ||
-             !('jobTitle' in request.resource.data.profile) ||
-             !(request.resource.data.profile.jobTitle in ['실장', '팀장', '엔지니어']) ||
-             (
-               isGoogleProvider() &&
-               userId == request.auth.uid &&
-               resource != null &&
-               resource.data.isAccessCodeVerified == true &&
-               request.resource.data.isAccessCodeVerified == true
-             );
+    function isValidJobTitle() {
+      return true;
     }
 
     function isValidUser(userId) {
@@ -147,7 +136,7 @@ service cloud.firestore {
              (!('profile' in request.resource.data) || request.resource.data.profile is map) &&
              (!('lockoutState' in request.resource.data) || request.resource.data.lockoutState is map) &&
              isVerifiedAccessCode(userId) &&
-             isValidJobTitle(userId);
+             isValidJobTitle();
     }
 
     function isValidAccessVerificationCreate(userId) {

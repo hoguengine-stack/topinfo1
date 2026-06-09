@@ -141,8 +141,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const initTimeRef = useRef(Date.now());
 
-  const isAdmin = isGoogleAdmin && isAccessCodeVerified && profile?.jobTitle === "실장";
-  const isEmployee = isGoogleAdmin && isAccessCodeVerified && (profile?.jobTitle === "실장" || profile?.jobTitle === "팀장" || profile?.jobTitle === "엔지니어");
+  const isAdmin = isGoogleAdmin && isAccessCodeVerified;
+  const isEmployee = isGoogleAdmin && isAccessCodeVerified;
 
   useEffect(() => {
     // Listen to system version changes for auto-reloading multiple PCs
@@ -328,23 +328,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsAccessCodeVerified(true);
       localStorage.setItem("isAccessCodeVerified", "true");
       saveLockoutState({ failedAttempts: 0, lockoutTier: 0, lockoutUntil: null }).catch(() => {});
-
-      if (user) {
-        const userRef = doc(db, "users", user.sub);
-        const updatedFields: any = {
-          isAccessCodeVerified: true,
-        };
-        if (!profile || profile.jobTitle === "현장 관리자") {
-          const promoProfile = {
-            nickname: profile?.nickname || user.name || "관리자",
-            picture: profile?.picture || user.picture || "",
-            jobTitle: "실장"
-          };
-          updatedFields.profile = promoProfile;
-          setProfile(promoProfile);
-        }
-        updateDoc(userRef, updatedFields).catch(e => console.warn("Local verify profile update failed", e));
-      }
       return { success: true };
     }
 
@@ -359,22 +342,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           accessCodeHash,
           createdAt: Date.now(),
         });
-
-        const updatedFields: any = {
+        await updateDoc(userRef, {
           isAccessCodeVerified: true,
           accessCode: deleteField(),
-        };
-        if (!profile || profile.jobTitle === "현장 관리자") {
-          const promoProfile = {
-            nickname: profile?.nickname || user.name || "관리자",
-            picture: profile?.picture || user.picture || "",
-            jobTitle: "실장"
-          };
-          updatedFields.profile = promoProfile;
-          setProfile(promoProfile);
-        }
-
-        await updateDoc(userRef, updatedFields);
+        });
         await deleteDoc(verificationRef).catch((cleanupError) => {
           console.warn("Access verification cleanup failed:", cleanupError);
         });
@@ -390,23 +361,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if ((isQuotaErr || isLocal) && (normalizedCode === "kicckmk" || normalizedCode === "2kicckmk")) {
           setIsAccessCodeVerified(true);
           localStorage.setItem("isAccessCodeVerified", "true");
-
-          if (user) {
-            const userRef = doc(db, "users", user.sub);
-            const updatedFields: any = {
-              isAccessCodeVerified: true,
-            };
-            if (!profile || profile.jobTitle === "현장 관리자") {
-              const promoProfile = {
-                nickname: profile?.nickname || user.name || "관리자",
-                picture: profile?.picture || user.picture || "",
-                jobTitle: "실장"
-              };
-              updatedFields.profile = promoProfile;
-              setProfile(promoProfile);
-            }
-            await updateDoc(userRef, updatedFields).catch(e => console.warn("Quota verify profile update failed", e));
-          }
           return { success: true };
         }
 
