@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { auth, db, googleProvider } from "../firebase";
 import { signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
+import { deleteDoc, deleteField, doc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
 
 interface User {
   sub: string;
@@ -65,14 +65,14 @@ interface AuthContextType {
   jobTitles: string[];
   login: () => Promise<void>;
   emailLogin: (email: string, pass: string) => Promise<void>;
-  emailSignUp: (email: string, pass: string, nickname: string, jobTitle: string) => Promise<void>;
+  emailSignUp: (email: string, pass: string, nickname: string, jobTitle: string, typedAccessCode: string) => Promise<void>;
   logout: () => Promise<void>;
-  verifyAccessCode: (code: string) => VerifyResult;
+  verifyAccessCode: (code: string) => Promise<VerifyResult>;
   saveProfile: (nickname: string, picture: string, jobTitle?: string) => void;
   updateProfilePicture: (picture: string) => void;
   updateJobTitle: (jobTitle: string) => void;
   updateNickname: (nickname: string) => void;
-  updateAccessCode: (newCode: string) => void;
+  updateAccessCode: (newCode: string) => Promise<void>;
   updateTaskTypes: (types: string[]) => void;
   updateTaskTypeColors: (colors: Record<string, string>) => void;
   updatePriorities: (priorities: string[]) => void;
@@ -92,6 +92,36 @@ const defaultTaskTypeColors = {
   "기타": "#8b5cf6" // purple-500
 };
 
+const redirectFallbackAuthCodes = new Set([
+  "auth/popup-blocked",
+  "auth/cancelled-popup-request",
+  "auth/web-storage-unsupported",
+]);
+
+async function hashAccessCode(code: string) {
+  const normalizedCode = code.trim();
+  const bytes = new TextEncoder().encode(normalizedCode);
+  const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function getAuthErrorCode(error: unknown) {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    return String((error as { code?: unknown }).code || "");
+  }
+  return "";
+}
+
+function isEmbeddedWindow() {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -105,13 +135,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [priorities, setPriorities] = useState<string[]>(["긴급", "높음", "보통", "낮음"]);
   const [jobTitles, setJobTitles] = useState<string[]>(["현장 관리자", "팀장", "엔지니어", "실장"]);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(defaultNotificationSettings);
-  const [accessCode, setAccessCode] = useState<string>("kicckmk");
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const initTimeRef = useRef(Date.now());
 
-  const isAdmin = isGoogleAdmin || profile?.jobTitle === "실장";
-  const isEmployee = isGoogleAdmin || profile?.jobTitle === "실장" || profile?.jobTitle === "팀장" || profile?.jobTitle === "엔지니어";
+  const isAdmin = isGoogleAdmin && isAccessCodeVerified && profile?.jobTitle === "실장";
+  const isEmployee = isGoogleAdmin && isAccessCodeVerified && (profile?.jobTitle === "실장" || profile?.jobTitle === "팀장" || profile?.jobTitle === "엔지니어");
 
   useEffect(() => {
     // Listen to system version changes for auto-reloading multiple PCs
@@ -139,13 +168,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: firebaseUser.email || "",
           email_verified: firebaseUser.emailVerified,
         });
-        
+
         const isGoogle = firebaseUser.providerData.some(p => p.providerId === "google.com");
         setIsGoogleAdmin(isGoogle);
-        if (isGoogle) {
-          setIsAccessCodeVerified(true);
-          localStorage.setItem("isAccessCodeVerified", "true");
-        }
       } else {
         setUser(null);
         setProfile(null);
@@ -177,8 +202,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data.priorities) setPriorities(data.priorities);
         if (data.jobTitles) setJobTitles(data.jobTitles);
         if (data.notificationSettings) setNotificationSettings({ ...defaultNotificationSettings, ...data.notificationSettings });
-        if (data.accessCode) setAccessCode(data.accessCode);
         if (data.lockoutState) setLockoutState(data.lockoutState);
+        if (data.isAccessCodeVerified !== undefined) {
+          setIsAccessCodeVerified(data.isAccessCodeVerified);
+          localStorage.setItem("isAccessCodeVerified", String(data.isAccessCodeVerified));
+        } else {
+          setIsAccessCodeVerified(localStorage.getItem("isAccessCodeVerified") === "true");
+        }
       } else {
         // Initialize default user document
         const defaultData = {
@@ -188,11 +218,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           priorities: ["긴급", "높음", "보통", "낮음"],
           jobTitles: ["현장 관리자", "팀장", "엔지니어", "실장"],
           notificationSettings: defaultNotificationSettings,
-          accessCode: "kicckmk",
+          isAccessCodeVerified: false,
           lockoutState: { failedAttempts: 0, lockoutTier: 0, lockoutUntil: null }
         };
         await setDoc(userRef, defaultData);
         setProfile(defaultData.profile);
+        setIsAccessCodeVerified(false);
+        localStorage.setItem("isAccessCodeVerified", "false");
       }
       setIsLoading(false);
     }, (error) => {
@@ -213,11 +245,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async () => {
     try {
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || ('standalone' in navigator && (navigator as any).standalone === true);
-      
-      if (isStandalone) {
+
+      if (isStandalone || isEmbeddedWindow()) {
         await signInWithRedirect(auth, googleProvider);
       } else {
-        await signInWithPopup(auth, googleProvider);
+        try {
+          await signInWithPopup(auth, googleProvider);
+        } catch (popupError) {
+          if (redirectFallbackAuthCodes.has(getAuthErrorCode(popupError))) {
+            await signInWithRedirect(auth, googleProvider);
+            return;
+          }
+          throw popupError;
+        }
       }
     } catch (error) {
       console.error("Login failed:", error);
@@ -234,24 +274,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const emailSignUp = async (email: string, pass: string, nickname: string, jobTitle: string) => {
+  const emailSignUp = async (email: string, pass: string, nickname: string, _jobTitle: string, _typedAccessCode: string) => {
     try {
       const res = await createUserWithEmailAndPassword(auth, email, pass);
       if (res.user) {
         const userRef = doc(db, "users", res.user.uid);
         const defaultData = {
-          profile: { nickname, picture: "", jobTitle },
+          profile: { nickname, picture: "", jobTitle: "현장 관리자" },
           taskTypes: ["용지", "설치", "점검", "수리", "휴대용단말기", "기타"],
           taskTypeColors: defaultTaskTypeColors,
           priorities: ["긴급", "높음", "보통", "낮음"],
           jobTitles: ["현장 관리자", "팀장", "엔지니어", "실장"],
           notificationSettings: defaultNotificationSettings,
-          accessCode: "kicckmk",
+          isAccessCodeVerified: false,
           lockoutState: { failedAttempts: 0, lockoutTier: 0, lockoutUntil: null }
         };
         await setDoc(userRef, defaultData);
         // Explicitly set the profile in memory or let the snapshot hook update it.
-        setProfile({ nickname, picture: "", jobTitle });
+        setProfile({ nickname, picture: "", jobTitle: "현장 관리자" });
+        setIsAccessCodeVerified(false);
+        localStorage.setItem("isAccessCodeVerified", "false");
       }
     } catch (error) {
       console.error("Email signUp failed:", error);
@@ -269,49 +311,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const verifyAccessCode = (code: string): VerifyResult => {
+  const verifyAccessCode = async (code: string): Promise<VerifyResult> => {
     if (lockoutState.lockoutUntil && Date.now() < lockoutState.lockoutUntil) {
       return { success: false, locked: true, lockoutUntil: lockoutState.lockoutUntil };
     }
 
-    if (code === accessCode) {
-      setIsAccessCodeVerified(true);
-      localStorage.setItem("isAccessCodeVerified", "true");
-      saveLockoutState({ failedAttempts: 0, lockoutTier: 0, lockoutUntil: null });
-      return { success: true };
-    } else {
-      let newAttempts = lockoutState.failedAttempts + 1;
-      let newTier = lockoutState.lockoutTier;
-      let newUntil = lockoutState.lockoutUntil;
+    if (user) {
+      try {
+        const userRef = doc(db, "users", user.sub);
+        const verificationRef = doc(db, "access_verifications", user.sub);
+        const accessCodeHash = await hashAccessCode(code);
 
-      if (newAttempts >= 5) {
-        newTier += 1;
-        newAttempts = 0;
-        let lockoutDuration = 0;
-        if (newTier === 1) lockoutDuration = 5 * 60 * 1000; // 5 mins
-        else if (newTier === 2) lockoutDuration = 30 * 60 * 1000; // 30 mins
-        else if (newTier === 3) lockoutDuration = 60 * 60 * 1000; // 1 hour
-        else lockoutDuration = 24 * 60 * 60 * 1000; // 24 hours
+        await setDoc(verificationRef, {
+          uid: user.sub,
+          accessCodeHash,
+          createdAt: Date.now(),
+        });
+        await updateDoc(userRef, {
+          isAccessCodeVerified: true,
+          accessCode: deleteField(),
+        });
+        await deleteDoc(verificationRef).catch((cleanupError) => {
+          console.warn("Access verification cleanup failed:", cleanupError);
+        });
 
-        newUntil = Date.now() + lockoutDuration;
+        setIsAccessCodeVerified(true);
+        localStorage.setItem("isAccessCodeVerified", "true");
+        await saveLockoutState({ failedAttempts: 0, lockoutTier: 0, lockoutUntil: null });
+        return { success: true };
+      } catch (err) {
+        console.warn("Verification write failed (likely invalid access code):", err);
+
+        let newAttempts = lockoutState.failedAttempts + 1;
+        let newTier = lockoutState.lockoutTier;
+        let newUntil = lockoutState.lockoutUntil;
+
+        if (newAttempts >= 5) {
+          newTier += 1;
+          newAttempts = 0;
+          let lockoutDuration = 0;
+          if (newTier === 1) lockoutDuration = 5 * 60 * 1000; // 5 mins
+          else if (newTier === 2) lockoutDuration = 30 * 60 * 1000; // 30 mins
+          else if (newTier === 3) lockoutDuration = 60 * 60 * 1000; // 1 hour
+          else lockoutDuration = 24 * 60 * 60 * 1000; // 24 hours
+
+          newUntil = Date.now() + lockoutDuration;
+        }
+
+        const newState = { failedAttempts: newAttempts, lockoutTier: newTier, lockoutUntil: newUntil };
+        await saveLockoutState(newState);
+
+        return {
+          success: false,
+          locked: newAttempts === 0,
+          lockoutUntil: newUntil,
+          attemptsLeft: 5 - newAttempts
+        };
       }
-
-      const newState = { failedAttempts: newAttempts, lockoutTier: newTier, lockoutUntil: newUntil };
-      saveLockoutState(newState);
-      
-      return { 
-        success: false, 
-        locked: newAttempts === 0, 
-        lockoutUntil: newUntil, 
-        attemptsLeft: 5 - newAttempts 
-      };
+    } else {
+      return { success: false, attemptsLeft: 5 };
     }
   };
 
   const updateAccessCode = async (newCode: string) => {
-    setAccessCode(newCode);
-    if (user) {
-      await updateDoc(doc(db, "users", user.sub), { accessCode: newCode });
+    if (user && isAdmin) {
+      try {
+        const accessCodeHash = await hashAccessCode(newCode);
+        await setDoc(doc(db, "settings", "security"), {
+          accessCodeHash,
+          updatedAt: Date.now(),
+          updatedBy: user.sub,
+        });
+        console.log("[Security] Master access code hash updated in settings/security");
+      } catch (err) {
+        console.error("Failed to update master access code in settings/security:", err);
+        throw err;
+      }
     }
   };
 

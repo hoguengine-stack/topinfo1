@@ -21,7 +21,7 @@ import {
   BookOpen,
   Upload
 } from "lucide-react";
-import { CMSPage, CMSBlock } from "../types";
+import { CMSPage, CMSBlock, NavigationSettings } from "../types";
 import { doc, updateDoc } from "firebase/firestore";
 
 interface ImageUploaderProps {
@@ -46,7 +46,7 @@ const removeColorBackground = (
     canvas.height = img.height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0);
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -78,12 +78,12 @@ const removeColorBackground = (
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        
+
         const maxVal = Math.max(r, g, b);
         const minVal = Math.min(r, g, b);
         const diff = maxVal - minVal;
-        
-        // Remove white and neutral gray squares of checkerboards 
+
+        // Remove white and neutral gray squares of checkerboards
         // including transition blurred edge pixels
         if (diff < 22 && minVal > 115) {
           data[i + 3] = 0; // set transparent
@@ -114,7 +114,7 @@ const removeTargetColor = (
     canvas.height = img.height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0);
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -124,11 +124,11 @@ const removeTargetColor = (
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      
+
       const diffR = Math.abs(r - targetR);
       const diffG = Math.abs(g - targetG);
       const diffB = Math.abs(b - targetB);
-      
+
       if (diffR <= tolerance && diffG <= tolerance && diffB <= tolerance) {
         data[i + 3] = 0;
       }
@@ -141,7 +141,7 @@ const removeTargetColor = (
 };
 
 const extractMajorColors = (
-  base64Str: string, 
+  base64Str: string,
   callback: (colors: [number, number, number][]) => void
 ) => {
   if (!base64Str || !base64Str.startsWith("data:image/")) {
@@ -164,15 +164,15 @@ const extractMajorColors = (
       const imgData = ctx.getImageData(0, 0, 30, 30);
       const data = imgData.data;
       const colorCounts: { [key: string]: { rgb: [number, number, number], count: number } } = {};
-      
+
       for (let i = 0; i < data.length; i += 4) {
         const a = data[i + 3];
         if (a < 50) continue; // skip already transparent pixels
-        
+
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
-        
+
         // chunk colors to bin similar ones
         const rB = Math.round(r / 20) * 20;
         const gB = Math.round(g / 20) * 20;
@@ -183,7 +183,7 @@ const extractMajorColors = (
         }
         colorCounts[key].count++;
       }
-      
+
       const sorted = Object.values(colorCounts).sort((a, b) => b.count - a.count);
       const topColors = sorted.slice(0, 8).map(item => item.rgb);
       callback(topColors);
@@ -218,8 +218,8 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ label, value, onChange, p
     const reader = new FileReader();
     reader.onload = (e) => {
       const base64Result = e.target?.result as string;
-      const isPngHeader = base64Result.startsWith("data:image/png") || 
-                          base64Result.startsWith("data:image/webp") || 
+      const isPngHeader = base64Result.startsWith("data:image/png") ||
+                          base64Result.startsWith("data:image/webp") ||
                           base64Result.startsWith("data:image/gif") ||
                           base64Result.startsWith("data:image/svg+xml");
 
@@ -254,18 +254,18 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ label, value, onChange, p
         if (ctx) {
           ctx.clearRect(0, 0, width, height); // Clear to preserve transparency
           ctx.drawImage(img, 0, 0, width, height);
-          
+
           const nameLower = file.name.toLowerCase();
-          const isTransparent = file.type === "image/png" || 
-                                file.type === "image/gif" || 
-                                file.type === "image/webp" || 
+          const isTransparent = file.type === "image/png" ||
+                                file.type === "image/gif" ||
+                                file.type === "image/webp" ||
                                 file.type === "image/svg+xml" ||
-                                nameLower.endsWith(".png") || 
-                                nameLower.endsWith(".gif") || 
-                                nameLower.endsWith(".webp") || 
+                                nameLower.endsWith(".png") ||
+                                nameLower.endsWith(".gif") ||
+                                nameLower.endsWith(".webp") ||
                                 nameLower.endsWith(".svg") ||
                                 isPngHeader;
-                                
+
           const compressed = canvas.toDataURL(isTransparent ? "image/png" : "image/jpeg", 0.85);
           onChange(compressed);
         } else {
@@ -300,14 +300,14 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ label, value, onChange, p
   return (
     <div className="space-y-1 font-sans">
       <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-400 mb-0.5">{label}</label>
-      
-      <div 
+
+      <div
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         className={`relative border-2 border-dashed rounded-xl p-2 transition flex flex-col gap-1.5 ${
-          isDragging 
-            ? "border-blue-500 bg-blue-500/10" 
+          isDragging
+            ? "border-blue-500 bg-blue-500/10"
             : "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/25 blur-none"
         }`}
       >
@@ -443,12 +443,15 @@ export interface WebsiteHUDPanelProps {
   setActiveEditTarget: (target: any) => void;
   pages: CMSPage[];
   setPages: (pages: CMSPage[]) => void;
-  
+
   handleHUDChange: (updatedFields: Partial<CMSBlock>) => Promise<void>;
   handleHUDCardChange: (updatedFields: Partial<{ title: string; desc: string; icon: string; buttonText?: string; buttonLink?: string }>) => Promise<void>;
   handleHUDDeleteCardItem: () => Promise<void>;
   handleNavTitleChange: (newTitle: string) => Promise<void>;
+  handleNavVisibilityChange: (visible: boolean) => Promise<void>;
+  navigationSettings: NavigationSettings;
   db: any;
+  isCmsSaving?: boolean;
 }
 
 export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
@@ -461,7 +464,10 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
   handleHUDCardChange,
   handleHUDDeleteCardItem,
   handleNavTitleChange,
+  handleNavVisibilityChange,
+  navigationSettings,
   db,
+  isCmsSaving,
 }) => {
   const [activeDropdown, setActiveDropdown] = useState<"bg" | "align" | "size" | "color" | "keyboard" | "layout" | null>(null);
   const [isPopoverOpen, setIsPopoverOpen] = useState(true);
@@ -507,9 +513,9 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
   // Toolbar Click switches context to the selected aspect of the block
   const handleToolbarClick = (type: "bg" | "align" | "size" | "color" | "keyboard" | "layout") => {
     if (!activeEditTarget) return;
-    
+
     let elementToSelect = activeEditTarget.selectedElement || "block";
-    
+
     if (type === "bg") {
       elementToSelect = "block";
     } else if (type === "layout") {
@@ -526,7 +532,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
       ...activeEditTarget,
       selectedElement: elementToSelect
     });
-    
+
     setIsPopoverOpen(true);
   };
 
@@ -535,7 +541,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
   const getFriendlyElementName = () => {
     if (activeEditTarget.type === "nav") return "🌐 네비게이션 메뉴 편집";
     if (activeEditTarget.type === "card") return "💳 개별 카드 혜택 편집";
-    
+
     switch (selectedElement) {
       case "badge": return "🏷️ 상단 배지 라벨 및 아이콘";
       case "title": return "✍️ 메인 대제목 내용 및 스타일";
@@ -555,16 +561,29 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
   const renderSelectedElementSettings = () => {
     // 1. NAV MENU
     if (activeEditTarget.type === "nav") {
+      const slug = activeEditTarget.page?.slug;
+      const visible = slug ? navigationSettings[slug]?.visible !== false : true;
       return (
         <div className="space-y-3">
-          <label className="block text-[10px] uppercase font-bold text-slate-400">선택한 메뉴 탭 표시이름</label>
-          <input
-            type="text"
-            value={activeEditTarget.page?.title || ""}
-            onChange={(e) => handleNavTitleChange(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-slate-850 dark:text-white text-xs focus:ring-1 focus:ring-blue-500 font-sans"
-            placeholder="예: 홈, 건의사항 등"
-          />
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-slate-400">선택한 메뉴 탭 표시이름</label>
+            <input
+              type="text"
+              value={activeEditTarget.page?.title || ""}
+              onChange={(e) => handleNavTitleChange(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-slate-850 dark:text-white text-xs focus:ring-1 focus:ring-blue-500 font-sans"
+              placeholder="예: 홈, 건의사항 등"
+            />
+          </div>
+          <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 px-3 py-2 text-xs font-bold text-slate-650 dark:text-slate-300">
+            <span>상단/모바일 메뉴에 노출</span>
+            <input
+              type="checkbox"
+              checked={visible}
+              onChange={(e) => handleNavVisibilityChange(e.target.checked)}
+              className="h-4 w-4 accent-blue-600"
+            />
+          </label>
         </div>
       );
     }
@@ -692,7 +711,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
 
           {selectedElement === "badge" && (
             <div className="pt-1">
-              <ImageUploader 
+              <ImageUploader
                 label="🛡️ 배지 왼쪽 커스텀 아이콘 (SVG/PNG/JPG)"
                 value={block.badgeIconUrl || ""}
                 onChange={(val) => handleUpdateField({ badgeIconUrl: val })}
@@ -1038,7 +1057,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
     if (selectedElement === "icon") {
       return (
         <div className="space-y-3">
-          <ImageUploader 
+          <ImageUploader
             label="🖼️ 삽입 데코레이션 아이콘/이미지 (SVG/PNG/JPG)"
             value={block.iconImageUrl || ""}
             onChange={(val) => handleUpdateField({ iconImageUrl: val })}
@@ -1117,7 +1136,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
     if (selectedElement === "image") {
       return (
         <div className="space-y-3">
-          <ImageUploader 
+          <ImageUploader
             label="🌌 대표 사이드/배경 이미지 (URL/PNG/JPG)"
             value={block.imageUrl || ""}
             onChange={(val) => handleUpdateField({ imageUrl: val })}
@@ -1418,9 +1437,9 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
             <span className="block text-[10px] font-bold text-slate-400">요소 정렬 순서 위/아래 이동</span>
             <div className="space-y-1 mt-1 bg-slate-50 dark:bg-slate-950 p-1.5 rounded-xl border border-slate-200 dark:border-slate-850">
               {block.elementOrder.map((el, idx) => {
-                const orderName = el === "badge" ? "🛡️ 배지 라벨" 
-                                : el === "title" ? "✍️ 메인 대제목" 
-                                : el === "subtitle" ? "📝 서브 설명" 
+                const orderName = el === "badge" ? "🛡️ 배지 라벨"
+                                : el === "title" ? "✍️ 메인 대제목"
+                                : el === "subtitle" ? "📝 서브 설명"
                                 : el === "buttons" ? "🔘 행동 단추 버튼"
                                 : "🖼️ 추가 SVG/이미지";
                 return (
@@ -1515,22 +1534,68 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
     await handleHUDChange(fields);
   };
 
+  const switchSelectedElement = (element: string) => {
+    if (!activeEditTarget) return;
+    setActiveEditTarget({
+      ...activeEditTarget,
+      selectedElement: element
+    });
+    setIsPopoverOpen(true);
+  };
+
+  const getTextToolbarField = () => {
+    if (selectedElement === "badge") return "badgeFontSize";
+    if (selectedElement === "subtitle") return "subtitleFontSize";
+    if (selectedElement === "content") return "contentFontSize";
+    return "titleFontSize";
+  };
+
+  const isTextToolbarTarget = ["badge", "title", "subtitle", "content"].includes(selectedElement);
+  const textToolbarField = getTextToolbarField();
+  const textToolbarValue = block && isTextToolbarTarget ? ((block[textToolbarField as keyof CMSBlock] as string) || "") : "";
+
+  const bodyElementKey = activeEditTarget.type === "text" ? "content" : "subtitle";
+
+  const toolbarTargets = [
+    { key: "block", label: "구역", icon: LayoutGrid, enabled: !!block },
+    { key: "title", label: "제목", icon: Type, enabled: !!block && activeEditTarget.type !== "image" && activeEditTarget.type !== "text" },
+    { key: bodyElementKey, label: activeEditTarget.type === "text" ? "텍스트" : "본문", icon: BookOpen, enabled: !!block && activeEditTarget.type !== "image" },
+    { key: "buttons", label: "버튼", icon: Link, enabled: !!block && (activeEditTarget.type === "hero" || activeEditTarget.type === "banner") },
+    { key: "image", label: "이미지", icon: ImageIcon, enabled: !!block && (activeEditTarget.type === "image" || activeEditTarget.type === "hero" || activeEditTarget.type === "banner") },
+  ];
+
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none w-max max-w-[95vw] flex flex-col items-center select-none font-sans">
-      
+    <div className="fixed inset-0 z-[1000] pointer-events-none select-none font-sans">
+
       {/* =========================================================================
           1. Sleek absolute popovers content rendering engine above the toolbar
          ========================================================================= */}
       {isPopoverOpen && activeEditTarget && (
-        <div className="mb-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-2xl p-4 w-80 sm:w-96 max-h-[55vh] overflow-y-auto pointer-events-auto animate-in fade-in slide-in-from-bottom-4 duration-200 space-y-4 text-slate-800 dark:text-slate-100 text-left">
-          
+        <aside className="absolute left-3 top-3 bottom-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-2xl w-[330px] max-w-[calc(100vw_-_1.5rem)] overflow-hidden pointer-events-auto animate-in fade-in slide-in-from-left-3 duration-200 text-slate-800 dark:text-slate-100 text-left">
+
           {/* Header */}
-          <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800">
-            <span className="text-[10px] sm:text-xs uppercase font-extrabold tracking-wider text-blue-600 dark:text-blue-400 font-mono flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-pulse" /> 
-              {getFriendlyElementName()}
-            </span>
-            <button 
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] uppercase font-extrabold tracking-wider text-blue-600 dark:text-blue-400 font-mono flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+                  사이트 편집
+                </span>
+                {isCmsSaving ? (
+                  <span className="text-[9px] font-extrabold bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded-full animate-pulse shrink-0">
+                    저장 중...
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-extrabold bg-emerald-500/10 text-emerald-500 px-1.5 py-0.5 rounded-full shrink-0">
+                    저장 완료
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate max-w-[245px]">
+                {getFriendlyElementName()}
+              </p>
+            </div>
+            <button
               onClick={() => setIsPopoverOpen(false)}
               className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded bg-transparent"
               title="속성창 닫기"
@@ -1539,20 +1604,42 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
             </button>
           </div>
 
-          <div className="text-xs space-y-3.5">
+          <div className="grid grid-cols-5 gap-1.5 px-3 py-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/30">
+            {toolbarTargets.map((target) => {
+              const Icon = target.icon;
+              return (
+                <button
+                  key={target.key}
+                  type="button"
+                  disabled={!target.enabled}
+                  onClick={() => switchSelectedElement(target.key)}
+                  className={`h-12 rounded-xl border text-[10px] font-black transition flex flex-col items-center justify-center gap-0.5 ${
+                    selectedElement === target.key
+                      ? "border-blue-500 bg-blue-600 text-white shadow-sm"
+                      : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-blue-300 disabled:opacity-35 disabled:hover:border-slate-200"
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{target.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="h-[calc(100%-116px)] overflow-y-auto p-4 text-xs space-y-3.5">
             {renderSelectedElementSettings()}
           </div>
-        </div>
+        </aside>
       )}
 
       {/* Bypassed Old Popover Block */}
       {false && activeDropdown && (
         <div className="mb-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-2xl p-4 w-80 sm:w-96 max-h-[55vh] overflow-y-auto pointer-events-auto animate-in fade-in slide-in-from-bottom-4 duration-200 space-y-4 text-slate-800 dark:text-slate-100 text-left">
-          
+
           {/* Header of Popover */}
           <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800">
             <span className="text-[10px] sm:text-xs uppercase font-extrabold tracking-wider text-blue-600 dark:text-blue-400 font-mono flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5" /> 
+              <Sparkles className="w-3.5 h-3.5" />
               {activeDropdown === "bg" ? "테마 색상 변경" :
                activeDropdown === "align" ? "레이아웃 정렬" :
                activeDropdown === "size" ? "글자 크기 & 모서리" :
@@ -1560,7 +1647,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                activeDropdown === "keyboard" ? "콘텐츠 텍스트 편집기" :
                "상세 레이아웃 & 정렬"}
             </span>
-            <button 
+            <button
               onClick={() => setActiveDropdown(null)}
               className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded bg-transparent"
               title="닫기"
@@ -1750,9 +1837,9 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                     <span className="block text-[10px] font-bold text-slate-400">요소 정렬 순서 위/아래 이동</span>
                     <div className="space-y-1 mt-1 bg-slate-50 dark:bg-slate-950 p-1.5 rounded-xl border border-slate-200 dark:border-slate-850">
                       {block.elementOrder.map((el, idx) => {
-                        const orderName = el === "badge" ? "🛡️ 배지 라벨" 
-                                        : el === "title" ? "✍️ 메인 대제목" 
-                                        : el === "subtitle" ? "📝 서브 설명" 
+                        const orderName = el === "badge" ? "🛡️ 배지 라벨"
+                                        : el === "title" ? "✍️ 메인 대제목"
+                                        : el === "subtitle" ? "📝 서브 설명"
                                         : el === "buttons" ? "🔘 행동 단추 버튼"
                                         : "🖼️ 추가 SVG/이미지";
                         return (
@@ -1798,7 +1885,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
             {/* Popover content: Keyboard (Text Content detail inputs) */}
             {activeDropdown === "keyboard" && (
               <div className="space-y-4 font-sans text-left text-xs pointer-events-auto">
-                
+
                 {/* 1. Sub-element Navigation Tab */}
                 {activeEditTarget.type === "nav" && (
                   <div className="space-y-2">
@@ -1828,7 +1915,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                         />
                       </div>
                       <div className="pt-1">
-                        <ImageUploader 
+                        <ImageUploader
                           label="🛡️ 배지 왼쪽 커스텀 아이콘 (SVG/PNG/JPG)"
                           value={block.badgeIconUrl || ""}
                           onChange={(val) => handleUpdateField({ badgeIconUrl: val })}
@@ -1917,7 +2004,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                     </div>
 
                     <div className="pt-2 border-t border-slate-150 dark:border-slate-800 space-y-3">
-                      <ImageUploader 
+                      <ImageUploader
                         label="🖼️ 삽입 데코레이션 아이콘/이미지 (SVG/PNG/JPG)"
                         value={block.iconImageUrl || ""}
                         onChange={(val) => handleUpdateField({ iconImageUrl: val })}
@@ -1991,7 +2078,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
 
                       {block.type === "banner" && (
                         <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
-                          <ImageUploader 
+                          <ImageUploader
                             label="🌌 배너 대배경 / 사이드 이미지 (URL/PNG/JPG)"
                             value={block.imageUrl || ""}
                             onChange={(val) => handleUpdateField({ imageUrl: val })}
@@ -2241,7 +2328,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                 {/* 6. Direct Full Image Banner Editable Elements */}
                 {activeEditTarget.type === "image" && block && (
                   <div className="space-y-3">
-                    <ImageUploader 
+                    <ImageUploader
                       label="🖼️ 대표 풀 이미지 업로드 / 주소 URL"
                       value={block.imageUrl || ""}
                       onChange={(value) => handleUpdateField({ imageUrl: value })}
@@ -2387,7 +2474,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                     </div>
                   </div>
                 )}
-                
+
               </div>
             )}
           </div>
@@ -2397,8 +2484,8 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
       {/* =========================================================================
           2. Master Horizontal Slick Floating Style Bar (Matches the photo)
          ========================================================================= */}
-      <div 
-        className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-slate-800/80 shadow-[0_20px_50px_rgba(0,0,0,0.22)] pointer-events-auto flex items-center h-14 px-4.5 rounded-full gap-1 sm:gap-1.5 shrink-0 select-none animate-in fade-in duration-250 slide-in-from-bottom-5"
+      <div
+        className="absolute top-3 left-1/2 -translate-x-1/2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200 dark:border-slate-800/80 shadow-[0_16px_40px_rgba(15,23,42,0.18)] pointer-events-auto flex items-center h-12 px-3 rounded-2xl gap-1 sm:gap-1.5 shrink-0 select-none animate-in fade-in duration-250 max-w-[95vw] lg:max-w-[calc(100vw_-_370px)] overflow-x-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Draw Indicator Squiggle / Active Badge */}
@@ -2417,12 +2504,79 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
         {/* Separator */}
         <div className="h-6 w-[1.5px] bg-slate-200 dark:bg-slate-800 mx-1.5" />
 
+        {block && isTextToolbarTarget && (
+          <>
+            <div className="hidden sm:flex items-center gap-1.5 h-8 px-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const current = parseInt(textToolbarValue || (selectedElement === "title" ? "28" : "14")) || 14;
+                  handleUpdateField({ [textToolbarField]: String(Math.max(6, current - 1)) } as Partial<CMSBlock>);
+                }}
+                className="w-6 h-6 rounded-lg hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-black"
+                title="글자 크기 줄이기"
+              >
+                -
+              </button>
+              <input
+                type="number"
+                min="6"
+                max="100"
+                value={textToolbarValue}
+                onChange={(e) => handleUpdateField({ [textToolbarField]: e.target.value } as Partial<CMSBlock>)}
+                className="w-11 bg-transparent text-center text-[11px] font-black text-slate-800 dark:text-white focus:outline-none"
+                placeholder={selectedElement === "title" ? "28" : "14"}
+                title="선택 텍스트 글자 크기"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const current = parseInt(textToolbarValue || (selectedElement === "title" ? "28" : "14")) || 14;
+                  handleUpdateField({ [textToolbarField]: String(Math.min(100, current + 1)) } as Partial<CMSBlock>);
+                }}
+                className="w-6 h-6 rounded-lg hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-black"
+                title="글자 크기 키우기"
+              >
+                +
+              </button>
+            </div>
+
+            <div className="hidden md:flex items-center gap-1 shrink-0">
+              {[
+                { align: "left", icon: AlignLeft, title: "왼쪽 정렬" },
+                { align: "center", icon: AlignCenter, title: "가운데 정렬" },
+                { align: "right", icon: AlignRight, title: "오른쪽 정렬" },
+              ].map((alignItem) => {
+                const Icon = alignItem.icon;
+                const { field, value } = getCurrentAlignFieldAndValue();
+                return (
+                  <button
+                    key={alignItem.align}
+                    type="button"
+                    onClick={() => handleUpdateField({ [field]: alignItem.align as any })}
+                    className={`p-1.5 rounded-lg transition ${
+                      value === alignItem.align
+                        ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                        : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                    }`}
+                    title={alignItem.title}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="h-6 w-[1.5px] bg-slate-200 dark:bg-slate-800 mx-1.5" />
+          </>
+        )}
+
         {/* 🎨 Paintbrush / Theme color button with dropdown */}
         <button
           onClick={() => handleToolbarClick("bg")}
           className={`flex items-center gap-1 p-1.5 rounded-lg transition shrink-0 ${
             selectedElement === "block" && isPopoverOpen
-              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103" 
+              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103"
               : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
           }`}
           title="🌌 구역 전체 테마 배경 & 배치 정렬"
@@ -2435,8 +2589,8 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
         <button
           onClick={() => handleToolbarClick("align")}
           className={`flex items-center gap-1 p-1.5 rounded-lg transition shrink-0 ${
-            selectedElement === "divider" && isPopoverOpen
-              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103" 
+            ["block", "title", "subtitle", "content", "buttons"].includes(selectedElement) && isPopoverOpen
+              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103"
               : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
           }`}
           title="➖ 분할 구분선 길이/간격 설정"
@@ -2449,8 +2603,8 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
         <button
           onClick={() => handleToolbarClick("size")}
           className={`flex items-center gap-1 p-1.5 rounded-lg transition shrink-0 ${
-            selectedElement === "title" && isPopoverOpen
-              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103" 
+            isTextToolbarTarget && isPopoverOpen
+              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103"
               : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
           }`}
           title="✍️ 메인 대제목 내용 및 스타일"
@@ -2463,8 +2617,8 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
         <button
           onClick={() => handleToolbarClick("color")}
           className={`flex items-center gap-1 p-1.5 rounded-lg transition shrink-0 ${
-            selectedElement === "badge" && isPopoverOpen
-              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103" 
+            isTextToolbarTarget && isPopoverOpen
+              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103"
               : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
           }`}
           title="🏷️ 상단 배지 라벨 및 아이콘"
@@ -2478,7 +2632,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
           onClick={() => handleToolbarClick("layout")}
           className={`flex items-center gap-1 p-1.5 rounded-lg transition shrink-0 ${
             (selectedElement === "image" || selectedElement === "icon") && isPopoverOpen
-              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103" 
+              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103"
               : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
           }`}
           title="🖼️ 대표 이미지 / 삽입 데코레이션 조율"
@@ -2495,7 +2649,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
           onClick={() => handleToolbarClick("keyboard")}
           className={`flex items-center gap-1 p-1.5 rounded-lg transition shrink-0 ${
             (selectedElement === "subtitle" || selectedElement === "content" || selectedElement === "buttons") && isPopoverOpen
-              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103" 
+              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold scale-103"
               : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
           }`}
           title="📝 보조 설명문 & 행동 단추 버튼 편집"
@@ -2550,11 +2704,11 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
         {/* ✓ Submit button */}
         <button
           onClick={() => setActiveEditTarget(null)}
-          className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-3.5 py-1.5 rounded-full text-[10.5px] transition flex items-center gap-1 shadow-md hover:scale-103 shrink-0"
+          className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-3.5 py-1.5 rounded-xl text-[10.5px] transition flex items-center gap-1 shadow-md hover:scale-103 shrink-0"
           title="변경사항 적용 완료"
         >
           <Check className="w-3.5 h-3.5" />
-          <span>Submit</span>
+          <span>완료</span>
         </button>
 
       </div>

@@ -13,7 +13,7 @@ export function SuggestionBoard() {
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockError, setUnlockError] = useState("");
   const [commentText, setCommentText] = useState("");
-  
+
   // New Suggestion Form State
   const [isCreating, setIsCreating] = useState(false);
   const [newPost, setNewPost] = useState({
@@ -41,8 +41,8 @@ export function SuggestionBoard() {
     if (!search.trim()) {
       setFilteredPosts(posts);
     } else {
-      setFilteredPosts(posts.filter(p => 
-        p.title.toLowerCase().includes(search.toLowerCase()) || 
+      setFilteredPosts(posts.filter(p =>
+        p.title.toLowerCase().includes(search.toLowerCase()) ||
         p.content.toLowerCase().includes(search.toLowerCase()) ||
         p.authorName.toLowerCase().includes(search.toLowerCase())
       ));
@@ -89,11 +89,11 @@ export function SuggestionBoard() {
         content: commentText,
         createdAt: new Date().toISOString(),
       };
-      
+
       const postRef = doc(db, "suggestions", selectedPost.id);
       const updatedReplies = [...(selectedPost.replies || []), reply];
       await updateDoc(postRef, { replies: updatedReplies });
-      
+
       setSelectedPost((prev: any) => ({ ...prev, replies: updatedReplies }));
       setCommentText("");
     } catch (err) {
@@ -352,7 +352,7 @@ export function SuggestionBoard() {
                             <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest flex items-center gap-1.5">
                               <Reply className="w-3.5 h-3.5 rotate-180" /> 탑정보통신 전담 엔지니어 답변
                             </h4>
-                            
+
                             {post.replies && post.replies.length > 0 ? (
                               <div className="space-y-3">
                                 {post.replies.map((reply: any) => (
@@ -417,6 +417,61 @@ export function ResourceBoard() {
     fileType: "ZIP / Driver",
   });
 
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadedFileName, setUploadedFileName] = useState("");
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingFile(true);
+    setUploadProgress(0);
+    setUploadedFileName(file.name);
+
+    try {
+      const { ref, uploadBytesResumable, getDownloadURL } = await import("firebase/storage");
+      const { storage } = await import("../firebase");
+
+      const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+          const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+          setUploadProgress(progress);
+        },
+        (error) => {
+          console.error("Upload error:", error);
+          alert("파일 업로드 중 오류가 발생했습니다: " + error.message);
+          setUploadingFile(false);
+        },
+        async () => {
+          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+
+          const sizeMB = (file.size / (1024 * 1024)).toFixed(1) + " MB";
+          const extension = file.name.split(".").pop()?.toUpperCase() || "FILE";
+          const typeStr = `${extension} / Document`;
+
+          setNewResource((prev) => ({
+            ...prev,
+            downloadUrl: downloadUrl,
+            fileSize: sizeMB,
+            fileType: file.name.endsWith(".zip") || file.name.endsWith(".rar") ? "ZIP / Driver" : typeStr,
+            title: prev.title || file.name.substring(0, file.name.lastIndexOf(".")) || file.name
+          }));
+
+          setUploadingFile(false);
+        }
+      );
+    } catch (err: any) {
+      console.error(err);
+      alert("업로드 모듈 로딩 실패: " + err.message);
+      setUploadingFile(false);
+    }
+  };
+
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "resources"), (snap) => {
       const items: any[] = [];
@@ -448,6 +503,7 @@ export function ResourceBoard() {
       });
       setIsUploading(false);
       setNewResource({ title: "", description: "", downloadUrl: "", fileSize: "12.4 MB", fileType: "ZIP / Driver" });
+      setUploadedFileName("");
     } catch (err) {
       alert("자료 보관 실패");
     }
@@ -463,8 +519,8 @@ export function ResourceBoard() {
     }
   };
 
-  const filtered = resources.filter(res => 
-    res.title.toLowerCase().includes(search.toLowerCase()) || 
+  const filtered = resources.filter(res =>
+    res.title.toLowerCase().includes(search.toLowerCase()) ||
     res.description.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -511,14 +567,40 @@ export function ResourceBoard() {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">파일 다운로드 경로 링크</label>
-              <input
-                type="text"
-                placeholder="http:// 또는 https:// 구글 드라이브나 기기 서버 주소"
-                value={newResource.downloadUrl}
-                onChange={(e) => setNewResource({ ...newResource, downloadUrl: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
-              />
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">파일 다운로드 경로 링크 / 로컬 파일 업로드</label>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="http:// 또는 로컬 파일 업로드 시 자동 입력"
+                  value={newResource.downloadUrl}
+                  onChange={(e) => setNewResource({ ...newResource, downloadUrl: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
+                />
+                <div className="flex items-center gap-3">
+                  <input
+                    type="file"
+                    id="resource-file-upload"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="resource-file-upload"
+                    className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2.5 px-4 rounded-xl border border-slate-200 active:scale-95 transition flex items-center gap-1.5"
+                  >
+                    <FileDown className="w-3.5 h-3.5" /> 로컬 파일 선택하여 업로드
+                  </label>
+                  {uploadingFile && (
+                    <span className="text-xs text-blue-600 font-bold animate-pulse">
+                      업로드 중... ({uploadProgress}%)
+                    </span>
+                  )}
+                  {uploadedFileName && !uploadingFile && (
+                    <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> {uploadedFileName} 완료
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 

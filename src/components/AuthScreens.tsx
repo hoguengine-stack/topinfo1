@@ -38,7 +38,7 @@ export function AuthScreens({ onComplete }: { onComplete: () => void }) {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    
+
     if (hours > 0) return `${hours}시간 ${minutes}분 ${seconds}초`;
     if (minutes > 0) return `${minutes}분 ${seconds}초`;
     return `${seconds}초`;
@@ -49,7 +49,7 @@ export function AuthScreens({ onComplete }: { onComplete: () => void }) {
   if (!user) {
     return (
       <div className="fixed inset-0 bg-[#121212] flex items-center justify-center p-6 z-[100]">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md text-center"
@@ -74,7 +74,7 @@ export function AuthScreens({ onComplete }: { onComplete: () => void }) {
   if (!isAccessCodeVerified) {
     return (
       <div className="fixed inset-0 bg-[#121212] flex items-center justify-center p-6 z-[100]">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           className="w-full max-w-md"
@@ -105,9 +105,9 @@ export function AuthScreens({ onComplete }: { onComplete: () => void }) {
               <p className="text-red-500 text-center text-sm">{error}</p>
             ) : null}
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (isLocked) return;
-                const result = verifyAccessCode(code);
+                const result = await verifyAccessCode(code);
                 if (!result.success) {
                   if (result.locked) {
                     setError(""); // Will be handled by isLocked
@@ -130,7 +130,7 @@ export function AuthScreens({ onComplete }: { onComplete: () => void }) {
   if (!profile) {
     return (
       <div className="fixed inset-0 bg-[#121212] flex items-center justify-center p-6 z-[100]">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           className="w-full max-w-md"
@@ -139,7 +139,7 @@ export function AuthScreens({ onComplete }: { onComplete: () => void }) {
             <h2 className="text-2xl font-bold text-white mb-2">프로필 설정</h2>
             <p className="text-gray-400">사용할 닉네임과 사진을 설정하세요.</p>
           </div>
-          
+
           <div className="flex flex-col items-center gap-8">
             <div className="relative group">
               <div className="w-32 h-32 rounded-full bg-[#1e1e1e] border-2 border-white/10 overflow-hidden flex items-center justify-center">
@@ -151,9 +151,9 @@ export function AuthScreens({ onComplete }: { onComplete: () => void }) {
               </div>
               <label className="absolute bottom-0 right-0 p-2 bg-emerald-500 rounded-full cursor-pointer shadow-lg active:scale-90 transition-transform">
                 <Camera className="w-5 h-5 text-white" />
-                <input 
-                  type="file" 
-                  className="hidden" 
+                <input
+                  type="file"
+                  className="hidden"
                   accept="image/*"
                   onChange={(e) => {
                     const file = e.target.files?.[0];

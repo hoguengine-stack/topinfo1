@@ -9,9 +9,10 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const { 
+  const {
     user, profile, logout, updateProfilePicture, updateJobTitle, updateNickname, updateAccessCode,
-    taskTypes, taskTypeColors, priorities, jobTitles, notificationSettings, updateTaskTypes, updateTaskTypeColors, updatePriorities, updateJobTitles, updateNotificationSettings, forceRefreshAllPCs
+    taskTypes, taskTypeColors, priorities, jobTitles, notificationSettings, updateTaskTypes, updateTaskTypeColors, updatePriorities, updateJobTitles, updateNotificationSettings, forceRefreshAllPCs,
+    isAdmin
   } = useAuth();
   const [activeSubModal, setActiveSubModal] = React.useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = React.useState(() => {
@@ -42,19 +43,25 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   React.useEffect(() => {
     if ("Notification" in window && Notification.permission === "granted" && !notificationSettings.pushEnabled) {
-      // Keep state in sync if permission is granted but settings say off? 
+      // Keep state in sync if permission is granted but settings say off?
       // Actually we just read from notificationSettings.pushEnabled
     }
   }, []);
 
   if (!user || !profile) return null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (activeSubModal === "profile") {
       updateNickname(tempNickname);
     } else if (activeSubModal === "privacy" && tempAccessCode) {
-      updateAccessCode(tempAccessCode);
-      alert("접속 코드가 성공적으로 변경되었습니다.");
+      try {
+        await updateAccessCode(tempAccessCode);
+        setTempAccessCode("");
+        alert("접속 코드가 성공적으로 변경되었습니다.");
+      } catch {
+        alert("접속 코드 변경에 실패했습니다. 관리자 권한을 확인해 주세요.");
+        return;
+      }
     } else if (activeSubModal === "categories") {
       updateTaskTypes(editTaskTypes.map(t => t.value));
       const newColors: Record<string, string> = {};
@@ -79,7 +86,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       }
       return;
     }
-    
+
     if (Notification.permission === "denied") {
       alert("알림 권한이 거부되어 있습니다. 브라우저 설정에서 알림 권한을 허용해 주세요.");
       return;
@@ -105,8 +112,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const renderSubModal = () => {
     if (!activeSubModal) return null;
 
-    const title = activeSubModal === "profile" ? "프로필 정보 수정" : 
-                  activeSubModal === "settings" ? "알림설정" : 
+    const title = activeSubModal === "profile" ? "프로필 정보 수정" :
+                  activeSubModal === "settings" ? "알림설정" :
                   activeSubModal === "categories" ? "항목 관리 설정" :
                   "보안 및 개인정보";
 
@@ -119,7 +126,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <X className="w-5 h-5" />
             </button>
           </div>
-          
+
           <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
             {activeSubModal === "profile" && (
               <div className="space-y-6">
@@ -130,9 +137,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     </div>
                     <label className="absolute bottom-0 right-0 p-1.5 bg-emerald-500 rounded-full cursor-pointer shadow-lg">
                       <Camera className="w-3 h-3 text-white" />
-                      <input 
-                        type="file" 
-                        className="hidden" 
+                      <input
+                        type="file"
+                        className="hidden"
                         accept="image/*"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
@@ -149,8 +156,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">닉네임</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={tempNickname}
                       onChange={(e) => setTempNickname(e.target.value)}
                       className="w-full bg-[#2d2d2d] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
@@ -158,7 +165,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">직책</label>
-                    <select 
+                    <select
                       value={profile.jobTitle || jobTitles[0]}
                       onChange={(e) => updateJobTitle(e.target.value)}
                       className="w-full bg-[#2d2d2d] border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none"
@@ -184,7 +191,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                           <div className="flex flex-col gap-1 cursor-grab active:cursor-grabbing justify-center px-1 text-gray-500 hover:text-white">
                             <GripVertical className="w-5 h-5 flex-shrink-0" />
                           </div>
-                          <input 
+                          <input
                             type="color"
                             value={item.color}
                             onChange={(e) => {
@@ -195,7 +202,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             className="w-10 h-[42px] bg-transparent border-0 self-center flex-shrink-0 cursor-pointer p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-xl outline-none"
                             title="색상 선택"
                           />
-                          <input 
+                          <input
                             type="text"
                             value={item.value}
                             onChange={(e) => {
@@ -205,7 +212,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             }}
                             className="flex-1 bg-[#2d2d2d] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 min-w-0"
                           />
-                          <button 
+                          <button
                             onClick={() => setEditTaskTypes(editTaskTypes.filter((_, i) => i !== idx))}
                             className="p-2 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center h-full self-center flex-shrink-0"
                             style={{ height: "42px" }}
@@ -215,7 +222,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         </Reorder.Item>
                       ))}
                     </Reorder.Group>
-                    <button 
+                    <button
                       onClick={() => setEditTaskTypes([...editTaskTypes, {id: Math.random().toString(), value: "", color: "#10b981"}])}
                       className="w-full py-2 border border-dashed border-white/10 rounded-xl text-xs text-gray-500 flex items-center justify-center gap-2 hover:bg-white/5"
                     >
@@ -234,7 +241,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                           <div className="flex flex-col gap-1 cursor-grab active:cursor-grabbing justify-center px-1 text-gray-500 hover:text-white">
                             <GripVertical className="w-5 h-5 flex-shrink-0" />
                           </div>
-                          <input 
+                          <input
                             type="text"
                             value={item.value}
                             onChange={(e) => {
@@ -244,7 +251,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             }}
                             className="flex-1 bg-[#2d2d2d] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 min-w-0"
                           />
-                          <button 
+                          <button
                             onClick={() => setEditPriorities(editPriorities.filter((_, i) => i !== idx))}
                             className="p-2 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center h-full self-center flex-shrink-0"
                             style={{ height: "42px" }}
@@ -254,7 +261,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         </Reorder.Item>
                       ))}
                     </Reorder.Group>
-                    <button 
+                    <button
                       onClick={() => setEditPriorities([...editPriorities, {id: Math.random().toString(), value: ""}])}
                       className="w-full py-2 border border-dashed border-white/10 rounded-xl text-xs text-gray-500 flex items-center justify-center gap-2 hover:bg-white/5"
                     >
@@ -273,7 +280,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                           <div className="flex flex-col gap-1 cursor-grab active:cursor-grabbing justify-center px-1 text-gray-500 hover:text-white">
                             <GripVertical className="w-5 h-5 flex-shrink-0" />
                           </div>
-                          <input 
+                          <input
                             type="text"
                             value={item.value}
                             onChange={(e) => {
@@ -283,7 +290,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             }}
                             className="flex-1 bg-[#2d2d2d] border border-white/5 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50 min-w-0"
                           />
-                          <button 
+                          <button
                             onClick={() => setEditJobTitles(editJobTitles.filter((_, i) => i !== idx))}
                             className="p-2 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center h-full self-center flex-shrink-0"
                             style={{ height: "42px" }}
@@ -293,7 +300,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         </Reorder.Item>
                       ))}
                     </Reorder.Group>
-                    <button 
+                    <button
                       onClick={() => setEditJobTitles([...editJobTitles, {id: Math.random().toString(), value: ""}])}
                       className="w-full py-2 border border-dashed border-white/10 rounded-xl text-xs text-gray-500 flex items-center justify-center gap-2 hover:bg-white/5"
                     >
@@ -312,14 +319,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       <Bell className="w-5 h-5 text-emerald-500" />
                       <span className="text-sm text-white font-medium">푸시 알림</span>
                     </div>
-                    <button 
+                    <button
                       onClick={requestNotificationPermission}
                       className={`w-10 h-6 rounded-full relative transition-colors ${notificationSettings.pushEnabled ? "bg-emerald-500" : "bg-gray-600"}`}
                     >
                       <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${notificationSettings.pushEnabled ? "right-1" : "left-1"}`} />
                     </button>
                   </div>
-                  
+
                   <div className="pt-3 border-t border-white/10 space-y-3">
                     <label className={`flex items-center justify-between text-sm ${notificationSettings.pushEnabled ? 'text-gray-300' : 'text-gray-500'}`}>
                       <span>마감일 임박 알림 (1시간 전)</span>
@@ -347,19 +354,21 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
             {activeSubModal === "privacy" && (
               <div className="space-y-4">
-                <div className="p-4 bg-[#2d2d2d] rounded-2xl border border-white/5 space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Lock className="w-5 h-5 text-orange-500" />
-                    <span className="text-sm text-white font-medium">접속 코드 변경</span>
+                {isAdmin && (
+                  <div className="p-4 bg-[#2d2d2d] rounded-2xl border border-white/5 space-y-4">
+                    <div className="flex items-center gap-3">
+                      <Lock className="w-5 h-5 text-orange-500" />
+                      <span className="text-sm text-white font-medium">접속 코드 변경</span>
+                    </div>
+                    <input
+                      type="password"
+                      placeholder="새로운 접속 코드 입력"
+                      value={tempAccessCode}
+                      onChange={(e) => setTempAccessCode(e.target.value)}
+                      className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    />
                   </div>
-                  <input 
-                    type="password" 
-                    placeholder="새로운 접속 코드 입력"
-                    value={tempAccessCode}
-                    onChange={(e) => setTempAccessCode(e.target.value)}
-                    className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                  />
-                </div>
+                )}
                 <button className="w-full p-4 flex items-center justify-between text-sm text-gray-300 hover:bg-white/5 transition-colors bg-[#2d2d2d] rounded-2xl border border-white/5">
                   <div className="flex items-center gap-3">
                     <Shield className="w-4 h-4 text-gray-500" />
@@ -379,7 +388,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </div>
 
           <div className="p-4 bg-[#1a1a1a] border-t border-white/10">
-            <button 
+            <button
               onClick={handleSave}
               className="w-full py-4 bg-emerald-500 text-white font-bold rounded-2xl active:scale-95 transition-transform shadow-lg shadow-emerald-500/20"
             >
@@ -447,9 +456,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         </div>
                         <label className="absolute bottom-0 right-0 p-2 bg-emerald-500 rounded-full cursor-pointer shadow-lg active:scale-90 transition-transform">
                           <Camera className="w-4 h-4 text-white" />
-                          <input 
-                            type="file" 
-                            className="hidden" 
+                          <input
+                            type="file"
+                            className="hidden"
                             accept="image/*"
                             onChange={(e) => {
                               const file = e.target.files?.[0];
@@ -467,7 +476,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         <p className="text-xs text-gray-500">{profile.jobTitle || "현장 관리자"}</p>
                       </div>
                     </div>
-                    <button 
+                    <button
                       onClick={() => setActiveSubModal("profile")}
                       className="w-full p-4 flex items-center justify-between text-sm text-gray-300 hover:bg-white/5 transition-colors"
                     >
@@ -484,7 +493,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] mb-4 px-1">설정</label>
                   <div className="bg-[#1e1e1e] rounded-2xl overflow-hidden border border-white/5 mb-4">
-                    <button 
+                    <button
                       onClick={() => setActiveSubModal("settings")}
                       className="w-full p-4 flex items-center justify-between text-sm text-gray-300 hover:bg-white/5 transition-colors border-b border-white/5"
                     >
@@ -494,7 +503,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       </div>
                       <ChevronRight className="w-4 h-4 text-gray-600" />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setActiveSubModal("categories")}
                       className="w-full p-4 flex items-center justify-between text-sm text-gray-300 hover:bg-white/5 transition-colors border-b border-white/5"
                     >
@@ -504,7 +513,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       </div>
                       <ChevronRight className="w-4 h-4 text-gray-600" />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setActiveSubModal("privacy")}
                       className="w-full p-4 flex items-center justify-between text-sm text-gray-300 hover:bg-white/5 transition-colors"
                     >

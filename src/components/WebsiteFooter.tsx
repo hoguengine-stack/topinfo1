@@ -29,8 +29,8 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
   handleLinkClick,
 }) => {
   const renderLogo = () => (
-    <div 
-      className="flex items-center gap-3 cursor-pointer select-none" 
+    <div
+      className="flex items-center gap-3 cursor-pointer select-none"
       onClick={() => handleLinkClick("home")}
     >
       <div className="w-10 h-10 rounded-full border-[3px] border-[#0f62fe] bg-white flex items-center justify-center relative overflow-hidden shrink-0 shadow-sm">
@@ -63,7 +63,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                       setFooterInfo(updated);
                       await setDoc(doc(db, "settings", "footer"), updated);
                     }}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-105Color"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -76,7 +76,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                       setFooterInfo(updated);
                       await setDoc(doc(db, "settings", "footer"), updated);
                     }}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-105Color"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1 col-span-2">
@@ -89,7 +89,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                       setFooterInfo(updated);
                       await setDoc(doc(db, "settings", "footer"), updated);
                     }}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-105Color"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -102,7 +102,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                       setFooterInfo(updated);
                       await setDoc(doc(db, "settings", "footer"), updated);
                     }}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-105Color"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -115,7 +115,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                       setFooterInfo(updated);
                       await setDoc(doc(db, "settings", "footer"), updated);
                     }}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-105Color"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1 col-span-2">
@@ -128,7 +128,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                       setFooterInfo(updated);
                       await setDoc(doc(db, "settings", "footer"), updated);
                     }}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-105Color"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>
               </div>

@@ -21,8 +21,8 @@ async function startServer() {
       resave: false,
       saveUninitialized: false,
       cookie: {
-        secure: true,
-        sameSite: "none",
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
         httpOnly: true,
         maxAge: 9999 * 365 * 24 * 60 * 60 * 1000, // 9999 years
       },
@@ -45,10 +45,10 @@ async function startServer() {
       rootUrl = `https://${host}`;
       console.warn("APP_URL environment variable is missing. Falling back to:", rootUrl);
     }
-    
+
     // Remove trailing slash if exists to prevent double slashes
     rootUrl = rootUrl.replace(/\/$/, "");
-    
+
     const redirectUri = `${rootUrl}/auth/google/callback`;
     console.log("Generated Redirect URI for Google:", redirectUri);
 
@@ -146,7 +146,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 

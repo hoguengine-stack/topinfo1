@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
 import { collection, onSnapshot, doc, setDoc, updateDoc, getDoc } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
-import { CMSPage, Product, CMSBlock } from "../types";
+import { CMSPage, Product, CMSBlock, NavigationSettings } from "../types";
+import { DEFAULT_NAVIGATION_SETTINGS, mergeNavigationSettings } from "../utils/cmsSettings";
 import { TopWebsiteView } from "./TopWebsiteView";
 import { Trash2, Sparkles } from "lucide-react";
 
@@ -10,9 +11,43 @@ interface TopWebsiteProps {
   onEnterInternalDashboard: () => void;
 }
 
+function getFirebaseErrorCode(error: unknown) {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    return String((error as { code?: unknown }).code || "");
+  }
+  return "";
+}
+
+function getGoogleLoginErrorMessage(error: unknown) {
+  const code = getFirebaseErrorCode(error);
+  const currentHost = window.location.hostname || "현재 접속 주소";
+
+  if (code === "auth/operation-not-allowed") {
+    return "Firebase Authentication에서 Google 로그인 제공업체가 꺼져 있습니다. Firebase 콘솔에서 Google 제공업체를 활성화해야 합니다.";
+  }
+
+  if (code === "auth/unauthorized-domain") {
+    return `${currentHost} 도메인이 Firebase Auth 허용 도메인에 등록되어 있지 않습니다. Firebase 콘솔 Authentication 설정에서 허용 도메인에 추가해야 합니다.`;
+  }
+
+  if (code === "auth/popup-blocked") {
+    return "브라우저가 Google 인증 팝업을 차단했습니다. 다시 시도하면 redirect 방식으로 인증을 진행합니다.";
+  }
+
+  if (code === "auth/popup-closed-by-user") {
+    return "Google 인증 창이 닫혀 로그인되지 않았습니다.";
+  }
+
+  if (code === "auth/cancelled-popup-request") {
+    return "이미 진행 중인 Google 인증 요청이 취소되었습니다. 잠시 후 다시 시도해 주세요.";
+  }
+
+  return `Google Workspace 연동인증에 실패했습니다.${code ? ` (${code})` : ""}`;
+}
+
 export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
   const { user, profile, logout, emailLogin, emailSignUp, login, setIsAccessCodeVerified, isAdmin, isEmployee } = useAuth();
-  
+
   // Navigation states
   const [currentUrl, setCurrentUrl] = useState<string>("home");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -41,7 +76,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
   // Db states
   const [pages, setPages] = useState<CMSPage[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  
+  const [navigationSettings, setNavigationSettings] = useState<NavigationSettings>(DEFAULT_NAVIGATION_SETTINGS);
+
   // Local active product tab
   const [productFilter, setProductFilter] = useState<string>("전체");
 
@@ -56,6 +92,104 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
   });
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+
+  const [isCmsSaving, setIsCmsSaving] = useState(false);
+  const pendingWritesRef = React.useRef<Record<string, { pageId: string; blocks: CMSPage["blocks"] }>>({});
+  const writeTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const pendingNavWritesRef = React.useRef<{
+    pId: string;
+    title: string;
+    navigationSettings: NavigationSettings;
+  } | null>(null);
+  const navWriteTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const pendingProductWritesRef = React.useRef<Record<string, Partial<Product>>>({});
+  const productWriteTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (writeTimeoutRef.current) clearTimeout(writeTimeoutRef.current);
+      if (navWriteTimeoutRef.current) clearTimeout(navWriteTimeoutRef.current);
+      if (productWriteTimeoutRef.current) clearTimeout(productWriteTimeoutRef.current);
+    };
+  }, []);
+
+  const schedulePageWrite = (pageId: string, blocks: CMSPage["blocks"]) => {
+    pendingWritesRef.current[pageId] = { pageId, blocks };
+    setIsCmsSaving(true);
+
+    if (writeTimeoutRef.current) {
+      clearTimeout(writeTimeoutRef.current);
+    }
+
+    writeTimeoutRef.current = setTimeout(async () => {
+      const pending = { ...pendingWritesRef.current };
+      pendingWritesRef.current = {};
+
+      for (const pId in pending) {
+        const { blocks: blocksToWrite } = pending[pId];
+        try {
+          await updateDoc(doc(db, "cms_pages", pId), { blocks: blocksToWrite });
+          console.log(`[CMS] Debounced write success for page ${pId}`);
+        } catch (e) {
+          console.error(`[CMS] Debounced write failed for page ${pId}:`, e);
+        }
+      }
+      setIsCmsSaving(false);
+    }, 1000);
+  };
+
+  const scheduleNavWrite = (pId: string, title: string, updatedSettings: NavigationSettings) => {
+    pendingNavWritesRef.current = { pId, title, navigationSettings: updatedSettings };
+    setIsCmsSaving(true);
+
+    if (navWriteTimeoutRef.current) {
+      clearTimeout(navWriteTimeoutRef.current);
+    }
+
+    navWriteTimeoutRef.current = setTimeout(async () => {
+      if (!pendingNavWritesRef.current) return;
+      const { pId: targetId, title: targetTitle, navigationSettings: targetSettings } = pendingNavWritesRef.current;
+      pendingNavWritesRef.current = null;
+
+      try {
+        await updateDoc(doc(db, "cms_pages", targetId), { title: targetTitle });
+        await setDoc(doc(db, "settings", "navigation"), targetSettings);
+        console.log(`[CMS] Debounced nav write success`);
+      } catch (e) {
+        console.error(`[CMS] Debounced nav write failed:`, e);
+      }
+      setIsCmsSaving(false);
+    }, 1000);
+  };
+
+  const scheduleProductWrite = (productId: string, fields: Partial<Product>) => {
+    pendingProductWritesRef.current[productId] = {
+      ...pendingProductWritesRef.current[productId],
+      ...fields
+    };
+    setIsCmsSaving(true);
+
+    if (productWriteTimeoutRef.current) {
+      clearTimeout(productWriteTimeoutRef.current);
+    }
+
+    productWriteTimeoutRef.current = setTimeout(async () => {
+      const pending = { ...pendingProductWritesRef.current };
+      pendingProductWritesRef.current = {};
+
+      for (const prodId in pending) {
+        const dataToWrite = pending[prodId];
+        try {
+          await updateDoc(doc(db, "products", prodId), dataToWrite);
+          console.log(`[CMS] Debounced write success for product ${prodId}`);
+        } catch (e) {
+          console.error(`[CMS] Debounced write failed for product ${prodId}:`, e);
+        }
+      }
+      setIsCmsSaving(false);
+    }, 1000);
+  };
 
   const [footerInfo, setFooterInfo] = useState({
     companyName: "(주)탑정보통신",
@@ -85,7 +219,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     const unsubPages = onSnapshot(collection(db, "cms_pages"), async (snap) => {
       const items: CMSPage[] = [];
       snap.forEach(d => items.push({ id: d.id, ...d.data() } as CMSPage));
-      
+
       // Automate restoration of any missing standard pages to ensure of all menus are present
       const defaultPages: CMSPage[] = [
         {
@@ -97,7 +231,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
           blocks: [
             {
               id: "b1",
-              type: "hero",
+              type: "banner",
+              layoutStyle: "column_center",
               title: "결제의 새로운 표준,\n탑정보통신이 주도합니다",
               badge: "탑정보통신 2026 비즈니스 패밀리쉽",
               subtitle: "대표님의 성공적인 오프라인 비즈니스를 지원하는 스마트 슬림 포스기, 고속 애플페이 단말기 무상 지원 솔루션.",
@@ -136,7 +271,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
           blocks: [
             {
               id: "p1",
-              type: "hero",
+              type: "banner",
+              layoutStyle: "column_center",
               title: "탑정보통신 프리미엄 결제 하드웨어",
               badge: "최우수 기술 장비 공급 라인업",
               subtitle: "신규 매장에 가장 잘 어울리는 화이트 슬림 디자인과 다채로운 결제 연동 리스트입니다.",
@@ -155,7 +291,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
           blocks: [
             {
               id: "s1",
-              type: "hero",
+              type: "banner",
+              layoutStyle: "column_center",
               title: "고객 가맹점 소통 건의제판",
               badge: "실시간 열린 마음 피드백",
               subtitle: "탑정보통신은 대표님들의 사소한 소리도 귀 기울여 듣고 현장에 반영하도록 최선을 다합니다.",
@@ -172,7 +309,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
           blocks: [
             {
               id: "r1",
-              type: "hero",
+              type: "banner",
+              layoutStyle: "column_center",
               title: "기술 및 매뉴얼 통합 자료실",
               badge: "자가 장애 조치 및 사용성 다운로드",
               subtitle: "용지 교체부터 애플페이 오류 처리, 정산 전산 대조 가이드 매뉴얼을 무료 다운로드하세요.",
@@ -189,7 +327,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
           blocks: [
             {
               id: "c1",
-              type: "hero",
+              type: "banner",
+              layoutStyle: "column_center",
               title: "탑정보통신 무료 가맹 상담",
               badge: "가장 빠른 24시간 가입 지원",
               subtitle: "카드 결제 단말기, 슬림 포스(POS), 세로형 키오스크까지 한번에 연동 상담받으세요.",
@@ -206,7 +345,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
           blocks: [
             {
               id: "pa1",
-              type: "hero",
+              type: "banner",
+              layoutStyle: "column_center",
               title: "무상 롤 전산 용지 특별배송",
               badge: "초고속 로젠택배 특별 지원",
               subtitle: "탑정보통신 단말 거래처 패밀리라면 평생 전액 영수증 인쇄 롤 용지를 전 기종 무상 지원해 드립니다.",
@@ -218,16 +358,18 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
 
       let hasMissing = false;
       const existingIds = items.map(p => p.id);
-      
+
       for (const dp of defaultPages) {
         if (!existingIds.includes(dp.id)) {
           hasMissing = true;
-          console.log(`[CMS Init] Missing standard page '${dp.id}', auto-populating...`);
-          await setDoc(doc(db, "cms_pages", dp.id), dp);
+          if (user) {
+            console.log(`[CMS Init] Missing standard page '${dp.id}', auto-populating...`);
+            await setDoc(doc(db, "cms_pages", dp.id), dp);
+          }
         }
       }
 
-      if (!hasMissing) {
+      if (!hasMissing || !user) {
         setPages(items);
       }
     });
@@ -236,12 +378,17 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     const unsubProducts = onSnapshot(collection(db, "products"), async (snap) => {
       const items: Product[] = [];
       snap.forEach(d => items.push({ id: d.id, ...d.data() } as Product));
-      
+
       const initDocRef = doc(db, "settings", "initialization_state");
       try {
         const initSnap = await getDoc(initDocRef);
-        
+
         if (items.length === 0 && !initSnap.exists()) {
+          if (!user) {
+            setProducts(items);
+            return;
+          }
+
           console.log("Empty products collection and uninitialized database. Initializing defaults...");
           const defaultProducts: Product[] = [
             {
@@ -295,14 +442,14 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     // Navigation settings listener
     const unsub_nav = onSnapshot(doc(db, "settings", "navigation"), (snap) => {
       if (!snap.exists()) {
-        setDoc(doc(db, "settings", "navigation"), {
-          home: { label: "홈", visible: true },
-          products: { label: "제품군소개", visible: true },
-          board_suggestions: { label: "건의제안", visible: true },
-          board_resources: { label: "자료실자료", visible: true },
-          request_consult: { label: "무상 가맹/상담신청", visible: true },
-          request_paper: { label: "용지 배송요청", visible: true }
-        });
+        setNavigationSettings(DEFAULT_NAVIGATION_SETTINGS);
+        if (user) {
+          setDoc(doc(db, "settings", "navigation"), DEFAULT_NAVIGATION_SETTINGS).catch((err) => {
+            console.warn("Navigation settings initialization failed", err);
+          });
+        }
+      } else {
+        setNavigationSettings(mergeNavigationSettings(snap.data() as NavigationSettings));
       }
     });
 
@@ -311,14 +458,20 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       if (snap.exists()) {
         setFooterInfo(snap.data() as any);
       } else {
-        setDoc(doc(db, "settings", "footer"), {
+        const defaultFooter = {
           companyName: "(주)탑정보통신",
           ceo: "탑정보통신전담",
           address: "서울특별시 구로구 신도림동",
           phone: "24시간 장애접수 1544-0000",
           email: "support@topinfo.com",
           copyright: "Copyright © 2026 TOP Information & Communication. All Rights Reserved."
-        });
+        };
+        setFooterInfo(defaultFooter);
+        if (user) {
+          setDoc(doc(db, "settings", "footer"), defaultFooter).catch((err) => {
+            console.warn("Footer settings initialization failed", err);
+          });
+        }
       }
     });
 
@@ -328,7 +481,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       unsub_nav();
       unsub_footer();
     };
-  }, []);
+  }, [user]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -347,13 +500,9 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
           authFormData.email,
           authFormData.password,
           authFormData.nickname,
-          authFormData.jobTitle
+          "현장 관리자",
+          ""
         );
-
-        if (authFormData.accessCode === "kicckmk") {
-          setIsAccessCodeVerified(true);
-          localStorage.setItem("isAccessCodeVerified", "true");
-        }
       } else {
         await emailLogin(authFormData.email, authFormData.password);
       }
@@ -382,7 +531,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       onEnterInternalDashboard();
     } catch (err: any) {
       console.error(err);
-      setAuthError("Google Workspace 연동인증에 실패했습니다.");
+      setAuthError(getGoogleLoginErrorMessage(err));
     } finally {
       setAuthLoading(false);
     }
@@ -518,17 +667,17 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       }
       return b;
     });
-    try {
-      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
-    } catch (e) {
-      console.error("Firestore immediate block update failed: ", e);
-    }
+
+    const updatedPages = pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p);
+    setPages(updatedPages);
+
+    schedulePageWrite(page.id, updatedBlocks);
   };
 
   const handleHUDChange = async (fields: Partial<CMSBlock>) => {
     if (!activeEditTarget || !activeEditTarget.blockId) return;
     const { page, blockId, block } = activeEditTarget;
-    
+
     const updatedBlocks = page.blocks.map(b => {
       if (b.id === blockId) {
         return { ...b, ...fields };
@@ -545,17 +694,13 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       page: { ...page, blocks: updatedBlocks }
     });
 
-    try {
-      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
-    } catch (err) {
-      console.error("Real-time HUD update failed: ", err);
-    }
+    schedulePageWrite(page.id, updatedBlocks);
   };
 
   const handleHUDCardChange = async (cardItemFields: any) => {
     if (!activeEditTarget || !activeEditTarget.blockId || activeEditTarget.itemIndex === undefined) return;
     const { page, blockId, block, itemIndex } = activeEditTarget;
-    
+
     const currentItems = [...(block?.items || [])];
     currentItems[itemIndex] = { ...currentItems[itemIndex], ...cardItemFields };
 
@@ -575,11 +720,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       page: { ...page, blocks: updatedBlocks }
     });
 
-    try {
-      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
-    } catch (err) {
-      console.error("Real-time HUD card update failed: ", err);
-    }
+    schedulePageWrite(page.id, updatedBlocks);
   };
 
   const handleHUDDeleteCardItem = async () => {
@@ -617,19 +758,46 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
   const handleNavTitleChange = async (newTitle: string) => {
     if (!activeEditTarget || !activeEditTarget.page) return;
     const pId = activeEditTarget.page.id;
+    const slug = activeEditTarget.page.slug;
 
     const updatedPages = pages.map(p => p.id === pId ? { ...p, title: newTitle } : p);
     setPages(updatedPages);
+
+    const updatedNavigationSettings = {
+      ...mergeNavigationSettings(navigationSettings),
+      [slug]: {
+        ...mergeNavigationSettings(navigationSettings)[slug],
+        label: newTitle,
+      },
+    };
+    setNavigationSettings(updatedNavigationSettings);
 
     setActiveEditTarget({
       ...activeEditTarget,
       page: { ...activeEditTarget.page, title: newTitle }
     });
 
+    scheduleNavWrite(pId, newTitle, updatedNavigationSettings);
+  };
+
+  const handleNavVisibilityChange = async (visible: boolean) => {
+    if (!activeEditTarget || !activeEditTarget.page) return;
+    const slug = activeEditTarget.page.slug;
+    const mergedSettings = mergeNavigationSettings(navigationSettings);
+    const updatedNavigationSettings = {
+      ...mergedSettings,
+      [slug]: {
+        ...mergedSettings[slug],
+        visible,
+      },
+    };
+
+    setNavigationSettings(updatedNavigationSettings);
+
     try {
-      await updateDoc(doc(db, "cms_pages", pId), { title: newTitle });
+      await setDoc(doc(db, "settings", "navigation"), updatedNavigationSettings);
     } catch (err) {
-      console.error("Failed to update nav tab title: ", err);
+      console.error("Failed to update nav visibility: ", err);
     }
   };
 
@@ -648,6 +816,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         setPages={setPages}
         products={products}
         setProducts={setProducts}
+        scheduleProductWrite={scheduleProductWrite}
+        schedulePageWrite={schedulePageWrite}
         productFilter={productFilter}
         setProductFilter={setProductFilter}
         isEditModeActive={isEditModeActive}
@@ -656,6 +826,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         setActiveEditTarget={setActiveEditTarget}
         footerInfo={footerInfo}
         setFooterInfo={setFooterInfo}
+        navigationSettings={navigationSettings}
         user={user}
         profile={profile}
         logout={logout}
@@ -674,7 +845,9 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         setGoogleClickTimes={setGoogleClickTimes}
         mobileMenuOpen={mobileMenuOpen}
         setMobileMenuOpen={setMobileMenuOpen}
+        isSignUpMode={isSignUpMode}
         setIsSignUpMode={setIsSignUpMode}
+        isCmsSaving={isCmsSaving}
         handleLinkClick={handleLinkClick}
         handleMoveBlockUp={handleMoveBlockUp}
         handleMoveBlockDown={handleMoveBlockDown}
@@ -685,6 +858,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         handleHUDCardChange={handleHUDCardChange}
         handleHUDDeleteCardItem={handleHUDDeleteCardItem}
         handleNavTitleChange={handleNavTitleChange}
+        handleNavVisibilityChange={handleNavVisibilityChange}
         showAddBlockMenuAtIndex={showAddBlockMenuAtIndex}
         setShowAddBlockMenuAtIndex={setShowAddBlockMenuAtIndex}
         onEnterInternalDashboard={onEnterInternalDashboard}

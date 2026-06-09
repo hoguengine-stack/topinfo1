@@ -1,8 +1,9 @@
 import React from "react";
-import { 
-  Edit3, Menu, X, UserCircle, LogOut, LogIn 
+import {
+  Edit3, Menu, X, UserCircle, LogOut, LogIn
 } from "lucide-react";
-import { CMSPage } from "../types";
+import { CMSPage, NavigationSettings } from "../types";
+import { getNavigationLabel, getOrderedVisiblePages } from "../utils/cmsSettings";
 
 export interface WebsiteHeaderProps {
   isAdmin: boolean;
@@ -13,6 +14,7 @@ export interface WebsiteHeaderProps {
   setShowAddBlockMenuAtIndex: (val: any) => void;
   currentUrl: string;
   pages: CMSPage[];
+  navigationSettings: NavigationSettings;
   setActiveEditTarget: (target: any) => void;
   handleLinkClick: (slug: string) => void;
   user: any;
@@ -33,6 +35,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   setShowAddBlockMenuAtIndex,
   currentUrl,
   pages,
+  navigationSettings,
   setActiveEditTarget,
   handleLinkClick,
   user,
@@ -43,9 +46,19 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   mobileMenuOpen,
   setMobileMenuOpen,
 }) => {
+  const primaryPages = getOrderedVisiblePages(pages, navigationSettings, [
+    "home",
+    "products",
+    "board_suggestions",
+    "board_resources",
+  ]);
+  const actionPages = getOrderedVisiblePages(pages, navigationSettings, ["request_consult", "request_paper"]);
+  const customPages = getOrderedVisiblePages(pages.filter((page) => page.isCustom), navigationSettings);
+  const mobilePages = getOrderedVisiblePages(pages, navigationSettings);
+
   const renderLogo = () => (
-    <div 
-      className="flex items-center gap-3 cursor-pointer select-none" 
+    <div
+      className="flex items-center gap-3 cursor-pointer select-none"
       onClick={() => handleLinkClick("home")}
     >
       <div className="w-10 h-10 rounded-full border-[3px] border-[#0f62fe] bg-white flex items-center justify-center relative overflow-hidden shrink-0 shadow-sm">
@@ -61,9 +74,9 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100/80">
+      <header className="sticky top-0 z-50 bg-white/85 backdrop-blur-lg border-b border-slate-100 shadow-xs transition-all duration-300">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
-          
+
           {/* Logo elements with Edit Mode Toggle */}
           <div className="flex items-center gap-4 shrink-0">
             {isAdmin && (
@@ -91,9 +104,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 
           {/* Desktop Navigation */}
           <nav className="hidden xl:flex items-center gap-2 shrink-0">
-            {["home", "products", "board_suggestions", "board_resources"].map((slug) => {
-              const p = pages.find((item) => item.slug === slug);
-              if (!p) return null;
+            {primaryPages.map((p) => {
               const isActive = currentUrl === p.slug;
               return (
                 <button
@@ -113,12 +124,12 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                   }`}
                   title={isEditModeActive ? "클릭해서 탭 이름/설정 변경" : ""}
                 >
-                  {p.title}
+                  {getNavigationLabel(p, navigationSettings)}
                 </button>
               );
             })}
-            
-            {pages.filter(p => p.isCustom).map(p => (
+
+            {customPages.map(p => (
               <button
                 key={p.id}
                 onClick={(e) => {
@@ -136,16 +147,14 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                 }`}
                 title={isEditModeActive ? "클릭해서 탭 이름/설정 변경" : ""}
               >
-                {p.title}
+                {getNavigationLabel(p, navigationSettings)}
               </button>
             ))}
           </nav>
 
           {/* Desktop Navigation md breakpoint fallback */}
           <nav className="hidden md:flex xl:hidden items-center gap-1 shrink-0">
-            {["home", "products", "board_suggestions", "board_resources"].map((slug) => {
-              const p = pages.find((item) => item.slug === slug);
-              if (!p) return null;
+            {primaryPages.map((p) => {
               const isActive = currentUrl === p.slug;
               return (
                 <button
@@ -165,7 +174,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                   }`}
                   title={isEditModeActive ? "클릭해서 탭 이름/설정 변경" : ""}
                 >
-                  {p.title}
+                  {getNavigationLabel(p, navigationSettings)}
                 </button>
               );
             })}
@@ -173,11 +182,11 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 
           {/* Dual Action Gateways / Auth section */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
-            {(() => {
-              const p = pages.find(item => item.slug === "request_consult");
-              if (!p) return null;
+            {actionPages.map((p, index) => {
+              const isPrimaryAction = p.slug === "request_consult" || index === 0;
               return (
                 <button
+                  key={p.id}
                   onClick={(e) => {
                     if (isEditModeActive) {
                       e.stopPropagation();
@@ -186,45 +195,26 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                       handleLinkClick(p.slug);
                     }
                   }}
-                  className={`bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold px-3 py-2.5 md:px-4.5 rounded-2xl transition shadow-md shadow-blue-600/10 flex items-center justify-center shrink-0 min-w-28 ${
+                  className={`${
+                    isPrimaryAction
+                      ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/10 min-w-28"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-800 min-w-24"
+                  } text-xs font-extrabold px-3 py-2.5 md:px-4 rounded-2xl transition flex items-center justify-center shrink-0 ${
                     isEditModeActive ? "relative outline-amber-400 outline-offset-2 hover:outline hover:outline-dashed hover:outline-2" : ""
                   }`}
                   title={isEditModeActive ? "클릭해서 탭 이름/설정 변경" : ""}
                 >
-                  {p.title}
+                  {getNavigationLabel(p, navigationSettings)}
                 </button>
               );
-            })()}
+            })}
 
-            {(() => {
-              const p = pages.find(item => item.slug === "request_paper");
-              if (!p) return null;
-              return (
-                <button
-                  onClick={(e) => {
-                    if (isEditModeActive) {
-                      e.stopPropagation();
-                      setActiveEditTarget({ type: "nav", pageId: p.slug, page: p });
-                    } else {
-                      handleLinkClick(p.slug);
-                    }
-                  }}
-                  className={`bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold px-3 py-2.5 md:px-4 rounded-2xl transition flex items-center justify-center shrink-0 min-w-24 ${
-                    isEditModeActive ? "relative outline-amber-400 outline-offset-2 hover:outline hover:outline-dashed hover:outline-2" : ""
-                  }`}
-                  title={isEditModeActive ? "클릭해서 탭 이름/설정 변경" : ""}
-                >
-                  {p.title}
-                </button>
-              );
-            })()}
-            
             <div className="w-px h-5 bg-slate-200 mx-1.5" />
 
             {user ? (
               <div className="flex items-center gap-2 shrink-0">
-                <div 
-                  className="flex items-center gap-1.5 cursor-pointer text-slate-700 hover:text-blue-600 transition" 
+                <div
+                  className="flex items-center gap-1.5 cursor-pointer text-slate-700 hover:text-blue-600 transition"
                   onClick={() => {
                     if (isEmployee) {
                       handleLinkClick("admin");
@@ -247,12 +237,20 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => { setIsSignUpMode(false); setShowLoginModal(true); }}
-                className="text-slate-600 hover:text-slate-900 hover:bg-slate-50 text-xs font-bold px-3 py-2 rounded-xl transition flex items-center gap-1.5 shrink-0"
-              >
-                <LogIn className="w-4 h-4" /> 로그인
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => { setIsSignUpMode(false); setShowLoginModal(true); }}
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-50 text-xs font-bold px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shrink-0"
+                >
+                  로그인
+                </button>
+                <button
+                  onClick={() => { setIsSignUpMode(true); setShowLoginModal(true); }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold px-3.5 py-2.5 rounded-xl transition shrink-0 shadow-sm shadow-blue-600/10 active:scale-95"
+                >
+                  회원가입
+                </button>
+              </div>
             )}
           </div>
 
@@ -271,19 +269,17 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       {mobileMenuOpen && (
         <div className="md:hidden border-b border-slate-200 bg-white px-6 py-6 space-y-4">
           <div className="flex flex-col gap-2">
-            {["home", "products", "board_suggestions", "board_resources", "request_consult", "request_paper"].map((slug) => {
-              const p = pages.find(item => item.slug === slug);
-              if (!p) return null;
+            {mobilePages.map((p) => {
               return (
                 <button
-                  key={slug}
+                  key={p.id}
                   onClick={() => {
                     setMobileMenuOpen(false);
-                    handleLinkClick(slug);
+                    handleLinkClick(p.slug);
                   }}
                   className="w-full text-left px-4 py-2.5 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition animate-in fade-in duration-100"
                 >
-                  {p.title}
+                  {getNavigationLabel(p, navigationSettings)}
                 </button>
               );
             })}
@@ -296,12 +292,20 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                 <button onClick={() => { setMobileMenuOpen(false); logout(); }} className="text-red-500 font-bold text-xs">로그아웃</button>
               </div>
             ) : (
-              <button
-                onClick={() => { setMobileMenuOpen(false); setIsSignUpMode(false); setShowLoginModal(true); }}
-                className="w-full text-center bg-slate-100 text-slate-800 font-bold py-3 rounded-xl text-xs"
-              >
-                로그인 및 가입
-              </button>
+              <div className="grid grid-cols-2 gap-2 w-full">
+                <button
+                  onClick={() => { setMobileMenuOpen(false); setIsSignUpMode(false); setShowLoginModal(true); }}
+                  className="w-full text-center bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-3 rounded-xl text-xs transition"
+                >
+                  로그인
+                </button>
+                <button
+                  onClick={() => { setMobileMenuOpen(false); setIsSignUpMode(true); setShowLoginModal(true); }}
+                  className="w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs transition"
+                >
+                  회원가입
+                </button>
+              </div>
             )}
           </div>
         </div>

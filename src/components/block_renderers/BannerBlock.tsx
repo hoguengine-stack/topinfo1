@@ -1,7 +1,7 @@
 import React from "react";
-import { Sparkles, ArrowRight, Trash2, Check } from "lucide-react";
+import { Sparkles, ArrowRight, Trash2, Check, Move } from "lucide-react";
 import { CMSPage, CMSBlock } from "../../types";
-import { updateDoc, doc } from "firebase/firestore";
+
 
 interface BannerBlockProps {
   page: CMSPage;
@@ -15,6 +15,7 @@ interface BannerBlockProps {
   handleDeleteSubElement: (blockId: string, el: string) => Promise<void>;
   handleResizeStart: (e: React.MouseEvent, block: CMSBlock, elementKey: string) => void;
   handleLinkClick: (slug: string) => void;
+  handleUpdateBlockData: (page: CMSPage, blockId: string, updatedData: Partial<CMSBlock>) => Promise<void>;
   db: any;
 }
 
@@ -30,6 +31,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
   handleDeleteSubElement,
   handleResizeStart,
   handleLinkClick,
+  handleUpdateBlockData,
   db,
 }) => {
   const isCenterLayout = block.layoutStyle === "column_center";
@@ -59,27 +61,22 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
           >
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 text-blue-300 rounded-full text-xs font-bold mb-2 border border-white/5 uppercase tracking-widest">
               {block.badgeIconUrl ? (
-                <img 
-                  src={block.badgeIconUrl} 
-                  alt="badge icon" 
+                <img
+                  src={block.badgeIconUrl}
+                  alt="badge icon"
                   referrerPolicy="no-referrer"
-                  className="w-4 h-4 object-contain rounded shrink-0" 
+                  className="w-4 h-4 object-contain rounded shrink-0"
                 />
               ) : (
-                <Sparkles className="w-3.5 h-3.5 shrink-0 text-amber-300" /> 
+                <Sparkles className="w-3.5 h-3.5 shrink-0 text-amber-300" />
               )}
               {isEditModeActive ? (
                 <input
                   type="text"
                   value={block.badge || ""}
-                  onChange={async (e) => {
+                  onChange={(e) => {
                     const newVal = e.target.value;
-                    const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, badge: newVal } : b);
-                    setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                    if (activeEditTarget && activeEditTarget.blockId === block.id) {
-                      setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, badge: newVal } as CMSBlock } : null);
-                    }
-                    await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                    handleUpdateBlockData?.(page, block.id, { badge: newVal });
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -106,18 +103,13 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
         const titleColor = block.titleColor || "text-white";
         const titleAlign = block.titleAlign || block.align || (isCenterLayout ? "center" : "left");
         const titleAlignClass = titleAlign === "left" ? "text-left" : titleAlign === "right" ? "text-right" : "text-center";
- 
+
         content = isEditModeActive ? (
           <textarea
             value={block.title || ""}
-            onChange={async (e) => {
+            onChange={(e) => {
               const newVal = e.target.value;
-              const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, title: newVal } : b);
-              setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-              if (activeEditTarget && activeEditTarget.blockId === block.id) {
-                setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, title: newVal } as CMSBlock } : null);
-              }
-              await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+              handleUpdateBlockData?.(page, block.id, { title: newVal });
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -140,7 +132,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
             placeholder="배너 메인 타이틀"
           />
         ) : (
-          <h3 
+          <h3
             style={{
               fontSize: block.titleFontSize ? `${block.titleFontSize}pt` : (block.elementSizes?.["title"]?.fontSize || undefined),
               letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
@@ -157,18 +149,13 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
         const subtitleAlign = block.subtitleAlign || block.align || (isCenterLayout ? "center" : "left");
         const subtitleAlignClass = subtitleAlign === "left" ? "text-left" : subtitleAlign === "right" ? "text-right" : "text-center";
         const subtitleMxClass = subtitleAlign === "left" ? "mr-auto ml-0" : subtitleAlign === "right" ? "ml-auto mr-0" : "mx-auto";
- 
+
         content = isEditModeActive ? (
           <textarea
             value={block.subtitle || ""}
-            onChange={async (e) => {
+            onChange={(e) => {
               const newVal = e.target.value;
-              const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, subtitle: newVal } : b);
-              setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-              if (activeEditTarget && activeEditTarget.blockId === block.id) {
-                setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, subtitle: newVal } as CMSBlock } : null);
-              }
-              await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+              handleUpdateBlockData?.(page, block.id, { subtitle: newVal });
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -191,7 +178,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
             placeholder="배너 상세 설명"
           />
         ) : (
-          <p 
+          <p
             style={{
               fontSize: block.subtitleFontSize ? `${block.subtitleFontSize}pt` : (block.elementSizes?.["subtitle"]?.fontSize || undefined),
               letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
@@ -208,7 +195,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
         const b1Round = block.buttonRoundness || "rounded-2xl";
         const b1IsTailwindBg = b1Bg.startsWith("bg-");
         const b1IsTailwindText = b1Text.startsWith("text-");
- 
+
         const b2Bg = block.button2BgColor || "bg-white/10";
         const b2Text = block.button2TextColor || "text-white";
         const b2Round = block.button2Roundness || "rounded-2xl";
@@ -224,7 +211,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
         const b2Height = block.button2Height || undefined;
         const b2FontSize = block.button2FontSize ? (/^\d+$/.test(block.button2FontSize) ? `${block.button2FontSize}px` : block.button2FontSize) : (block.elementSizes?.["buttons"]?.fontSize || undefined);
         const b2LetterSpacing = block.button2LetterSpacing || undefined;
- 
+
         const buttonsAlign = block.buttonsAlign || block.align || (isCenterLayout ? "center" : "left");
         const buttonsAlignClass = buttonsAlign === "left" ? "justify-start" : buttonsAlign === "right" ? "justify-end" : "justify-center";
 
@@ -232,7 +219,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
           <div className={`shrink-0 flex flex-wrap gap-4 items-center w-full md:w-auto mt-4 md:mt-2 ${buttonsAlignClass}`}>
             {block.buttonText && (
               isEditModeActive ? (
-                <div 
+                <div
                   style={{
                     backgroundColor: b1IsTailwindBg ? undefined : b1Bg,
                     color: b1IsTailwindText ? undefined : b1Text,
@@ -248,14 +235,9 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
                   <input
                     type="text"
                     value={block.buttonText || ""}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const newVal = e.target.value;
-                      const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, buttonText: newVal } : b);
-                      setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                      if (activeEditTarget && activeEditTarget.blockId === block.id) {
-                        setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, buttonText: newVal } as CMSBlock } : null);
-                      }
-                      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                      handleUpdateBlockData?.(page, block.id, { buttonText: newVal });
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -268,7 +250,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
                         setActiveEditTarget({ type: "banner", pageId: page.id, page, blockId: block.id, block, selectedElement: "buttons" });
                       }
                     }}
-                    style={{ 
+                    style={{
                       color: b1IsTailwindText ? undefined : b1Text,
                       fontSize: b1FontSize,
                       letterSpacing: b1LetterSpacing,
@@ -278,7 +260,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
                   <ArrowRight className="w-3.5 h-3.5 shrink-0 ml-1.5" />
 
                   {/* Handle precisely on button 1 bottom-right */}
-                  <div 
+                  <div
                     className="absolute bottom-1 right-1 w-4 h-4 bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center cursor-se-resize z-50 transition shadow-md active:scale-95"
                     style={{ touchAction: "none" }}
                     onMouseDown={(e) => handleResizeStart(e, block, "button1")}
@@ -312,10 +294,10 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
                 </button>
               )
             )}
- 
+
             {block.button2Text && (
               isEditModeActive ? (
-                <div 
+                <div
                   style={{
                     backgroundColor: b2IsTailwindBg ? undefined : b2Bg,
                     color: b2IsTailwindText ? undefined : b2Text,
@@ -331,14 +313,9 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
                   <input
                     type="text"
                     value={block.button2Text || ""}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const newVal = e.target.value;
-                      const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, button2Text: newVal } : b);
-                      setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                      if (activeEditTarget && activeEditTarget.blockId === block.id) {
-                        setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, button2Text: newVal } as CMSBlock } : null);
-                      }
-                      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                      handleUpdateBlockData?.(page, block.id, { button2Text: newVal });
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -351,7 +328,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
                         setActiveEditTarget({ type: "banner", pageId: page.id, page, blockId: block.id, block, selectedElement: "buttons" });
                       }
                     }}
-                    style={{ 
+                    style={{
                       color: b2IsTailwindText ? undefined : b2Text,
                       fontSize: b2FontSize,
                       letterSpacing: b2LetterSpacing,
@@ -360,7 +337,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
                   />
 
                   {/* Handle precisely on button 2 bottom-right */}
-                  <div 
+                  <div
                     className="absolute bottom-1 right-1 w-4 h-4 bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center justify-center cursor-se-resize z-50 transition shadow-md active:scale-95"
                     style={{ touchAction: "none" }}
                     onMouseDown={(e) => handleResizeStart(e, block, "button2")}
@@ -398,7 +375,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
       } else if (el === "iconImageUrl" && block.iconImageUrl) {
         const alignClass = block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center";
         content = (
-          <div 
+          <div
             onClick={(e) => {
               if (isEditModeActive) {
                 e.stopPropagation();
@@ -407,11 +384,11 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
             }}
             className={`flex ${alignClass} my-4 relative group/insg`}
           >
-            <img 
-              src={block.iconImageUrl} 
-              alt="custom custom-svg decoration" 
+            <img
+              src={block.iconImageUrl}
+              alt="custom custom-svg decoration"
               referrerPolicy="no-referrer"
-              className="hover:scale-105 transition duration-150 cursor-pointer" 
+              className="hover:scale-105 transition duration-150 cursor-pointer"
               style={{
                 width: block.iconWidth || undefined,
                 height: block.iconHeight || undefined,
@@ -442,13 +419,23 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
                     : (block.align || "center");
 
       const subAlignClass = elAlign === "left" ? "items-start text-left" : elAlign === "right" ? "items-end text-right" : "items-center text-center";
+      const isTextElement = el === "badge" || el === "title" || el === "subtitle";
+      const elementWidth = isTextElement ? block.elementSizes?.[el]?.width : undefined;
+      const getTextControlRight = (offset: string) => {
+        if (!elementWidth) return undefined;
+        if (elAlign === "left") return `calc(100% - ${elementWidth} + ${offset})`;
+        if (elAlign === "right") return offset;
+        return `calc((100% - ${elementWidth}) / 2 + ${offset})`;
+      };
 
       return (
         <div
           key={el}
           className={`w-full flex flex-col group/sub transition ${subAlignClass} ${
-            isEditModeActive 
-              ? "hover:outline hover:outline-dashed hover:outline-blue-400 p-1.5 rounded-lg relative cursor-default" 
+            isEditModeActive
+              ? isTextElement
+                ? "relative cursor-default"
+                : "hover:outline hover:outline-dashed hover:outline-blue-400 p-1.5 rounded-lg relative cursor-default"
               : ""
           }`}
         >
@@ -463,13 +450,17 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
                   handleDeleteSubElement(block.id, el);
                 }}
                 className="absolute top-1.5 right-1.5 opacity-0 group-hover/sub:opacity-100 bg-red-600 hover:bg-red-700 text-white font-bold p-1 rounded-lg transition z-20 shadow-xs flex items-center justify-center cursor-pointer"
+                style={isTextElement ? { right: getTextControlRight("0.375rem") } : undefined}
               >
                 <Trash2 className="w-3 h-3" />
               </button>
               {el !== "buttons" && (
-                <div 
+                <div
                   className="absolute bottom-1 right-1 w-5 h-5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center cursor-se-resize z-45 opacity-0 group-hover/sub:opacity-100 transition shadow-md active:scale-90"
-                  style={{ touchAction: "none" }}
+                  style={{
+                    touchAction: "none",
+                    ...(isTextElement ? { right: getTextControlRight("0.25rem") } : {})
+                  }}
                   onMouseDown={(e) => handleResizeStart(e, block, el)}
                 >
                   <span className="text-[10px] font-bold">↘</span>
@@ -504,22 +495,22 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
     objectFit: "contain",
   };
 
-  const bannerAlignClass = block.align 
+  const bannerAlignClass = block.align
     ? (block.align === "left" ? "flex-col items-start text-left gap-6" : block.align === "right" ? "flex-col items-end text-right gap-6" : "flex-col items-center text-center gap-6")
-    : (block.blockAlign 
-        ? block.blockAlign 
-        : isCenterLayout 
-          ? "flex-col items-center text-center gap-6" 
-          : isLeftColumnLayout 
-            ? "flex-col items-start text-left gap-6" 
+    : (block.blockAlign
+        ? block.blockAlign
+        : isCenterLayout
+          ? "flex-col items-center text-center gap-6"
+          : isLeftColumnLayout
+            ? "flex-col items-start text-left gap-6"
             : "flex-col md:flex-row md:items-center justify-between gap-8 text-left");
 
-  const bannerTextAlignClass = block.align 
+  const bannerTextAlignClass = block.align
     ? (block.align === "left" ? "items-start text-left" : block.align === "right" ? "items-end text-right" : "items-center text-center")
     : (isCenterLayout ? "items-center text-center" : isLeftColumnLayout ? "items-start text-left" : "items-start text-left");
 
   return (
-    <section 
+    <section
       onClick={(e) => {
         if (isEditModeActive) {
           e.stopPropagation();
@@ -528,16 +519,16 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
       }}
       style={bannerStyle}
       className={`text-white rounded-3xl p-8 md:p-12 shadow-lg shadow-slate-955/20 transition-all ${bannerBg} flex relative w-full overflow-hidden ${
-        isEditModeActive ? "cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-dashed" : ""
+        isEditModeActive ? "cursor-pointer" : ""
       } ${bannerAlignClass}`}
     >
       {/* Visual Watermark background effect */}
       {hasWatermark && (
-        <img 
-          src={block.imageUrl} 
-          alt="watermark illustration" 
+        <img
+          src={block.imageUrl}
+          alt="watermark illustration"
           referrerPolicy="no-referrer"
-          className="absolute right-[-4%] bottom-[-5%] w-[180px] h-[180px] object-contain opacity-10 pointer-events-none select-none animate-pulse" 
+          className="absolute right-[-4%] bottom-[-5%] w-[180px] h-[180px] object-contain opacity-10 pointer-events-none select-none animate-pulse"
           style={customImageStyle}
         />
       )}
@@ -547,11 +538,11 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center w-full my-1">
           {block.bannerImagePosition === "left" && (
             <div className="w-full flex justify-center">
-              <img 
-                src={block.imageUrl} 
-                alt="banner illustration" 
+              <img
+                src={block.imageUrl}
+                alt="banner illustration"
                 referrerPolicy="no-referrer"
-                className="rounded-2xl transition duration-150 hover:scale-[1.01]" 
+                className="rounded-2xl transition duration-150 hover:scale-[1.01]"
                 style={{
                   maxHeight: "280px",
                   ...customImageStyle
@@ -566,11 +557,11 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
 
           {block.bannerImagePosition !== "left" && (
             <div className="w-full flex justify-center">
-              <img 
-                src={block.imageUrl} 
-                alt="banner illustration" 
+              <img
+                src={block.imageUrl}
+                alt="banner illustration"
                 referrerPolicy="no-referrer"
-                className="rounded-2xl transition duration-150 hover:scale-[1.01]" 
+                className="rounded-2xl transition duration-150 hover:scale-[1.01]"
                 style={{
                   maxHeight: "280px",
                   ...customImageStyle
@@ -581,17 +572,17 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
         </div>
       ) : (
         <div className={`flex-1 space-y-4 w-full flex flex-col ${bannerTextAlignClass}`} onClick={(e) => isEditModeActive && e.stopPropagation()}>
-          
+
           {/* Inline Image on TOP */}
           {block.bannerLayout === "inline" && block.imageUrl && block.bannerImagePosition === "top" && (
             <div className={`w-full flex ${
               block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center"
             } mb-2`}>
-              <img 
-                src={block.imageUrl} 
-                alt="inline banner illustration" 
+              <img
+                src={block.imageUrl}
+                alt="inline banner illustration"
                 referrerPolicy="no-referrer"
-                className="rounded-2xl transition hover:scale-[1.02]" 
+                className="rounded-2xl transition hover:scale-[1.02]"
                 style={{
                   maxHeight: "180px",
                   ...customImageStyle
@@ -607,11 +598,11 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
             <div className={`w-full flex ${
               block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center"
             } mt-2`}>
-              <img 
-                src={block.imageUrl} 
-                alt="inline banner illustration" 
+              <img
+                src={block.imageUrl}
+                alt="inline banner illustration"
                 referrerPolicy="no-referrer"
-                className="rounded-2xl transition hover:scale-[1.02]" 
+                className="rounded-2xl transition hover:scale-[1.02]"
                 style={{
                   maxHeight: "180px",
                   ...customImageStyle
@@ -628,8 +619,8 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
           isCenterLayout ? "justify-center" : "justify-start"
         }`}>
           {(block.items || []).map((bItem, bIdx) => (
-            <span 
-              key={bIdx} 
+            <span
+              key={bIdx}
               className="flex items-center gap-1.5 font-semibold text-slate-200 bg-white/5 border border-white/10 px-2.5 py-1 rounded-xl shadow-3xs"
             >
               <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -637,16 +628,11 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
                 <input
                   type="text"
                   value={bItem.title || ""}
-                  onChange={async (e) => {
+                  onChange={(e) => {
                     const newVal = e.target.value;
                     const currentItems = [...(block.items || [])];
                     currentItems[bIdx] = { ...currentItems[bIdx], title: newVal };
-                    const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, items: currentItems } : b);
-                    setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                    if (activeEditTarget && activeEditTarget.blockId === block.id) {
-                      setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, items: currentItems } as CMSBlock } : null);
-                    }
-                    await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                    handleUpdateBlockData?.(page, block.id, { items: currentItems });
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -671,9 +657,21 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
       )}
 
       {isEditModeActive && (
-        <span className="absolute top-2 right-2 bg-slate-900 border border-white/15 text-slate-300 px-2.5 py-0.5 rounded-full text-[10px] font-bold pointer-events-none shadow-xs font-sans">
-          텍스트 편집 & 드래그 순서 변경 가능
-        </span>
+        <>
+          <button
+            type="button"
+            title="배너 이동 (상하좌우 드래그)"
+            style={{ touchAction: "none" }}
+            onMouseDown={(e) => handleResizeStart(e, block, "block-position")}
+            className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-3 py-1.5 rounded-full text-[10px] font-bold shadow-lg flex items-center gap-1.5 cursor-move z-40 transition"
+          >
+            <Move className="w-3 h-3" />
+            <span>이동</span>
+          </button>
+          <span className="absolute top-2 right-20 bg-slate-900 border border-white/15 text-slate-300 px-2.5 py-1.5 rounded-full text-[10px] font-bold pointer-events-none shadow-xs font-sans">
+            텍스트 편집 & 드래그 순서 변경 가능
+          </span>
+        </>
       )}
     </section>
   );

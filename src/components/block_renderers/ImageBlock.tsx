@@ -1,6 +1,6 @@
 import React from "react";
 import { CMSPage, CMSBlock } from "../../types";
-import { updateDoc, doc } from "firebase/firestore";
+
 
 interface ImageBlockProps {
   page: CMSPage;
@@ -12,6 +12,7 @@ interface ImageBlockProps {
   setActiveEditTarget: (target: any) => void;
   handleResizeStart: (e: React.MouseEvent, block: CMSBlock, elementKey: string) => void;
   handleLinkClick: (slug: string) => void;
+  handleUpdateBlockData: (page: CMSPage, blockId: string, updatedData: Partial<CMSBlock>) => Promise<void>;
   db: any;
 }
 
@@ -25,13 +26,14 @@ export const ImageBlock: React.FC<ImageBlockProps> = ({
   setActiveEditTarget,
   handleResizeStart,
   handleLinkClick,
+  handleUpdateBlockData,
   db,
 }) => {
   const alignmentClass = block.align === "left" ? "items-start" : block.align === "right" ? "items-end" : "items-center";
   const heightLimit = block.titleSize && block.titleSize !== "none" ? block.titleSize : "none";
 
   return (
-    <section 
+    <section
       onClick={(e) => {
         if (isEditModeActive) {
           e.stopPropagation();
@@ -61,21 +63,16 @@ export const ImageBlock: React.FC<ImageBlockProps> = ({
       {block.buttonText && (
         <div className="absolute inset-0 bg-slate-950/15 flex items-center justify-center p-4" onClick={(e) => isEditModeActive && e.stopPropagation()}>
           {isEditModeActive ? (
-            <div 
+            <div
               className="bg-blue-600 border border-blue-500 text-white font-extrabold px-9 py-4 rounded-2xl text-xs sm:text-sm shadow-xl flex items-center justify-center"
               style={{ boxShadow: "0 10px 25px -5px rgba(37, 99, 235, 0.45)" }}
             >
               <input
                 type="text"
                 value={block.buttonText || ""}
-                onChange={async (e) => {
+                onChange={(e) => {
                   const newVal = e.target.value;
-                  const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, buttonText: newVal } : b);
-                  setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                  if (activeEditTarget && activeEditTarget.blockId === block.id) {
-                    setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, buttonText: newVal } as CMSBlock } : null);
-                  }
-                  await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                  handleUpdateBlockData?.(page, block.id, { buttonText: newVal });
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -115,7 +112,7 @@ export const ImageBlock: React.FC<ImageBlockProps> = ({
           <div className="absolute top-3 right-3 opacity-65 bg-slate-900/80 border border-white/10 text-white px-2.5 py-0.5 rounded-full text-[10px] font-bold pointer-events-none font-sans select-none">
             직접 텍스트 편집 가능 (인스펙터 Double-click)
           </div>
-          <div 
+          <div
             className="absolute bottom-3 right-3 w-7 h-7 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center cursor-se-resize z-45 opacity-100 shadow-md active:scale-95 transition"
             style={{ touchAction: "none" }}
             onMouseDown={(e) => handleResizeStart(e, block, "image")}

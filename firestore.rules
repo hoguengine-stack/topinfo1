@@ -12,7 +12,6 @@ service cloud.firestore {
     //   - taskTypes: list of strings
     //   - priorities: list of strings
     //   - jobTitles: list of strings
-    //   - accessCode: string
     //   - lockoutState: map (failedAttempts, lockoutTier, lockoutUntil)
     //
     // Collection: tasks
@@ -61,6 +60,12 @@ service cloud.firestore {
         request.resource.data[field].size() <= maxLen;
     }
 
+    function validOptionalString(field, maxLen) {
+      return !request.resource.data.keys().hasAny([field]) ||
+        (request.resource.data[field] is string &&
+         request.resource.data[field].size() <= maxLen);
+    }
+
     function isValidList(listData, maxSize) {
       return listData is list && listData.size() <= maxSize;
     }
@@ -68,13 +73,96 @@ service cloud.firestore {
     // ===============================================================
     // Domain Validators
     // ===============================================================
-    function isValidUser() {
-      return (!('accessCode' in request.resource.data) || (request.resource.data.accessCode is string && request.resource.data.accessCode.size() <= 20)) &&
+    function isGoogleProvider() {
+      return isAuthenticated() &&
+             request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    function isEmployee(uid) {
+      return isGoogleProvider() &&
+             request.auth.uid == uid &&
+             exists(/databases/$(database)/documents/users/$(uid)) &&
+             get(/databases/$(database)/documents/users/$(uid)).data.isAccessCodeVerified == true &&
+             (get(/databases/$(database)/documents/users/$(uid)).data.profile.jobTitle in ['실장', '팀장', '엔지니어']);
+    }
+
+    function isAdmin(uid) {
+      return isGoogleProvider() &&
+             request.auth.uid == uid &&
+             exists(/databases/$(database)/documents/users/$(uid)) &&
+             get(/databases/$(database)/documents/users/$(uid)).data.isAccessCodeVerified == true &&
+             get(/databases/$(database)/documents/users/$(uid)).data.profile.jobTitle == '실장';
+    }
+
+    function isCorrectAccessCodeHash(accessCodeHash) {
+      return (
+               exists(/databases/$(database)/documents/settings/security) &&
+               accessCodeHash == get(/databases/$(database)/documents/settings/security).data.accessCodeHash
+             ) ||
+             (
+               !exists(/databases/$(database)/documents/settings/security) &&
+               accessCodeHash == 'a8d04d9dac66d3342c1db8449a3fbbd7af969c159f33d5ee5797f67142a7950f'
+             );
+    }
+
+    function hasValidAccessVerification(userId) {
+      return exists(/databases/$(database)/documents/access_verifications/$(userId)) &&
+             get(/databases/$(database)/documents/access_verifications/$(userId)).data.uid == userId &&
+             isCorrectAccessCodeHash(get(/databases/$(database)/documents/access_verifications/$(userId)).data.accessCodeHash);
+    }
+
+    function isVerifiedAccessCode(userId) {
+      return !('isAccessCodeVerified' in request.resource.data) ||
+             request.resource.data.isAccessCodeVerified == false ||
+             (resource != null && resource.data.isAccessCodeVerified == true && request.resource.data.isAccessCodeVerified == true) ||
+             hasValidAccessVerification(userId);
+    }
+
+    function isAccessCodeNotWritable() {
+      return !('accessCode' in request.resource.data) ||
+             (resource != null &&
+              ('accessCode' in resource.data) &&
+              request.resource.data.accessCode == resource.data.accessCode);
+    }
+
+    function isValidJobTitle(userId) {
+      return !('profile' in request.resource.data) ||
+             !('jobTitle' in request.resource.data.profile) ||
+             !(request.resource.data.profile.jobTitle in ['실장', '팀장', '엔지니어']) ||
+             (
+               isGoogleProvider() &&
+               userId == request.auth.uid &&
+               resource != null &&
+               resource.data.isAccessCodeVerified == true &&
+               request.resource.data.isAccessCodeVerified == true
+             );
+    }
+
+    function isValidUser(userId) {
+      return isAccessCodeNotWritable() &&
              (!('taskTypes' in request.resource.data) || isValidList(request.resource.data.taskTypes, 50)) &&
              (!('priorities' in request.resource.data) || isValidList(request.resource.data.priorities, 50)) &&
              (!('jobTitles' in request.resource.data) || isValidList(request.resource.data.jobTitles, 50)) &&
              (!('profile' in request.resource.data) || request.resource.data.profile is map) &&
-             (!('lockoutState' in request.resource.data) || request.resource.data.lockoutState is map);
+             (!('lockoutState' in request.resource.data) || request.resource.data.lockoutState is map) &&
+             isVerifiedAccessCode(userId) &&
+             isValidJobTitle(userId);
+    }
+
+    function isValidAccessVerificationCreate(userId) {
+      return isOwner(userId) &&
+             request.resource.data.keys().hasOnly(['uid', 'accessCodeHash', 'createdAt']) &&
+             request.resource.data.uid == userId &&
+             request.resource.data.accessCodeHash is string &&
+             request.resource.data.accessCodeHash.size() == 64 &&
+             isCorrectAccessCodeHash(request.resource.data.accessCodeHash);
+    }
+
+    function isValidSecuritySettings() {
+      return request.resource.data.keys().hasOnly(['accessCodeHash', 'updatedAt', 'updatedBy']) &&
+             request.resource.data.accessCodeHash is string &&
+             request.resource.data.accessCodeHash.size() == 64 &&
+             request.resource.data.updatedBy == request.auth.uid;
     }
 
     function isValidTask() {
@@ -91,66 +179,173 @@ service cloud.firestore {
              (!('memo' in request.resource.data) || (request.resource.data.memo is string && request.resource.data.memo.size() <= 5000));
     }
 
+    function isValidConsultationCreate() {
+      return request.resource.data.keys().hasOnly([
+               'customerName',
+               'contact',
+               'businessName',
+               'businessType',
+               'productOfInterest',
+               'message',
+               'status',
+               'createdAt'
+             ]) &&
+             hasRequiredFields(['customerName', 'contact', 'status', 'createdAt']) &&
+             validStringLength('customerName', 1, 100) &&
+             validStringLength('contact', 1, 50) &&
+             request.resource.data.status == '대기' &&
+             validStringLength('createdAt', 1, 50) &&
+             validOptionalString('businessName', 150) &&
+             validOptionalString('businessType', 100) &&
+             validOptionalString('productOfInterest', 100) &&
+             validOptionalString('message', 2000);
+    }
+
+    function isValidPaperRequestCreate() {
+      return request.resource.data.keys().hasOnly([
+               'customerName',
+               'contact',
+               'address',
+               'deviceModel',
+               'quantity',
+               'status',
+               'createdAt'
+             ]) &&
+             hasRequiredFields(['customerName', 'contact', 'address', 'status', 'createdAt']) &&
+             validStringLength('customerName', 1, 100) &&
+             validStringLength('contact', 1, 50) &&
+             validStringLength('address', 1, 500) &&
+             request.resource.data.status == '대기' &&
+             validStringLength('createdAt', 1, 50) &&
+             validOptionalString('deviceModel', 120) &&
+             validOptionalString('quantity', 30);
+    }
+
+    function isValidSuggestionCreate() {
+      return request.resource.data.keys().hasOnly([
+               'title',
+               'content',
+               'authorName',
+               'authorId',
+               'isSecret',
+               'password',
+               'replies',
+               'createdAt'
+             ]) &&
+             hasRequiredFields(['title', 'content', 'authorName', 'isSecret', 'createdAt']) &&
+             validStringLength('title', 1, 200) &&
+             validStringLength('content', 1, 5000) &&
+             validStringLength('authorName', 1, 100) &&
+             request.resource.data.isSecret is bool &&
+             validStringLength('createdAt', 1, 50) &&
+             validOptionalString('authorId', 128) &&
+             validOptionalString('password', 100) &&
+             (!request.resource.data.keys().hasAny(['replies']) || isValidList(request.resource.data.replies, 100));
+    }
+
+    function isValidResourceCreate() {
+      return request.resource.data.keys().hasOnly([
+               'title',
+               'description',
+               'downloadUrl',
+               'fileSize',
+               'fileType',
+               'createdAt',
+               'authorName'
+             ]) &&
+             hasRequiredFields(['title', 'description', 'createdAt', 'authorName']) &&
+             validStringLength('title', 1, 200) &&
+             validStringLength('description', 1, 2000) &&
+             validStringLength('createdAt', 1, 50) &&
+             validStringLength('authorName', 1, 100) &&
+             validOptionalString('downloadUrl', 2000) &&
+             validOptionalString('fileSize', 50) &&
+             validOptionalString('fileType', 100);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
     match /users/{userId} {
       allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser() && uidUnchanged();
-      allow update: if isOwner(userId) && isValidUser() && uidNotModified();
+      allow create: if isOwner(userId) && isValidUser(userId) && uidUnchanged();
+      allow update: if isOwner(userId) && isValidUser(userId) && uidNotModified();
+      allow delete: if isOwner(userId);
+    }
+
+    match /access_verifications/{userId} {
+      allow read: if false;
+      allow create, update: if isValidAccessVerificationCreate(userId);
       allow delete: if isOwner(userId);
     }
 
     match /tasks/{taskId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidTask();
-      allow update: if isAuthenticated() && isValidTask();
-      allow delete: if isAuthenticated();
+      allow read: if isAuthenticated() && isEmployee(request.auth.uid);
+      allow create: if isAuthenticated() && isEmployee(request.auth.uid) && isValidTask();
+      allow update: if isAuthenticated() && isEmployee(request.auth.uid) && isValidTask();
+      allow delete: if isAuthenticated() && isEmployee(request.auth.uid);
     }
 
     match /notes/{noteId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if isAuthenticated() && isEmployee(request.auth.uid);
+      allow write: if isAuthenticated() && isEmployee(request.auth.uid);
     }
 
     match /personal_notes/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if isOwner(userId) && isEmployee(userId);
     }
-    
+
     match /system/{document=**} {
-      allow read, write: if isAuthenticated();
+      allow read: if true;
+      allow write: if isAuthenticated() && isEmployee(request.auth.uid);
+    }
+
+    match /settings/security {
+      allow read: if isAuthenticated() && isAdmin(request.auth.uid);
+      allow create, update: if isAuthenticated() && isAdmin(request.auth.uid) && isValidSecuritySettings();
+      allow delete: if false;
+    }
+
+    match /settings/{id} {
+      allow read: if id != 'security';
+      allow write: if id != 'security' && isAuthenticated() && (
+        (id == 'initialization_state' && !exists(/databases/$(database)/documents/settings/initialization_state)) ||
+        isEmployee(request.auth.uid)
+      );
     }
 
     match /products/{id} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAuthenticated() && isEmployee(request.auth.uid);
     }
 
     match /cms_pages/{id} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAuthenticated() && isEmployee(request.auth.uid);
     }
 
     match /consultations/{id} {
-      allow read: if isAuthenticated();
-      allow create: if true;
-      allow update, delete: if isAuthenticated();
+      allow read: if isAuthenticated() && isEmployee(request.auth.uid);
+      allow create: if isValidConsultationCreate();
+      allow update, delete: if isAuthenticated() && isEmployee(request.auth.uid);
     }
 
     match /paper_requests/{id} {
-      allow read: if isAuthenticated();
-      allow create: if true;
-      allow update, delete: if isAuthenticated();
+      allow read: if isAuthenticated() && isEmployee(request.auth.uid);
+      allow create: if isValidPaperRequestCreate();
+      allow update, delete: if isAuthenticated() && isEmployee(request.auth.uid);
     }
 
     match /suggestions/{id} {
-      allow read, create: if true;
-      allow update, delete: if true; // Managed inside app with passwords for guests, or roles
+      allow read: if true;
+      allow create: if isValidSuggestionCreate();
+      allow update, delete: if isAuthenticated() && isEmployee(request.auth.uid);
     }
 
     match /resources/{id} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow create: if isAuthenticated() && isEmployee(request.auth.uid) && isValidResourceCreate();
+      allow update, delete: if isAuthenticated() && isEmployee(request.auth.uid);
     }
   }
 }

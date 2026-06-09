@@ -117,6 +117,8 @@ export interface CMSBlock {
   contentColor?: string;
   contentFontSize?: string;
   contentLetterSpacing?: string;
+  textBoxWidth?: string;
+  textBoxHeight?: string;
   layoutStyle?: string;
   bgColor?: string;
   button2Text?: string;
@@ -125,6 +127,8 @@ export interface CMSBlock {
   blockAlign?: string;
   innerAlign?: string;
   innerSnap?: boolean;
+  posX?: number;
+  posY?: number;
   elementOrder?: string[];
   buttonBgColor?: string;
   buttonTextColor?: string;
@@ -185,3 +189,11 @@ export interface CMSPage {
   isCustom: boolean;
   createdAt: string;
 }
+
+export interface NavigationItemSettings {
+  label?: string;
+  visible?: boolean;
+  order?: number;
+}
+
+export type NavigationSettings = Record<string, NavigationItemSettings>;

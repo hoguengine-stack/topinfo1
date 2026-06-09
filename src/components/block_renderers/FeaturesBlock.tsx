@@ -1,7 +1,7 @@
 import React from "react";
 import { Trash2 } from "lucide-react";
 import { CMSPage, CMSBlock } from "../../types";
-import { updateDoc, doc } from "firebase/firestore";
+
 
 interface FeaturesBlockProps {
   page: CMSPage;
@@ -12,6 +12,7 @@ interface FeaturesBlockProps {
   activeEditTarget: any;
   setActiveEditTarget: (target: any) => void;
   handleLinkClick: (slug: string) => void;
+  handleUpdateBlockData: (page: CMSPage, blockId: string, updatedData: Partial<CMSBlock>) => Promise<void>;
   db: any;
 }
 
@@ -24,19 +25,20 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
   activeEditTarget,
   setActiveEditTarget,
   handleLinkClick,
+  handleUpdateBlockData,
   db,
 }) => {
   const renderIconComponent = (iconName: string, defaultIdx: number) => {
     const trimmed = iconName ? iconName.trim() : "";
     const name = trimmed.toLowerCase();
-    
+
     if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("/") || trimmed.includes(".") || trimmed.startsWith("data:")) {
       return (
-        <img 
-          src={trimmed} 
-          alt="icon" 
+        <img
+          src={trimmed}
+          alt="icon"
           referrerPolicy="no-referrer"
-          className="w-full h-full object-cover rounded-xl" 
+          className="w-full h-full object-cover rounded-xl"
         />
       );
     }
@@ -56,7 +58,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
     if (name === "heart") return <span className="text-xl">💖</span>;
     if (name === "shoppingbag") return <span className="text-xl">🛍️</span>;
     if (name === "helpcircle") return <span className="text-xl">❓</span>;
-    
+
     const val = defaultIdx % 4;
     if (val === 0) return <span className="text-xl">⚡</span>;
     if (val === 1) return <span className="text-xl">⏰</span>;
@@ -67,11 +69,11 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
   const gridColsCount = block.gridCols || 2;
   const isColumnLayout = block.itemLayout === "column";
   const cardBg = block.cardBgColor || "bg-white";
-  
+
   const isCardDark = cardBg.includes("bg-slate-900");
   const defaultTitleColor = isCardDark ? "text-white" : "text-slate-800";
   const defaultDescColor = isCardDark ? "text-slate-300" : "text-slate-500";
-  
+
   const titleAlign = block.titleAlign || block.align || "center";
   const subtitleAlign = block.subtitleAlign || block.align || "center";
 
@@ -83,7 +85,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
 
   return (
     <section className="space-y-8 w-full">
-      <div 
+      <div
         onClick={() => {
           if (isEditModeActive) {
             setActiveEditTarget({ type: "features", pageId: page.id, page, blockId: block.id, block, selectedElement: "block" });
@@ -98,14 +100,9 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
             <input
               type="text"
               value={block.title || ""}
-              onChange={async (e) => {
+              onChange={(e) => {
                 const newVal = e.target.value;
-                const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, title: newVal } : b);
-                setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                if (activeEditTarget && activeEditTarget.blockId === block.id) {
-                  setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, title: newVal } as CMSBlock } : null);
-                }
-                await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                handleUpdateBlockData?.(page, block.id, { title: newVal });
               }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -128,14 +125,9 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
             <input
               type="text"
               value={block.subtitle || ""}
-              onChange={async (e) => {
+              onChange={(e) => {
                 const newVal = e.target.value;
-                const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, subtitle: newVal } : b);
-                setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                if (activeEditTarget && activeEditTarget.blockId === block.id) {
-                  setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, subtitle: newVal } as CMSBlock } : null);
-                }
-                await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                handleUpdateBlockData?.(page, block.id, { subtitle: newVal });
               }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -158,7 +150,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
           </div>
         ) : (
           <>
-            <h2 
+            <h2
               style={{
                 fontSize: block.titleFontSize ? `${block.titleFontSize}pt` : undefined,
                 letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
@@ -167,7 +159,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
             >
               {block.title || "타이틀 없음"}
             </h2>
-            <p 
+            <p
               style={{
                 fontSize: block.subtitleFontSize ? `${block.subtitleFontSize}pt` : undefined,
                 letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
@@ -188,8 +180,8 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
         {(block.items || []).map((item, idx) => {
           const isCurrentlyEditingThisCard = isEditModeActive && activeEditTarget && activeEditTarget.blockId === block.id && activeEditTarget.itemIndex === idx;
           return (
-            <div 
-              key={idx} 
+            <div
+              key={idx}
               onClick={(e) => {
                 if (isEditModeActive) {
                   e.stopPropagation();
@@ -201,10 +193,10 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
               } ${
                 isEditModeActive ? "cursor-pointer" : ""
               } ${
-                block.blockAlign 
-                  ? block.blockAlign 
-                  : isColumnLayout 
-                    ? "flex-col items-center text-center gap-4" 
+                block.blockAlign
+                  ? block.blockAlign
+                  : isColumnLayout
+                    ? "flex-col items-center text-center gap-4"
                     : "flex-col items-start text-left gap-4 md:flex-row"
               }`}
             >
@@ -217,7 +209,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                   {renderIconComponent(item.icon || "", idx)}
                 </div>
               </div>
-              
+
               <div className="flex-1 space-y-2 w-full text-left" onClick={(e) => isEditModeActive && e.stopPropagation()}>
                 {item.badge && (
                   <div className={`px-2 py-0.5 rounded-full text-[9px] font-black inline-block tracking-widest uppercase mb-1 ${item.badgeBg || "bg-blue-100"} ${item.badgeColor || "text-blue-800"}`}>
@@ -225,16 +217,11 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                       <input
                         type="text"
                         value={item.badge || ""}
-                        onChange={async (e) => {
+                        onChange={(e) => {
                           const newVal = e.target.value;
                           const currentItems = [...(block.items || [])];
                           currentItems[idx] = { ...currentItems[idx], badge: newVal };
-                          const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, items: currentItems } : b);
-                          setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                          if (activeEditTarget && activeEditTarget.blockId === block.id && activeEditTarget.itemIndex === idx) {
-                            setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, items: currentItems } as CMSBlock } : null);
-                          }
-                          await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                          handleUpdateBlockData?.(page, block.id, { items: currentItems });
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -255,21 +242,16 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                     )}
                   </div>
                 )}
-                
+
                 {isEditModeActive ? (
                   <input
                     type="text"
                     value={item.title || ""}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const newVal = e.target.value;
                       const currentItems = [...(block.items || [])];
                       currentItems[idx] = { ...currentItems[idx], title: newVal };
-                      const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, items: currentItems } : b);
-                      setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                      if (activeEditTarget && activeEditTarget.blockId === block.id && activeEditTarget.itemIndex === idx) {
-                        setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, items: currentItems } as CMSBlock } : null);
-                      }
-                      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                      handleUpdateBlockData?.(page, block.id, { items: currentItems });
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -292,16 +274,11 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                 {isEditModeActive ? (
                   <textarea
                     value={item.desc || ""}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const newVal = e.target.value;
                       const currentItems = [...(block.items || [])];
                       currentItems[idx] = { ...currentItems[idx], desc: newVal };
-                      const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, items: currentItems } : b);
-                      setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                      if (activeEditTarget && activeEditTarget.blockId === block.id && activeEditTarget.itemIndex === idx) {
-                        setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, items: currentItems } as CMSBlock } : null);
-                      }
-                      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                      handleUpdateBlockData?.(page, block.id, { items: currentItems });
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -329,16 +306,11 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                         <input
                           type="text"
                           value={item.buttonText || ""}
-                          onChange={async (e) => {
+                          onChange={(e) => {
                             const newVal = e.target.value;
                             const currentItems = [...(block.items || [])];
                             currentItems[idx] = { ...currentItems[idx], buttonText: newVal };
-                            const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, items: currentItems } : b);
-                            setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                            if (activeEditTarget && activeEditTarget.blockId === block.id && activeEditTarget.itemIndex === idx) {
-                              setActiveEditTarget((prev: any) => prev ? { ...prev, block: { ...prev.block, items: currentItems } as CMSBlock } : null);
-                            }
-                            await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                            handleUpdateBlockData?.(page, block.id, { items: currentItems });
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -379,16 +351,11 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                   <button
                     type="button"
                     title="카드 요소 삭제"
-                    onClick={async (e) => {
+                    onClick={(e) => {
                       e.stopPropagation();
                       e.preventDefault();
                       const currentItems = (block.items || []).filter((_, idx2) => idx2 !== idx);
-                      const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, items: currentItems } : b);
-                      setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-                      if (activeEditTarget && activeEditTarget.blockId === block.id && activeEditTarget.itemIndex === idx) {
-                        setActiveEditTarget(null);
-                      }
-                      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+                      handleUpdateBlockData?.(page, block.id, { items: currentItems });
                     }}
                     className="p-1 bg-red-650 hover:bg-red-700 text-white rounded-lg transition"
                   >
@@ -403,15 +370,11 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
         {isEditModeActive && (
           <button
             type="button"
-            onClick={async (e) => {
+            onClick={(e) => {
               e.stopPropagation();
               const list = block.items || [];
               const updatedList = [...list, { title: "새로운 가맹 혜택", desc: "고객님의 비즈니스를 업그레이드 해 드리는 탑정보통신의 신규 혜택 상품입니다." }];
-              
-              const updatedBlocks = page.blocks.map(b => b.id === block.id ? { ...b, items: updatedList } : b);
-              setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-              setActiveEditTarget({ type: "card", pageId: page.id, page, blockId: block.id, block, itemIndex: updatedList.length - 1 });
-              await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+              handleUpdateBlockData?.(page, block.id, { items: updatedList });
             }}
             className="border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50/5 text-blue-600 rounded-3xl p-6 flex flex-col items-center justify-center gap-2 transition min-h-[140px] font-bold text-xs"
           >
