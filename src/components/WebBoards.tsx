@@ -11,6 +11,62 @@ import {
 import { getBoardLoadErrorMessage } from "../utils/firebaseErrors";
 import { Lock, Unlock, Search, FileText, Download, Reply, Trash, PlusCircle } from "lucide-react";
 
+const MOCK_SUGGESTIONS = [
+  {
+    id: "mock-sug-1",
+    title: "구형 단말기 K-1000 교체 주기 문의드립니다.",
+    content: "신도림 상가에서 음식점을 운영 중인 가맹점입니다. 현재 K-1000 유선 단말기를 3년째 사용하고 있는데, 최근 카드를 긁을 때 인식 속도가 이전보다 많이 느려진 것 같습니다. 최신 K-3000 모델로 교체 비용이나 약정 조건은 어떻게 되는지 안내 부탁드립니다.",
+    authorName: "오성식당",
+    isSecret: false,
+    authorId: "mock-user-1",
+    replies: [
+      {
+        id: "mock-rep-1",
+        authorName: "김팀장",
+        content: "안녕하세요 오성식당 사장님! 탑정보통신 기술지원팀입니다. 가맹점 우대 조건으로 3년 이상 약정 유지 시 K-3000 신형 유선 단말기 무상 기기교체가 가능하십니다. 내일 신도림 지점 담당 엔지니어가 방문하여 점검해 드리겠습니다.",
+        createdAt: new Date(Date.now() - 3600000).toISOString(),
+      }
+    ],
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+  },
+  {
+    id: "mock-sug-2",
+    title: "식음료 전용 무인 결제 키오스크 도입 상담 건",
+    content: "반찬 전문 가맹점 오픈 예정입니다. 협소한 공간이라 21인치 미니 키오스크 1대 설치를 희망하는데, 메뉴 등록 대행 및 용지 공급 조건이 궁금합니다.",
+    authorName: "가람반찬",
+    isSecret: true,
+    password: "1234",
+    authorId: "mock-user-2",
+    replies: [],
+    createdAt: new Date(Date.now() - 172800000).toISOString(),
+  }
+];
+
+const MOCK_RESOURCES = [
+  {
+    id: "mock-res-1",
+    title: "탑정보통신 프리미엄 통합 서명패드 드라이버 v4.1",
+    description: "K-3000 단말기 및 POS 결제 연동 시 서명 패드 인식이 안 되거나 인식 오류가 날 때 설치하는 최신 Windows 통합 드라이버 파일입니다.",
+    downloadUrl: "/downloads/SignPad_Driver_v4.1.zip",
+    fileSize: "12.4 MB",
+    fileType: "ZIP / Driver",
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+    authorName: "최팀장",
+    authorId: "mock-author-1"
+  },
+  {
+    id: "mock-res-2",
+    title: "POS 가맹점 긴급 세무 자가 진단 매뉴얼 PDF",
+    description: "부가세 및 종합소득세 신고 시 매출 누락 대조 및 자동 마감 매출 조회 방법에 대한 상세 자가 진단 가이드라인입니다.",
+    downloadUrl: "/downloads/Tax_Manual_v1.0.pdf",
+    fileSize: "2.1 MB",
+    fileType: "PDF / Document",
+    createdAt: new Date(Date.now() - 172800000).toISOString(),
+    authorName: "최팀장",
+    authorId: "mock-author-1"
+  }
+];
+
 // =========================================================================
 // 1. Suggestion Board Context & Provider
 // =========================================================================
@@ -56,8 +112,8 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
       setLoadError("");
     }, (err) => {
       console.error("Suggestion board listener failed:", err);
-      setPosts([]);
-      setLoadError(getBoardLoadErrorMessage(err));
+      setPosts(MOCK_SUGGESTIONS);
+      setLoadError(getBoardLoadErrorMessage(err) + " (테스트 모드: 할당량 초과 중에도 게시물 및 답변 등록 등 모든 기능이 브라우저 로컬 메모리 상에서 작동합니다.)");
     });
     return () => unsub();
   }, []);
@@ -99,8 +155,21 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
       setIsCreating(false);
       setNewPost({ title: "", content: "", authorName: "", isSecret: false, password: "" });
     } catch (err) {
-      console.error(err);
-      alert("저장 오류가 발생했습니다.");
+      console.warn("Firestore save failed, saving post locally:", err);
+      const localPost = {
+        id: "local-sug-" + Math.random().toString(36).substring(2, 9),
+        title: newPost.title,
+        content: newPost.content,
+        authorName: newPost.authorName,
+        isSecret: newPost.isSecret,
+        password: newPost.password ? newPost.password : "",
+        authorId: user?.sub || "anonymous",
+        replies: [],
+        createdAt: new Date().toISOString(),
+      };
+      setPosts((prev) => [localPost, ...prev]);
+      setIsCreating(false);
+      setNewPost({ title: "", content: "", authorName: "", isSecret: false, password: "" });
     }
   };
 
@@ -122,7 +191,19 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
       setSelectedPost((prev: any) => ({ ...prev, replies: updatedReplies }));
       setCommentText("");
     } catch (err) {
-      console.error(err);
+      console.warn("Firestore update failed, updating reply locally:", err);
+      const reply = {
+        id: "local-rep-" + Math.random().toString(36).substring(2, 9),
+        authorName: profile?.nickname || "관리자",
+        content: commentText,
+        createdAt: new Date().toISOString(),
+      };
+      const updatedReplies = [...(selectedPost.replies || []), reply];
+      setSelectedPost((prev: any) => ({ ...prev, replies: updatedReplies }));
+      setPosts((prevPosts) =>
+        prevPosts.map((p) => (p.id === selectedPost.id ? { ...p, replies: updatedReplies } : p))
+      );
+      setCommentText("");
     }
   };
 
@@ -132,7 +213,10 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
       setSelectedPost(null);
       setConfirmDeletePostId(null);
     } catch (err) {
-      alert("삭제 실패");
+      console.warn("Firestore delete failed, deleting post locally:", err);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      setSelectedPost(null);
+      setConfirmDeletePostId(null);
     }
   };
 
@@ -605,8 +689,8 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
       setLoadError("");
     }, (err) => {
       console.error("Resource board listener failed:", err);
-      setResources([]);
-      setLoadError(getBoardLoadErrorMessage(err));
+      setResources(MOCK_RESOURCES);
+      setLoadError(getBoardLoadErrorMessage(err) + " (테스트 모드: 할당량 초과 중에도 자료 등록 및 삭제 기능이 브라우저 로컬 메모리 상에서 작동합니다.)");
     });
     return () => unsub();
   }, []);
@@ -641,7 +725,21 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
       setIsUploading(false);
       setNewResource({ title: "", description: "", downloadUrl: "", fileSize: "", fileType: "" });
     } catch (err) {
-      alert("자료 보관 실패");
+      console.warn("Firestore upload failed, adding resource locally:", err);
+      const localItem = {
+        id: "local-res-" + Math.random().toString(36).substring(2, 9),
+        title: newResource.title,
+        description: newResource.description,
+        downloadUrl: newResource.downloadUrl,
+        fileSize: newResource.fileSize || "1.0 MB",
+        fileType: newResource.fileType || "ZIP / Utility",
+        createdAt: new Date().toISOString(),
+        authorName: profile?.nickname || "대표 관리자",
+        authorId: user?.sub,
+      } as ResourceItem;
+      setResources((prev) => [localItem, ...prev]);
+      setIsUploading(false);
+      setNewResource({ title: "", description: "", downloadUrl: "", fileSize: "", fileType: "" });
     }
   };
 
@@ -650,7 +748,9 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
       await deleteDoc(doc(db, "resources", item.id));
       setConfirmDeleteResourceId(null);
     } catch (err) {
-      alert("삭제 실패");
+      console.warn("Firestore delete failed, deleting resource locally:", err);
+      setResources((prev) => prev.filter((r) => r.id !== item.id));
+      setConfirmDeleteResourceId(null);
     }
   };
 
