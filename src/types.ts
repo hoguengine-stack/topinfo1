@@ -88,6 +88,7 @@ export interface ResourceItem {
 export interface CMSBlock {
   id: string;
   type: "hero" | "features" | "text" | "columns" | "banner" | "image" | "divider" | "custom_board";
+  boardPart?: "header" | "search" | "body";
   title?: string;
   subtitle?: string;
   content?: string;
