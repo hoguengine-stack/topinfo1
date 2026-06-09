@@ -25,6 +25,17 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
   // Product Form States
   const [editingProduct, setEditingProduct] = useState<Partial<Product> | null>(null);
   const [isProductListOpen, setIsProductListOpen] = useState(true);
+  const [deleteConfirmKey, setDeleteConfirmKey] = useState<string | null>(null);
+
+  const confirmDeleteAction = (key: string) => {
+    if (deleteConfirmKey !== key) {
+      setDeleteConfirmKey(key);
+      return false;
+    }
+
+    setDeleteConfirmKey(null);
+    return true;
+  };
 
   useEffect(() => {
     // Subscriber CMS Pages
@@ -107,7 +118,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       alert("기본 표준 시스템 페이지는 웹사이트 기둥이므로 삭제할 수 없습니다. 대신 상단 메뉴 라벨을 편집하시거나 비활성화해 사용하실 수 있습니다.");
       return;
     }
-    if (!confirm("이 페이지를 웹사이트에서 정말로 삭제하시겠습니까?")) return;
+    if (!confirmDeleteAction(`page:${pageId}`)) return;
     try {
       await deleteDoc(doc(db, "cms_pages", pageId));
       setSelectedPage(pages.find(p => p.id !== pageId) || null);
@@ -181,7 +192,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       alert("페이지에는 최소 하나의 블록이 포함되어 있어야 합니다.");
       return;
     }
-    if (!confirm("선택하신 블록 구역 데이터를 파기하시겠습니까? (영구 삭제 및 실시간 자동 반영됨)")) return;
+    if (!confirmDeleteAction(`block:${page.id}:${blockId}`)) return;
     const updatedBlocks = page.blocks.filter(b => b.id !== blockId);
     try {
       await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
@@ -218,7 +229,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
   };
 
   const handleDeleteProduct = async (productId: string) => {
-    if (!confirm("이 제품을 가맹 라인업에서 삭제합니까?")) return;
+    if (!confirmDeleteAction(`product:${productId}`)) return;
     try {
       await deleteDoc(doc(db, "products", productId));
     } catch (err) {
@@ -244,6 +255,24 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       });
     } catch (err) {
       alert("변경 실패");
+    }
+  };
+
+  const handleDeleteConsultation = async (id: string) => {
+    if (!confirmDeleteAction(`consult:${id}`)) return;
+    try {
+      await deleteDoc(doc(db, "consultations", id));
+    } catch (err) {
+      alert("삭제 실패");
+    }
+  };
+
+  const handleDeletePaperRequest = async (id: string) => {
+    if (!confirmDeleteAction(`paper:${id}`)) return;
+    try {
+      await deleteDoc(doc(db, "paper_requests", id));
+    } catch (err) {
+      alert("삭제 실패");
     }
   };
 
@@ -365,9 +394,14 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); handleDeletePage(p.id); }}
-                          className="text-slate-400 hover:text-red-500 p-1"
+                          className={`shrink-0 rounded-lg p-1 text-[10px] font-bold transition ${
+                            deleteConfirmKey === `page:${p.id}`
+                              ? "bg-red-50 text-red-600 px-2"
+                              : "text-slate-400 hover:text-red-500"
+                          }`}
+                          title={deleteConfirmKey === `page:${p.id}` ? "한 번 더 눌러 삭제 확정" : "페이지 삭제"}
                         >
-                          <Trash className="w-3.5 h-3.5" />
+                          {deleteConfirmKey === `page:${p.id}` ? "삭제확정" : <Trash className="w-3.5 h-3.5" />}
                         </button>
                       )}
                     </div>
@@ -431,10 +465,14 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                             <button
                               type="button"
                               onClick={() => handleDeleteBlock(selectedPage, block.id)}
-                              className="w-8 h-8 bg-red-100/60 hover:bg-red-500 hover:text-white text-red-600 rounded-full flex items-center justify-center transition border border-red-200/50 shadow-sm active:scale-95 duration-100"
-                              title="이 구역 파기"
+                              className={`h-8 rounded-full flex items-center justify-center transition border shadow-sm active:scale-95 duration-100 text-[10px] font-bold ${
+                                deleteConfirmKey === `block:${selectedPage.id}:${block.id}`
+                                  ? "bg-red-600 text-white border-red-500 px-3"
+                                  : "w-8 bg-red-100/60 hover:bg-red-500 hover:text-white text-red-600 border-red-200/50"
+                              }`}
+                              title={deleteConfirmKey === `block:${selectedPage.id}:${block.id}` ? "한 번 더 눌러 삭제 확정" : "이 구역 파기"}
                             >
-                              <Trash className="w-3.5 h-3.5" />
+                              {deleteConfirmKey === `block:${selectedPage.id}:${block.id}` ? "삭제확정" : <Trash className="w-3.5 h-3.5" />}
                             </button>
                           </div>
 
@@ -817,9 +855,13 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                         <button
                           type="button"
                           onClick={() => handleDeleteProduct(p.id)}
-                          className="text-slate-400 hover:text-red-500 font-bold text-xs p-2 active:scale-95 transition"
+                          className={`font-bold text-xs px-3 py-2 rounded-xl active:scale-95 transition ${
+                            deleteConfirmKey === `product:${p.id}`
+                              ? "bg-red-600 text-white"
+                              : "text-slate-400 hover:text-red-500"
+                          }`}
                         >
-                          폐기
+                          {deleteConfirmKey === `product:${p.id}` ? "폐기 확정" : "폐기"}
                         </button>
                       </div>
                     </div>
@@ -885,10 +927,15 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                               {c.status === "완료" ? "대기로 변경" : "완료처리"}
                             </button>
                             <button
-                              onClick={async () => { if(confirm("영구 삭제합니까?")) await deleteDoc(doc(db, "consultations", c.id)); }}
-                              className="text-red-500 hover:text-red-700 text-xs font-bold p-1"
+                              type="button"
+                              onClick={() => handleDeleteConsultation(c.id)}
+                              className={`text-xs font-bold px-2 py-1 rounded-lg transition ${
+                                deleteConfirmKey === `consult:${c.id}`
+                                  ? "bg-red-600 text-white"
+                                  : "text-red-500 hover:text-red-700"
+                              }`}
                             >
-                              삭제
+                              {deleteConfirmKey === `consult:${c.id}` ? "삭제 확정" : "삭제"}
                             </button>
                           </td>
                         </tr>
@@ -956,10 +1003,15 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                               {p.status === "완료" ? "접수 대기로" : "로젠출고완료"}
                             </button>
                             <button
-                              onClick={async () => { if(confirm("신청 내역을 파기합니까?")) await deleteDoc(doc(db, "paper_requests", p.id)); }}
-                              className="text-red-550 hover:text-red-700 text-xs font-bold p-1"
+                              type="button"
+                              onClick={() => handleDeletePaperRequest(p.id)}
+                              className={`text-xs font-bold px-2 py-1 rounded-lg transition ${
+                                deleteConfirmKey === `paper:${p.id}`
+                                  ? "bg-red-600 text-white"
+                                  : "text-red-550 hover:text-red-700"
+                              }`}
                             >
-                              삭제
+                              {deleteConfirmKey === `paper:${p.id}` ? "삭제 확정" : "삭제"}
                             </button>
                           </td>
                         </tr>

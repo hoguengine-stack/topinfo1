@@ -11,7 +11,8 @@
     "clean": "rm -rf dist",
     "test:cms": "tsx --test src/utils/cmsSettings.test.ts",
     "test:requests": "tsx --test src/utils/requestTasks.test.ts",
-    "test": "npm run test:cms && npm run test:requests",
+    "test:resources": "tsx --test src/utils/resourceFiles.test.ts",
+    "test": "npm run test:cms && npm run test:requests && npm run test:resources",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

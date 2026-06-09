@@ -471,6 +471,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
 }) => {
   const [activeDropdown, setActiveDropdown] = useState<"bg" | "align" | "size" | "color" | "keyboard" | "layout" | null>(null);
   const [isPopoverOpen, setIsPopoverOpen] = useState(true);
+  const [deleteConfirmBlockId, setDeleteConfirmBlockId] = useState<string | null>(null);
 
   // Automatically reopen the popover with correct settings whenever the selected element changes
   useEffect(() => {
@@ -2684,17 +2685,26 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
         {block && (
           <button
             onClick={async () => {
-              if (window.confirm("정말로 이 구역 블록을 완전히 삭제하시겠습니까?")) {
-                const updatedBlocks = activeEditTarget.page.blocks.filter(b => b.id !== block.id);
-                setPages(pages.map(p => p.id === activeEditTarget.page.id ? { ...p, blocks: updatedBlocks } : p));
-                setActiveEditTarget(null);
-                await updateDoc(doc(db, "cms_pages", activeEditTarget.page.id), { blocks: updatedBlocks });
+              if (deleteConfirmBlockId !== block.id) {
+                setDeleteConfirmBlockId(block.id);
+                return;
               }
+
+              const updatedBlocks = activeEditTarget.page.blocks.filter(b => b.id !== block.id);
+              setPages(pages.map(p => p.id === activeEditTarget.page.id ? { ...p, blocks: updatedBlocks } : p));
+              setDeleteConfirmBlockId(null);
+              setActiveEditTarget(null);
+              await updateDoc(doc(db, "cms_pages", activeEditTarget.page.id), { blocks: updatedBlocks });
             }}
-            className="p-1.5 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500 rounded-lg transition shrink-0"
-            title="이 블록 삭제"
+            className={`p-1.5 rounded-lg transition shrink-0 text-[10px] font-bold flex items-center gap-1 ${
+              deleteConfirmBlockId === block.id
+                ? "bg-red-600 text-white px-2.5"
+                : "bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500"
+            }`}
+            title={deleteConfirmBlockId === block.id ? "한 번 더 눌러 삭제 확정" : "이 블록 삭제"}
           >
             <Trash2 className="w-4 h-4" />
+            {deleteConfirmBlockId === block.id && <span>삭제확정</span>}
           </button>
         )}
 

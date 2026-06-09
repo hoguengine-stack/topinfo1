@@ -90,6 +90,7 @@ export interface ResourceItem {
   downloadUrl?: string;
   fileSize?: string;
   fileType?: string;
+  storagePath?: string;
   createdAt: string;
   authorName: string;
 }

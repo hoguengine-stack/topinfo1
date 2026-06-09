@@ -250,6 +250,7 @@ service cloud.firestore {
                'downloadUrl',
                'fileSize',
                'fileType',
+               'storagePath',
                'createdAt',
                'authorName'
              ]) &&
@@ -260,7 +261,8 @@ service cloud.firestore {
              validStringLength('authorName', 1, 100) &&
              validOptionalString('downloadUrl', 2000) &&
              validOptionalString('fileSize', 50) &&
-             validOptionalString('fileType', 100);
+             validOptionalString('fileType', 100) &&
+             validOptionalString('storagePath', 1000);
     }
 
     // ===============================================================

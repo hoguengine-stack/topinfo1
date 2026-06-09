@@ -1,43 +1,11 @@
 import React, { useState, useEffect, createContext, useContext } from "react";
 import { db, storage } from "../firebase";
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { useAuth } from "../contexts/AuthContext";
+import { ResourceItem } from "../types";
+import { buildResourceFileDraft, buildResourceRecord, getSafeStorageFileName } from "../utils/resourceFiles";
 import { Lock, Unlock, Search, FileText, Download, Reply, Trash, CheckCircle2, FileDown, PlusCircle } from "lucide-react";
-
-function formatFileSize(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / Math.pow(1024, index);
-  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-}
-
-function getFileBaseName(fileName: string) {
-  const dotIndex = fileName.lastIndexOf(".");
-  return dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
-}
-
-function getResourceFileType(file: File) {
-  const lowerName = file.name.toLowerCase();
-  const extension = lowerName.includes(".") ? lowerName.split(".").pop() || "file" : "file";
-  const upperExtension = extension.toUpperCase();
-
-  if (["zip", "rar", "7z"].includes(extension)) return `${upperExtension} / Driver`;
-  if (["exe", "msi"].includes(extension)) return `${upperExtension} / Installer`;
-  if (["pdf"].includes(extension)) return "PDF / Manual";
-  if (["doc", "docx", "hwp", "hwpx"].includes(extension)) return `${upperExtension} / Document`;
-  if (["jpg", "jpeg", "png", "webp"].includes(extension)) return `${upperExtension} / Image`;
-  return `${upperExtension} / File`;
-}
-
-function getSafeStorageFileName(fileName: string) {
-  return fileName
-    .trim()
-    .replace(/[\\/#?%*:|"<>]/g, "_")
-    .replace(/\s+/g, "_")
-    .slice(0, 120) || "resource-file";
-}
 
 // =========================================================================
 // 1. Suggestion Board Context & Provider
@@ -581,7 +549,7 @@ export function useResourceBoard() {
 
 export function ResourceBoardProvider({ children }: { children: React.ReactNode }) {
   const { user, profile, isAdmin } = useAuth();
-  const [resources, setResources] = useState<any[]>([]);
+  const [resources, setResources] = useState<ResourceItem[]>([]);
   const [search, setSearch] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [newResource, setNewResource] = useState({
@@ -590,6 +558,7 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
     downloadUrl: "",
     fileSize: "",
     fileType: "",
+    storagePath: "",
   });
 
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -608,16 +577,15 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
       return;
     }
 
-    const fileSize = formatFileSize(file.size);
-    const fileType = getResourceFileType(file);
-    const title = getFileBaseName(file.name);
+    const fileDraft = buildResourceFileDraft(file);
 
     setNewResource((prev) => ({
       ...prev,
       downloadUrl: "",
-      fileSize,
-      fileType,
-      title: prev.title || title,
+      fileSize: fileDraft.fileSize,
+      fileType: fileDraft.fileType,
+      storagePath: "",
+      title: prev.title || fileDraft.title,
     }));
 
     setUploadingFile(true);
@@ -649,8 +617,9 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
             setNewResource((prev) => ({
               ...prev,
               downloadUrl,
-              fileSize,
-              fileType,
+              fileSize: fileDraft.fileSize,
+              fileType: fileDraft.fileType,
+              storagePath: uploadTask.snapshot.ref.fullPath,
             }));
             setUploadProgress(100);
           } catch (err: any) {
@@ -675,9 +644,9 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "resources"), (snap) => {
-      const items: any[] = [];
+      const items: ResourceItem[] = [];
       snap.forEach((d) => {
-        items.push({ id: d.id, ...d.data() });
+        items.push({ id: d.id, ...d.data() } as ResourceItem);
       });
       items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setResources(items);
@@ -701,17 +670,15 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
     }
 
     try {
-      await addDoc(collection(db, "resources"), {
-        title: newResource.title,
-        description: newResource.description,
-        downloadUrl: newResource.downloadUrl || "#",
-        fileSize: newResource.fileSize,
-        fileType: newResource.fileType,
-        createdAt: new Date().toISOString(),
-        authorName: profile?.nickname || "대표 관리자",
-      });
+      await addDoc(
+        collection(db, "resources"),
+        buildResourceRecord(newResource, {
+          createdAt: new Date().toISOString(),
+          authorName: profile?.nickname || "대표 관리자",
+        })
+      );
       setIsUploading(false);
-      setNewResource({ title: "", description: "", downloadUrl: "", fileSize: "", fileType: "" });
+      setNewResource({ title: "", description: "", downloadUrl: "", fileSize: "", fileType: "", storagePath: "" });
       setUploadedFileName("");
       setUploadProgress(0);
     } catch (err) {
@@ -719,9 +686,16 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
     }
   };
 
-  const handleDeleteResource = async (id: string) => {
+  const handleDeleteResource = async (item: ResourceItem) => {
     try {
-      await deleteDoc(doc(db, "resources", id));
+      await deleteDoc(doc(db, "resources", item.id));
+      if (item.storagePath) {
+        try {
+          await deleteObject(ref(storage, item.storagePath));
+        } catch (storageErr) {
+          console.warn("Resource storage file deletion failed:", storageErr);
+        }
+      }
       setConfirmDeleteResourceId(null);
     } catch (err) {
       alert("삭제 실패");
@@ -960,7 +934,7 @@ export function ResourceBoardBody() {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteResource(item.id);
+                        handleDeleteResource(item);
                       }}
                       className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition"
                     >

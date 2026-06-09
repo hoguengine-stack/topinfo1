@@ -33,6 +33,7 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
   });
   const [taskMemo, setTaskMemo] = useState<string>("");
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ type: "consult" | "paper"; id: string } | null>(null);
 
   useEffect(() => {
     // Subscribe to Consultations
@@ -89,9 +90,14 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
   };
 
   const handleDeleteConsult = async (id: string) => {
-    if (!confirm("상담 신청 내역을 영구히 삭제합니까?")) return;
+    if (deleteConfirmTarget?.type !== "consult" || deleteConfirmTarget.id !== id) {
+      setDeleteConfirmTarget({ type: "consult", id });
+      return;
+    }
+
     try {
       await deleteDoc(doc(db, "consultations", id));
+      setDeleteConfirmTarget(null);
     } catch (err) {
       console.error(err);
       alert("삭제 실패");
@@ -99,9 +105,14 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
   };
 
   const handleDeletePaper = async (id: string) => {
-    if (!confirm("용지 요청 내역을 영구히 삭제합니까?")) return;
+    if (deleteConfirmTarget?.type !== "paper" || deleteConfirmTarget.id !== id) {
+      setDeleteConfirmTarget({ type: "paper", id });
+      return;
+    }
+
     try {
       await deleteDoc(doc(db, "paper_requests", id));
+      setDeleteConfirmTarget(null);
     } catch (err) {
       console.error(err);
       alert("삭제 실패");
@@ -330,6 +341,7 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
           ) : (
             filteredConsults.map((c) => {
               const isOpen = taskFormOpenForId === c.id;
+              const isDeleteArmed = deleteConfirmTarget?.type === "consult" && deleteConfirmTarget.id === c.id;
               return (
                 <div key={c.id} className={`bg-[#181818] border rounded-2xl p-5 transition hover:border-white/10 ${c.status === "완료" ? "border-white/5 opacity-55" : "border-emerald-500/20"}`}>
                   <div className="flex flex-col md:flex-row justify-between md:items-center gap-3 border-b border-white/5 pb-3 mb-4">
@@ -347,7 +359,7 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 self-end md:self-auto uppercase tracking-wider font-bold">
+                    <div className="flex flex-wrap items-center justify-end gap-1.5 self-end md:self-auto uppercase tracking-wider font-bold">
                       <span className="text-[10px] text-slate-450 font-mono mr-2">{new Date(c.createdAt).toLocaleString()}</span>
                       
                       <button
@@ -379,12 +391,27 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
                         </button>
                       )}
 
+                      {isDeleteArmed && (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmTarget(null)}
+                          className="text-slate-400 hover:text-white text-xs font-bold px-2.5 py-1 rounded-md border border-white/10 hover:bg-white/5 transition"
+                        >
+                          취소
+                        </button>
+                      )}
                       <button
+                        type="button"
                         onClick={() => handleDeleteConsult(c.id)}
-                        className="text-slate-400 hover:text-red-400 p-1 rounded-lg hover:bg-white/5 transition"
-                        title="내역 파기"
+                        className={`text-xs font-bold px-2.5 py-1 rounded-md transition border flex items-center gap-1 ${
+                          isDeleteArmed
+                            ? "bg-red-600 text-white border-red-500 hover:bg-red-700"
+                            : "text-slate-400 border-transparent hover:text-red-400 hover:bg-white/5"
+                        }`}
+                        title={isDeleteArmed ? "한 번 더 눌러 삭제 확정" : "내역 파기"}
                       >
-                        <Trash2 className="w-3.8 h-3.8" />
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {isDeleteArmed && "삭제 확정"}
                       </button>
                     </div>
                   </div>
@@ -521,6 +548,7 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
           ) : (
             filteredPapers.map((p) => {
               const isOpen = taskFormOpenForId === p.id;
+              const isDeleteArmed = deleteConfirmTarget?.type === "paper" && deleteConfirmTarget.id === p.id;
               return (
                 <div key={p.id} className={`bg-[#181818] border rounded-2xl p-5 transition hover:border-white/10 ${p.status === "완료" ? "border-white/5 opacity-55" : "border-blue-500/20"}`}>
                   <div className="flex flex-col md:flex-row justify-between md:items-center gap-3 border-b border-white/5 pb-3 mb-4">
@@ -538,7 +566,7 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 self-end md:self-auto uppercase tracking-wider font-bold">
+                    <div className="flex flex-wrap items-center justify-end gap-1.5 self-end md:self-auto uppercase tracking-wider font-bold">
                       <span className="text-[10px] text-slate-405 font-mono mr-2">{new Date(p.createdAt).toLocaleString()}</span>
                       
                       <button
@@ -575,12 +603,27 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
                         </button>
                       )}
 
+                      {isDeleteArmed && (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmTarget(null)}
+                          className="text-slate-400 hover:text-white text-xs font-bold px-2.5 py-1 rounded-md border border-white/10 hover:bg-white/5 transition"
+                        >
+                          취소
+                        </button>
+                      )}
                       <button
+                        type="button"
                         onClick={() => handleDeletePaper(p.id)}
-                        className="text-slate-400 hover:text-red-400 p-1 rounded-lg hover:bg-white/5 transition"
-                        title="내역 파기"
+                        className={`text-xs font-bold px-2.5 py-1 rounded-md transition border flex items-center gap-1 ${
+                          isDeleteArmed
+                            ? "bg-red-600 text-white border-red-500 hover:bg-red-700"
+                            : "text-slate-400 border-transparent hover:text-red-400 hover:bg-white/5"
+                        }`}
+                        title={isDeleteArmed ? "한 번 더 눌러 삭제 확정" : "내역 파기"}
                       >
-                        <Trash2 className="w-3.8 h-3.8" />
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {isDeleteArmed && "삭제 확정"}
                       </button>
                     </div>
                   </div>
