@@ -4,7 +4,12 @@ import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc } from "fireb
 import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { useAuth } from "../contexts/AuthContext";
 import { ResourceItem } from "../types";
-import { buildResourceFileDraft, buildResourceRecord, getSafeStorageFileName } from "../utils/resourceFiles";
+import {
+  buildResourceFileDraft,
+  buildResourceRecord,
+  canDeleteResourceDocumentAfterStorageDeleteError,
+  getSafeStorageFileName,
+} from "../utils/resourceFiles";
 import { Lock, Unlock, Search, FileText, Download, Reply, Trash, CheckCircle2, FileDown, PlusCircle } from "lucide-react";
 
 // =========================================================================
@@ -675,6 +680,7 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
         buildResourceRecord(newResource, {
           createdAt: new Date().toISOString(),
           authorName: profile?.nickname || "대표 관리자",
+          authorId: user?.sub,
         })
       );
       setIsUploading(false);
@@ -688,14 +694,18 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
 
   const handleDeleteResource = async (item: ResourceItem) => {
     try {
-      await deleteDoc(doc(db, "resources", item.id));
       if (item.storagePath) {
         try {
           await deleteObject(ref(storage, item.storagePath));
         } catch (storageErr) {
           console.warn("Resource storage file deletion failed:", storageErr);
+          if (!canDeleteResourceDocumentAfterStorageDeleteError(storageErr)) {
+            alert("파일 원본 삭제 권한 또는 네트워크 문제로 자료 문서를 보존했습니다. 파일 업로드 계정으로 다시 시도해 주세요.");
+            return;
+          }
         }
       }
+      await deleteDoc(doc(db, "resources", item.id));
       setConfirmDeleteResourceId(null);
     } catch (err) {
       alert("삭제 실패");

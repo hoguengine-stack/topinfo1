@@ -252,7 +252,8 @@ service cloud.firestore {
                'fileType',
                'storagePath',
                'createdAt',
-               'authorName'
+               'authorName',
+               'authorId'
              ]) &&
              hasRequiredFields(['title', 'description', 'createdAt', 'authorName']) &&
              validStringLength('title', 1, 200) &&
@@ -262,7 +263,8 @@ service cloud.firestore {
              validOptionalString('downloadUrl', 2000) &&
              validOptionalString('fileSize', 50) &&
              validOptionalString('fileType', 100) &&
-             validOptionalString('storagePath', 1000);
+             validOptionalString('storagePath', 1000) &&
+             validOptionalString('authorId', 128);
     }
 
     // ===============================================================

@@ -21,6 +21,7 @@ export interface ResourceRecord {
   fileType: string;
   createdAt: string;
   authorName: string;
+  authorId?: string;
   storagePath?: string;
 }
 
@@ -74,6 +75,7 @@ export function buildResourceRecord(
   options: {
     authorName: string;
     createdAt: string;
+    authorId?: string;
   }
 ): ResourceRecord {
   const record: ResourceRecord = {
@@ -86,10 +88,23 @@ export function buildResourceRecord(
     authorName: options.authorName,
   };
 
+  if (options.authorId) {
+    record.authorId = options.authorId;
+  }
+
   if (!draft.storagePath) {
     return record;
   }
 
   record.storagePath = draft.storagePath;
   return record;
+}
+
+export function canDeleteResourceDocumentAfterStorageDeleteError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "storage/object-not-found"
+  );
 }

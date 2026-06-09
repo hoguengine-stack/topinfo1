@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildResourceFileDraft,
   buildResourceRecord,
+  canDeleteResourceDocumentAfterStorageDeleteError,
   formatResourceFileSize,
   getSafeStorageFileName,
 } from "./resourceFiles";
@@ -34,6 +35,7 @@ test("buildResourceRecord keeps the storage path so deleting a resource can remo
     },
     {
       authorName: "대표 관리자",
+      authorId: "admin-uid",
       createdAt: "2026-06-09T10:00:00.000Z",
     }
   );
@@ -41,10 +43,17 @@ test("buildResourceRecord keeps the storage path so deleting a resource can remo
   assert.equal(record.storagePath, "resources/admin/1710000000000_driver.zip");
   assert.equal(record.downloadUrl, "https://storage.example/driver.zip");
   assert.equal(record.authorName, "대표 관리자");
+  assert.equal(record.authorId, "admin-uid");
 });
 
 test("formatResourceFileSize and getSafeStorageFileName produce stable upload metadata", () => {
   assert.equal(formatResourceFileSize(0), "0 B");
   assert.equal(formatResourceFileSize(1024 * 1024 * 2.5), "2.5 MB");
   assert.equal(getSafeStorageFileName(" driver setup:2026?.exe "), "driver_setup_2026_.exe");
+});
+
+test("resource documents are removed after storage delete only when the storage object is already absent", () => {
+  assert.equal(canDeleteResourceDocumentAfterStorageDeleteError({ code: "storage/object-not-found" }), true);
+  assert.equal(canDeleteResourceDocumentAfterStorageDeleteError({ code: "storage/unauthorized" }), false);
+  assert.equal(canDeleteResourceDocumentAfterStorageDeleteError(new Error("network timeout")), false);
 });

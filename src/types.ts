@@ -93,6 +93,7 @@ export interface ResourceItem {
   storagePath?: string;
   createdAt: string;
   authorName: string;
+  authorId?: string;
 }
 
 export interface CMSBlock {
