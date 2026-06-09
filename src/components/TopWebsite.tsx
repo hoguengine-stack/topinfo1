@@ -415,6 +415,9 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         console.error("Initialization state check failed: ", err);
         setProducts(items);
       }
+    }, (err) => {
+      console.error("Products listener failed. Rendering without product data:", err);
+      setProducts([]);
     });
 
     // Navigation settings listener
@@ -429,6 +432,9 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       } else {
         setNavigationSettings(mergeNavigationSettings(snap.data() as NavigationSettings));
       }
+    }, (err) => {
+      console.error("Navigation settings listener failed. Using defaults:", err);
+      setNavigationSettings(DEFAULT_NAVIGATION_SETTINGS);
     });
 
     // Footer info settings listener
@@ -451,6 +457,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
           });
         }
       }
+    }, (err) => {
+      console.error("Footer settings listener failed. Keeping current footer info:", err);
     });
 
     return () => {

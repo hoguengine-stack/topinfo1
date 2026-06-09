@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from "r
 import { auth, db, googleProvider } from "../firebase";
 import { signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, User as FirebaseUser } from "firebase/auth";
 import { deleteDoc, deleteField, doc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
+import { getAccessCodeFailureMessage, isFirestoreQuotaError } from "../utils/firebaseErrors";
 
 interface User {
   sub: string;
@@ -47,6 +48,7 @@ export interface VerifyResult {
   locked?: boolean;
   lockoutUntil?: number | null;
   attemptsLeft?: number;
+  errorMessage?: string;
 }
 
 interface AuthContextType {
@@ -238,7 +240,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const saveLockoutState = async (newState: LockoutState) => {
     setLockoutState(newState);
     if (user) {
-      await updateDoc(doc(db, "users", user.sub), { lockoutState: newState });
+      try {
+        await updateDoc(doc(db, "users", user.sub), { lockoutState: newState });
+      } catch (err) {
+        console.warn("Lockout state sync failed:", err);
+      }
     }
   };
 
@@ -341,6 +347,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: true };
       } catch (err) {
         console.warn("Verification write failed (likely invalid access code):", err);
+
+        if (isFirestoreQuotaError(err)) {
+          return {
+            success: false,
+            attemptsLeft: Math.max(0, 5 - lockoutState.failedAttempts),
+            errorMessage: getAccessCodeFailureMessage(err),
+          };
+        }
 
         let newAttempts = lockoutState.failedAttempts + 1;
         let newTier = lockoutState.lockoutTier;

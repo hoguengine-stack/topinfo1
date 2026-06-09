@@ -8,6 +8,7 @@ import {
   buildStaticDownloadDraft,
   StaticDownloadManifestItem,
 } from "../utils/resourceFiles";
+import { getBoardLoadErrorMessage } from "../utils/firebaseErrors";
 import { Lock, Unlock, Search, FileText, Download, Reply, Trash, PlusCircle } from "lucide-react";
 
 // =========================================================================
@@ -32,6 +33,7 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
   const [selectedPost, setSelectedPost] = useState<any | null>(null);
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockError, setUnlockError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [commentText, setCommentText] = useState("");
   const [confirmDeletePostId, setConfirmDeletePostId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -51,6 +53,11 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
       });
       items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setPosts(items);
+      setLoadError("");
+    }, (err) => {
+      console.error("Suggestion board listener failed:", err);
+      setPosts([]);
+      setLoadError(getBoardLoadErrorMessage(err));
     });
     return () => unsub();
   }, []);
@@ -169,6 +176,7 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
       setConfirmDeletePostId,
       isCreating,
       setIsCreating,
+      loadError,
       newPost,
       setNewPost,
       handleCreatePost,
@@ -245,6 +253,7 @@ export function SuggestionBoardBody() {
     setConfirmDeletePostId,
     isCreating,
     setIsCreating,
+    loadError,
     newPost,
     setNewPost,
     handleCreatePost,
@@ -256,6 +265,12 @@ export function SuggestionBoardBody() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4 w-full">
+      {loadError ? (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          {loadError}
+        </div>
+      ) : null}
+
       {isCreating ? (
         <form onSubmit={handleCreatePost} className="bg-white border border-slate-200/80 p-6 md:p-8 rounded-3xl shadow-sm mb-10 space-y-5">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
@@ -555,6 +570,7 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
   const [resources, setResources] = useState<ResourceItem[]>([]);
   const [downloadManifest, setDownloadManifest] = useState<StaticDownloadManifestItem[]>([]);
   const [search, setSearch] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [newResource, setNewResource] = useState({
     title: "",
@@ -586,6 +602,11 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
       });
       items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setResources(items);
+      setLoadError("");
+    }, (err) => {
+      console.error("Resource board listener failed:", err);
+      setResources([]);
+      setLoadError(getBoardLoadErrorMessage(err));
     });
     return () => unsub();
   }, []);
@@ -643,6 +664,7 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
       profile,
       isAdmin,
       resources,
+      loadError,
       search,
       setSearch,
       isUploading,
@@ -719,6 +741,7 @@ export function ResourceBoardBody() {
     handleDownloadPathChange,
     handleUpload,
     handleDeleteResource,
+    loadError,
     filtered,
   } = useResourceBoard();
 
@@ -726,6 +749,12 @@ export function ResourceBoardBody() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4 w-full">
+      {loadError ? (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          {loadError}
+        </div>
+      ) : null}
+
       {isUploading ? (
         <form onSubmit={handleUpload} className="bg-white border border-slate-200/80 p-6 md:p-8 rounded-3xl shadow-sm mb-10 space-y-5">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">

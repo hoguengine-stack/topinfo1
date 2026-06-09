@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { getAccessCodeFailureMessage } from "../utils/firebaseErrors";
 import { LogIn, ShieldCheck, UserCircle, Camera, Check } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -10,6 +11,7 @@ export function AuthScreens({ onComplete }: { onComplete: () => void }) {
   const [jobTitle, setJobTitle] = useState(jobTitles[0] || "현장 관리자");
   const [profilePic, setProfilePic] = useState("");
   const [error, setError] = useState("");
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
   const [lockoutRemaining, setLockoutRemaining] = useState<number>(0);
 
   React.useEffect(() => {
@@ -106,20 +108,32 @@ export function AuthScreens({ onComplete }: { onComplete: () => void }) {
             ) : null}
             <button
               onClick={async () => {
-                if (isLocked) return;
-                const result = await verifyAccessCode(code);
-                if (!result.success) {
-                  if (result.locked) {
-                    setError(""); // Will be handled by isLocked
-                  } else {
-                    setError(`잘못된 코드입니다. (남은 시도: ${result.attemptsLeft}회)`);
+                if (isLocked || isVerifyingCode) return;
+                setIsVerifyingCode(true);
+                setError("");
+
+                try {
+                  const result = await verifyAccessCode(code);
+                  if (!result.success) {
+                    if (result.errorMessage) {
+                      setError(result.errorMessage);
+                    } else if (result.locked) {
+                      setError(""); // Will be handled by isLocked
+                    } else {
+                      setError(`잘못된 코드입니다. (남은 시도: ${result.attemptsLeft ?? 0}회)`);
+                    }
                   }
+                } catch (err) {
+                  console.error("Access code verification failed:", err);
+                  setError(getAccessCodeFailureMessage(err));
+                } finally {
+                  setIsVerifyingCode(false);
                 }
               }}
-              disabled={isLocked || !code}
-              className={`w-full ${isLocked ? 'bg-gray-600' : 'bg-emerald-500'} text-white font-bold py-4 rounded-2xl active:scale-95 transition-transform`}
+              disabled={isLocked || !code || isVerifyingCode}
+              className={`w-full ${isLocked || isVerifyingCode ? 'bg-gray-600' : 'bg-emerald-500'} text-white font-bold py-4 rounded-2xl active:scale-95 transition-transform`}
             >
-              확인
+              {isVerifyingCode ? "확인 중..." : "확인"}
             </button>
           </div>
         </motion.div>
