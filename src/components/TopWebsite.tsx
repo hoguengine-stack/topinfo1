@@ -220,6 +220,54 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       const items: CMSPage[] = [];
       snap.forEach(d => items.push({ id: d.id, ...d.data() } as CMSPage));
 
+      // Sanitize and auto-correct extreme positions (e.g. lost dragged blocks)
+      // Also ensure custom function pages have the 'custom_board' block in their blocks list
+      const sanitizedItems = items.map(page => {
+        let pageModified = false;
+
+        // 1. Sanitize standard positions
+        const pageBlocks = Array.isArray(page.blocks) ? page.blocks : [];
+        const sanitizedBlocks = pageBlocks.map(block => {
+          let blockModified = false;
+          let nextBlock = { ...block };
+
+          if (typeof block.posY === 'number' && block.posY < -150) {
+            nextBlock.posY = 0;
+            blockModified = true;
+          }
+          if (typeof block.posX === 'number' && (block.posX < -600 || block.posX > 600)) {
+            nextBlock.posX = 0;
+            blockModified = true;
+          }
+
+          if (blockModified) {
+            pageModified = true;
+          }
+          return nextBlock;
+        });
+
+        // 2. Ensure custom function pages have the custom_board block
+        const customSlugs = ["products", "request_consult", "request_paper", "board_suggestions", "board_resources"];
+        let nextBlocks = [...sanitizedBlocks];
+        if (customSlugs.includes(page.slug) && !nextBlocks.some(b => b.type === "custom_board")) {
+          nextBlocks.push({
+            id: "custom_board_" + page.id,
+            type: "custom_board"
+          });
+          pageModified = true;
+        }
+
+        if (pageModified) {
+          if (isEmployee) {
+            updateDoc(doc(db, "cms_pages", page.id), { blocks: nextBlocks }).catch(err => {
+              console.warn(`[CMS AutoCorrect] Quiet sync failed for page ${page.id}:`, err);
+            });
+          }
+          return { ...page, blocks: nextBlocks };
+        }
+        return page;
+      });
+
       // Automate restoration of any missing standard pages to ensure of all menus are present
       const defaultPages: CMSPage[] = [
         {
@@ -279,6 +327,10 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
               align: "center",
               buttonText: "기기 무상 임대 상담",
               buttonLink: "request_consult"
+            },
+            {
+              id: "custom_board_products",
+              type: "custom_board"
             }
           ]
         },
@@ -297,6 +349,10 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
               badge: "실시간 열린 마음 피드백",
               subtitle: "탑정보통신은 대표님들의 사소한 소리도 귀 기울여 듣고 현장에 반영하도록 최선을 다합니다.",
               align: "center"
+            },
+            {
+              id: "custom_board_board_suggestions",
+              type: "custom_board"
             }
           ]
         },
@@ -315,6 +371,10 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
               badge: "자가 장애 조치 및 사용성 다운로드",
               subtitle: "용지 교체부터 애플페이 오류 처리, 정산 전산 대조 가이드 매뉴얼을 무료 다운로드하세요.",
               align: "center"
+            },
+            {
+              id: "custom_board_board_resources",
+              type: "custom_board"
             }
           ]
         },
@@ -333,6 +393,10 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
               badge: "가장 빠른 24시간 가입 지원",
               subtitle: "카드 결제 단말기, 슬림 포스(POS), 세로형 키오스크까지 한번에 연동 상담받으세요.",
               align: "center"
+            },
+            {
+              id: "custom_board_request_consult",
+              type: "custom_board"
             }
           ]
         },
@@ -351,26 +415,30 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
               badge: "초고속 로젠택배 특별 지원",
               subtitle: "탑정보통신 단말 거래처 패밀리라면 평생 전액 영수증 인쇄 롤 용지를 전 기종 무상 지원해 드립니다.",
               align: "center"
+            },
+            {
+              id: "custom_board_request_paper",
+              type: "custom_board"
             }
           ]
         }
       ];
 
       let hasMissing = false;
-      const existingIds = items.map(p => p.id);
+      const existingIds = sanitizedItems.map(p => p.id);
 
       for (const dp of defaultPages) {
         if (!existingIds.includes(dp.id)) {
           hasMissing = true;
-          if (user) {
+          if (isEmployee) {
             console.log(`[CMS Init] Missing standard page '${dp.id}', auto-populating...`);
             await setDoc(doc(db, "cms_pages", dp.id), dp);
           }
         }
       }
 
-      if (!hasMissing || !user) {
-        setPages(items);
+      if (!hasMissing || !isEmployee) {
+        setPages(sanitizedItems);
       }
     });
 
@@ -384,7 +452,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         const initSnap = await getDoc(initDocRef);
 
         if (items.length === 0 && !initSnap.exists()) {
-          if (!user) {
+          if (!isEmployee) {
             setProducts(items);
             return;
           }
@@ -429,7 +497,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
           await setDoc(initDocRef, { initialized: true });
         } else {
           setProducts(items);
-          if (!initSnap.exists() && items.length > 0) {
+          if (isEmployee && !initSnap.exists() && items.length > 0) {
             await setDoc(initDocRef, { initialized: true });
           }
         }
@@ -443,7 +511,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     const unsub_nav = onSnapshot(doc(db, "settings", "navigation"), (snap) => {
       if (!snap.exists()) {
         setNavigationSettings(DEFAULT_NAVIGATION_SETTINGS);
-        if (user) {
+        if (isEmployee) {
           setDoc(doc(db, "settings", "navigation"), DEFAULT_NAVIGATION_SETTINGS).catch((err) => {
             console.warn("Navigation settings initialization failed", err);
           });
@@ -467,7 +535,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
           copyright: "Copyright © 2026 TOP Information & Communication. All Rights Reserved."
         };
         setFooterInfo(defaultFooter);
-        if (user) {
+        if (isEmployee) {
           setDoc(doc(db, "settings", "footer"), defaultFooter).catch((err) => {
             console.warn("Footer settings initialization failed", err);
           });
@@ -481,7 +549,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       unsub_nav();
       unsub_footer();
     };
-  }, [user]);
+  }, [user, isEmployee]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
