@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { db } from "../firebase";
+import { db, storage } from "../firebase";
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, arrayUnion } from "firebase/firestore";
+import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { useAuth } from "../contexts/AuthContext";
 import { Lock, Unlock, Eye, EyeOff, Search, FileText, Download, Reply, Trash, CheckCircle2, AlertTriangle, ChevronRight, FileDown, PlusCircle } from "lucide-react";
 
@@ -430,9 +431,6 @@ export function ResourceBoard() {
     setUploadedFileName(file.name);
 
     try {
-      const { ref, uploadBytesResumable, getDownloadURL } = await import("firebase/storage");
-      const { storage } = await import("../firebase");
-
       const storageRef = ref(storage, `resources/${Date.now()}_${file.name}`);
       const uploadTask = uploadBytesResumable(storageRef, file);
 
