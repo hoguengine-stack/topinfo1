@@ -1,6 +1,7 @@
 import React from "react";
 import { doc, setDoc } from "firebase/firestore";
 import { Settings } from "lucide-react";
+import { useToast } from "../contexts/ToastContext";
 
 export interface WebsiteFooterProps {
   isEditModeActive: boolean;
@@ -28,6 +29,8 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
   setCurrentUrl,
   handleLinkClick,
 }) => {
+  const { showToast } = useToast();
+
   const renderLogo = () => (
     <div
       className="flex items-center gap-3 cursor-pointer select-none"
@@ -141,8 +144,8 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
           )}
         </div>
         <div className="flex flex-wrap gap-4 text-xs font-semibold text-slate-400">
-          <button onClick={() => alert("탑정보통신 이용약관")} className="hover:text-slate-600">이용약관</button>
-          <button onClick={() => alert("개인정보처리방침")} className="hover:text-slate-600">개인정보처리방침</button>
+          <button onClick={() => showToast("이용약관: 본 서비스의 이용에 관한 세부 조항 및 약관입니다. 상세 문의는 고객지원실로 부탁드립니다.", "info")} className="hover:text-slate-600">이용약관</button>
+          <button onClick={() => showToast("개인정보처리방침: 탑정보통신은 관련 법령에 따라 이용자의 개인정보를 소중히 보호하고 관리합니다.", "info")} className="hover:text-slate-600">개인정보처리방침</button>
           {isEmployee && (
             <button onClick={() => setCurrentUrl("admin")} className="font-bold text-blue-600 flex items-center gap-1">
               <Settings className="w-3.5 h-3.5" /> 임직원 제어포털

@@ -3,6 +3,7 @@ import { Task, Priority, Status, TaskType } from "../types";
 import { X, Trash2, Clock, Check, Calendar, Share2, Paperclip, Image as ImageIcon } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
 
 const ScrollUnit = ({ label, value, onScroll, onDoubleClick }: { label: string; value: number | string; onScroll: (delta: number) => void; onDoubleClick?: () => void }) => {
   const [startY, setStartY] = useState<number | null>(null);
@@ -205,6 +206,7 @@ export function TaskModal({
   assignees,
 }: TaskModalProps) {
   const { profile, taskTypes, taskTypeColors, priorities, isAdmin } = useAuth();
+  const { showToast } = useToast();
   const displayTaskTypes = React.useMemo(() => taskTypes.length > 0 ? taskTypes : ["설치"], [taskTypes]);
   const isSiljang = isAdmin;
   
@@ -264,7 +266,7 @@ export function TaskModal({
 
   const handleCompleteTask = () => {
     if (!formData.title) {
-      alert("작업 이름을 입력해주세요.");
+      showToast("작업 이름을 입력해주세요.", "warning");
       titleRef.current?.focus();
       return;
     }
@@ -279,7 +281,7 @@ export function TaskModal({
 
   const handleSaveAndShare = () => {
     if (!formData.title) {
-      alert("작업 이름을 입력해주세요.");
+      showToast("작업 이름을 입력해주세요.", "warning");
       titleRef.current?.focus();
       return;
     }
@@ -359,10 +361,10 @@ export function TaskModal({
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
-      alert("작업 내용이 복사되었습니다. 카카오톡에 붙여넣어 공유해 주세요!\n\n" + text);
+      showToast("작업 내용이 복사되었습니다. 카카오톡에 붙여넣어 공유해 주세요!", "success");
     }).catch(err => {
       console.error("Clipboard failed:", err);
-      alert("복사에 실패했습니다. 직접 복사해 주세요:\n\n" + text);
+      showToast("복사에 실패했습니다.", "error");
     });
   };
 

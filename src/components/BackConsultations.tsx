@@ -7,7 +7,7 @@ import {
   Phone, User, Landmark, HelpCircle, Check, Trash2, 
   Sparkles, ClipboardList, Send, Calendar, CheckSquare, Plus, ArrowRight, CornerDownRight, Tag, AlertTriangle
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { useToast } from "../contexts/ToastContext";
 
 interface BackConsultationsProps {
   assignees: string[];
@@ -22,19 +22,7 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
   // Filters
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "complete">("pending");
 
-  // Toast notification state
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-  };
-
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
+  const { showToast } = useToast();
 
   // Task integration form states
   const [taskFormOpenForId, setTaskFormOpenForId] = useState<string | null>(null);
@@ -757,28 +745,6 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
           )
         )}
       </div>
-
-      {/* Modern Toast Alert overlay */}
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="fixed bottom-6 right-6 z-[250]"
-          >
-            <div className={`flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border text-sm font-bold bg-[#1e1e1e]/90 backdrop-blur-md ${
-              toast.type === "success" 
-                ? "border-emerald-500/30 text-emerald-400" 
-                : "border-red-500/30 text-red-450"
-            }`}>
-              <span className={`w-2 h-2 rounded-full ${toast.type === "success" ? "bg-emerald-400" : "bg-red-400"} animate-pulse`} />
-              {toast.message}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { db } from "../firebase";
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
 import { Trash, Edit, Plus, Check, FileCode, ShoppingBag, Eye, EyeOff, LayoutTemplate, Layers, ClipboardList, Info, HelpCircle } from "lucide-react";
 import { CMSPage, CMSBlock, Product, Consultation, PaperRequest } from "../types";
+import { useToast } from "../contexts/ToastContext";
 
 interface WebAdminProps {
   onOpenTasks: () => void;
@@ -10,6 +11,7 @@ interface WebAdminProps {
 
 export function WebAdmin({ onOpenTasks }: WebAdminProps) {
   const [activeSubTab, setActiveSubTab] = useState<"cms" | "products" | "consultations" | "papers">("cms");
+  const { showToast } = useToast();
   
   // States
   const [pages, setPages] = useState<CMSPage[]>([]);
@@ -109,13 +111,13 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       setNewPageName("");
       setNewPageSlug("");
     } catch (err) {
-      alert("데이터 저장 오류");
+      showToast("데이터 저장 중 오류가 발생했습니다.", "error");
     }
   };
 
   const handleDeletePage = async (pageId: string) => {
     if (["home", "products", "board_suggestions", "board_resources", "request_consult", "request_paper"].includes(pageId)) {
-      alert("기본 표준 시스템 페이지는 웹사이트 기둥이므로 삭제할 수 없습니다. 대신 상단 메뉴 라벨을 편집하시거나 비활성화해 사용하실 수 있습니다.");
+      showToast("기본 표준 시스템 페이지는 웹사이트 기둥이므로 삭제할 수 없습니다. 대신 상단 메뉴 라벨을 편집하시거나 비활성화해 사용하실 수 있습니다.", "warning");
       return;
     }
     if (!confirmDeleteAction(`page:${pageId}`)) return;
@@ -123,7 +125,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       await deleteDoc(doc(db, "cms_pages", pageId));
       setSelectedPage(pages.find(p => p.id !== pageId) || null);
     } catch (err) {
-      alert("페이지 파기 실패");
+      showToast("페이지 삭제에 실패했습니다.", "error");
     }
   };
 
@@ -173,7 +175,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
       setSelectedPage({ ...page, blocks: updatedBlocks });
     } catch (err) {
-      alert("수정 실패");
+      showToast("블록 추가에 실패했습니다.", "error");
     }
   };
 
@@ -183,13 +185,13 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
       setSelectedPage({ ...page, blocks: updatedBlocks });
     } catch (err) {
-      alert("셀 업데이트 실패");
+      showToast("블록 업데이트에 실패했습니다.", "error");
     }
   };
 
   const handleDeleteBlock = async (page: CMSPage, blockId: string) => {
     if (page.blocks.length <= 1) {
-      alert("페이지에는 최소 하나의 블록이 포함되어 있어야 합니다.");
+      showToast("페이지에는 최소 하나의 블록이 포함되어 있어야 합니다.", "warning");
       return;
     }
     if (!confirmDeleteAction(`block:${page.id}:${blockId}`)) return;
@@ -198,7 +200,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
       setSelectedPage({ ...page, blocks: updatedBlocks });
     } catch (err) {
-      alert("삭제 실패");
+      showToast("블록 삭제에 실패했습니다.", "error");
     }
   };
 
@@ -224,7 +226,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       setEditingProduct(null);
       setIsProductListOpen(true);
     } catch (err) {
-      alert("제품 보관 실패");
+      showToast("제품 정보 저장에 실패했습니다.", "error");
     }
   };
 
@@ -233,7 +235,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
     try {
       await deleteDoc(doc(db, "products", productId));
     } catch (err) {
-      alert("삭제 불가");
+      showToast("제품 삭제에 실패했습니다.", "error");
     }
   };
 
@@ -244,7 +246,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
         status: current === "완료" ? "대기" : "완료",
       });
     } catch (err) {
-      alert("변경 실패");
+      showToast("상태 변경에 실패했습니다.", "error");
     }
   };
 
@@ -254,7 +256,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
         status: current === "완료" ? "대기" : "완료",
       });
     } catch (err) {
-      alert("변경 실패");
+      showToast("상태 변경에 실패했습니다.", "error");
     }
   };
 
@@ -263,7 +265,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
     try {
       await deleteDoc(doc(db, "consultations", id));
     } catch (err) {
-      alert("삭제 실패");
+      showToast("상담 신청 삭제에 실패했습니다.", "error");
     }
   };
 
@@ -272,7 +274,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
     try {
       await deleteDoc(doc(db, "paper_requests", id));
     } catch (err) {
-      alert("삭제 실패");
+      showToast("용지 신청 삭제에 실패했습니다.", "error");
     }
   };
 

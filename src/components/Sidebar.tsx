@@ -2,6 +2,7 @@ import React from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { X, LogOut, Settings, User, Camera, ChevronRight, Mail, Shield, Bell, Globe, Lock, Eye, ListFilter, Plus, Trash, RefreshCw, GripVertical } from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "motion/react";
+import { useToast } from "../contexts/ToastContext";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     taskTypes, taskTypeColors, priorities, jobTitles, notificationSettings, updateTaskTypes, updateTaskTypeColors, updatePriorities, updateJobTitles, updateNotificationSettings, forceRefreshAllPCs,
     isAdmin
   } = useAuth();
+  const { showToast } = useToast();
   const [activeSubModal, setActiveSubModal] = React.useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = React.useState(() => {
     return document.documentElement.classList.contains("dark");
@@ -57,9 +59,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       try {
         await updateAccessCode(tempAccessCode);
         setTempAccessCode("");
-        alert("접속 코드가 성공적으로 변경되었습니다.");
+        showToast("접속 코드가 성공적으로 변경되었습니다.", "success");
       } catch {
-        alert("접속 코드 변경에 실패했습니다. 관리자 권한을 확인해 주세요.");
+        showToast("접속 코드 변경에 실패했습니다. 관리자 권한을 확인해 주세요.", "error");
         return;
       }
     } else if (activeSubModal === "categories") {
@@ -71,7 +73,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       updateTaskTypeColors(newColors);
       updatePriorities(editPriorities.map(t => t.value));
       updateJobTitles(editJobTitles.map(t => t.value));
-      alert("항목 설정이 저장되었습니다.");
+      showToast("항목 설정이 저장되었습니다.", "success");
     }
     setActiveSubModal(null);
   };
@@ -80,15 +82,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     if (!("Notification" in window)) {
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       if (isIOS) {
-        alert("iOS에서는 Safari 브라우저로 접속한 뒤 '홈 화면에 추가'를 해야만 알림을 지원합니다.\n\nSafari에서 이 사이트를 열고 [공유] 버튼 > [홈 화면에 추가]를 진행해주세요.");
+        showToast("iOS에서는 Safari 브라우저로 접속한 뒤 '홈 화면에 추가'를 해야만 알림을 지원합니다. [공유] > [홈 화면에 추가]를 진행해주세요.", "warning");
       } else {
-        alert("이 브라우저는 알림 기능을 지원하지 않습니다.");
+        showToast("이 브라우저는 알림 기능을 지원하지 않습니다.", "error");
       }
       return;
     }
 
     if (Notification.permission === "denied") {
-      alert("알림 권한이 거부되어 있습니다. 브라우저 설정에서 알림 권한을 허용해 주세요.");
+      showToast("알림 권한이 거부되어 있습니다. 브라우저 설정에서 알림 권한을 허용해 주세요.", "warning");
       return;
     }
 

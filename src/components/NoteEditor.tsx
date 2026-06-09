@@ -113,6 +113,8 @@ export function NoteEditor({ docPath, title, placeholder = "내용을 입력하�
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkInputUrl, setLinkInputUrl] = useState("");
 
   const editor = useEditor({
     extensions: [
@@ -256,8 +258,9 @@ export function NoteEditor({ docPath, title, placeholder = "내용을 입력하�
           />
           <button
             onClick={() => {
-              const url = window.prompt("URL을 입력하세요:");
-              if (url) editor.chain().focus().setLink({ href: url }).run();
+              const previousUrl = editor.getAttributes('link').href || "";
+              setLinkInputUrl(previousUrl);
+              setShowLinkInput(true);
             }}
             className={`p-1.5 rounded hover:bg-white/10 ${editor.isActive("link") ? "bg-emerald-500/20 text-emerald-500" : "text-gray-400"}`}
           >
@@ -388,6 +391,47 @@ export function NoteEditor({ docPath, title, placeholder = "내용을 입력하�
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {showLinkInput && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-[#252525] border border-white/10 rounded-2xl p-5 w-full max-w-xs shadow-2xl space-y-4">
+            <h4 className="text-sm font-bold text-white">링크 URL 입력</h4>
+            <input
+              type="text"
+              placeholder="https://example.com"
+              value={linkInputUrl}
+              onChange={(e) => setLinkInputUrl(e.target.value)}
+              className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowLinkInput(false);
+                  setLinkInputUrl("");
+                }}
+                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-400 text-xs font-semibold rounded-lg"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  if (linkInputUrl.trim()) {
+                    editor.chain().focus().setLink({ href: linkInputUrl.trim() }).run();
+                  } else {
+                    editor.chain().focus().unsetLink().run();
+                  }
+                  setShowLinkInput(false);
+                  setLinkInputUrl("");
+                }}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg"
+              >
+                확인
+              </button>
+            </div>
           </div>
         </div>
       )}

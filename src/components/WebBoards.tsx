@@ -10,6 +10,7 @@ import {
 } from "../utils/resourceFiles";
 import { getBoardLoadErrorMessage } from "../utils/firebaseErrors";
 import { Lock, Unlock, Search, FileText, Download, Reply, Trash, PlusCircle } from "lucide-react";
+import { useToast } from "../contexts/ToastContext";
 
 const MOCK_SUGGESTIONS = [
   {
@@ -83,6 +84,7 @@ export function useSuggestionBoard() {
 
 export function SuggestionBoardProvider({ children }: { children: React.ReactNode }) {
   const { user, profile, isAdmin } = useAuth();
+  const { showToast } = useToast();
   const [posts, setPosts] = useState<any[]>([]);
   const [filteredPosts, setFilteredPosts] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -133,11 +135,11 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPost.title || !newPost.content || !newPost.authorName) {
-      alert("모든 빈칸을 채워주세요.");
+      showToast("모든 빈칸을 채워주세요.", "warning");
       return;
     }
     if (newPost.isSecret && !newPost.password) {
-      alert("비밀 게시글의 수정/조회를 위한 비밀번호를 입력해주세요.");
+      showToast("비밀 게시글의 수정/조회를 위한 비밀번호를 입력해주세요.", "warning");
       return;
     }
 
@@ -651,6 +653,7 @@ export function useResourceBoard() {
 
 export function ResourceBoardProvider({ children }: { children: React.ReactNode }) {
   const { user, profile, isAdmin } = useAuth();
+  const { showToast } = useToast();
   const [resources, setResources] = useState<ResourceItem[]>([]);
   const [downloadManifest, setDownloadManifest] = useState<StaticDownloadManifestItem[]>([]);
   const [search, setSearch] = useState("");
@@ -705,11 +708,11 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newResource.title || !newResource.description) {
-      alert("제목과 설명 정보를 입력하세요.");
+      showToast("제목과 설명 정보를 입력하세요.", "warning");
       return;
     }
     if (!newResource.downloadUrl) {
-      alert("GitHub 다운로드 경로 또는 외부 다운로드 링크를 입력해 주세요.");
+      showToast("GitHub 다운로드 경로 또는 외부 다운로드 링크를 입력해 주세요.", "warning");
       return;
     }
 
