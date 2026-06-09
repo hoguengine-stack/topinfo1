@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Header } from "./components/Header";
-import { TaskTable } from "./components/TaskTable";
-import { CalendarView } from "./components/CalendarView";
-import { TaskModal } from "./components/TaskModal";
 import { useTasks } from "./hooks/useTasks";
 import { Task } from "./types";
-import { AuthScreens } from "./components/AuthScreens";
 import { useAuth } from "./contexts/AuthContext";
-import { Sidebar } from "./components/Sidebar";
 import { TodayTasksNotification } from "./components/TodayTasksNotification";
 import { NotificationManager } from "./components/NotificationManager";
-import { NoteEditor } from "./components/NoteEditor";
 import { TopWebsite } from "./components/TopWebsite";
-import { BackConsultations } from "./components/BackConsultations";
+
+const TaskTable = React.lazy(() => import("./components/TaskTable").then(m => ({ default: m.TaskTable })));
+const CalendarView = React.lazy(() => import("./components/CalendarView").then(m => ({ default: m.CalendarView })));
+const TaskModal = React.lazy(() => import("./components/TaskModal").then(m => ({ default: m.TaskModal })));
+const AuthScreens = React.lazy(() => import("./components/AuthScreens").then(m => ({ default: m.AuthScreens })));
+const Sidebar = React.lazy(() => import("./components/Sidebar").then(m => ({ default: m.Sidebar })));
+const NoteEditor = React.lazy(() => import("./components/NoteEditor").then(m => ({ default: m.NoteEditor })));
+const BackConsultations = React.lazy(() => import("./components/BackConsultations").then(m => ({ default: m.BackConsultations })));
 
 export default function App() {
   const { user, profile, isAccessCodeVerified, isLoading } = useAuth();
@@ -114,83 +115,90 @@ export default function App() {
       </div>
 
       {/* 2. Internal Dashboard / Back Screen */}
-      {viewMode === "internal" && (!user || !isAccessCodeVerified || !profile) ? (
-        <div className="min-h-screen bg-[#121212] text-white flex flex-col justify-center items-center py-10 px-4">
-          <AuthScreens onComplete={() => {}} />
-          <button
-            onClick={() => setViewMode("website")}
-            className="mt-6 text-sm font-bold text-emerald-400 hover:text-emerald-300 underline"
-          >
-            ← 회사 홈페이지로 돌아가기
-          </button>
+      <React.Suspense fallback={
+        <div className="min-h-screen bg-[#121212] flex flex-col items-center justify-center text-emerald-400 font-mono text-sm gap-3">
+          <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          관제 시스템 로딩 중...
         </div>
-      ) : (
-        <div className={viewMode === "internal" ? "block" : "hidden"}>
-          {user && profile && isAccessCodeVerified && (
-            <>
-              <Header
-                view={view}
-                setView={setView}
-                filterAssignee={filterAssignee}
-                setFilterAssignee={setFilterAssignee}
-                assignees={allAssignees}
-                onMenuClick={() => setIsSidebarOpen(true)}
-                onBackToWebsite={() => setViewMode("website")}
-              />
-
-              <main className="w-full">
-                {view === "list" ? (
-                  <div key="list-view-container">
-                    <CalendarView tasks={tasks} onEdit={handleEdit} />
-                    <div className="h-4 bg-app-bg" />
-                    <TaskTable
-                      tasks={filteredTasks}
-                      onEdit={handleEdit}
-                      onAdd={handleAdd}
-                      onToggleComplete={handleToggleComplete}
-                    />
-                  </div>
-                ) : view === "calendar" ? (
-                  <div key="calendar-view-container">
-                    <CalendarView tasks={filteredTasks} onEdit={handleEdit} defaultExpanded={true} />
-                  </div>
-                ) : view === "personalNote" ? (
-                  <div key="personal-note-container" className="h-[calc(100vh-120px)]">
-                    {user && <NoteEditor docPath={`personal_notes/${user.sub}`} title="개인 노트" />}
-                  </div>
-                ) : view === "sharedNote" ? (
-                  <div key="shared-note-container" className="h-[calc(100vh-120px)]">
-                    <NoteEditor 
-                      docPath="notes/shared_note" 
-                      title="공유 노트" 
-                      isShared={true} 
-                      completedTasks={tasks.filter(t => t.status === "완료").sort((a,b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())}
-                      onToggleComplete={handleToggleComplete}
-                    />
-                  </div>
-                ) : (
-                  <BackConsultations assignees={allAssignees} currentUserId={user?.sub || ""} />
-                )}
-              </main>
-
-              <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-              <TodayTasksNotification tasks={tasks} />
-              <NotificationManager tasks={tasks} />
-
-              {isModalOpen && (
-                <TaskModal
-                  isOpen={isModalOpen}
-                  onClose={() => setIsModalOpen(false)}
-                  onSave={handleSave}
-                  onDelete={deleteTask}
-                  task={editingTask}
+      }>
+        {viewMode === "internal" && (!user || !isAccessCodeVerified || !profile) ? (
+          <div className="min-h-screen bg-[#121212] text-white flex flex-col justify-center items-center py-10 px-4">
+            <AuthScreens onComplete={() => {}} />
+            <button
+              onClick={() => setViewMode("website")}
+              className="mt-6 text-sm font-bold text-emerald-400 hover:text-emerald-300 underline"
+            >
+              ← 회사 홈페이지로 돌아가기
+            </button>
+          </div>
+        ) : (
+          <div className={viewMode === "internal" ? "block" : "hidden"}>
+            {user && profile && isAccessCodeVerified && (
+              <>
+                <Header
+                  view={view}
+                  setView={setView}
+                  filterAssignee={filterAssignee}
+                  setFilterAssignee={setFilterAssignee}
                   assignees={allAssignees}
+                  onMenuClick={() => setIsSidebarOpen(true)}
+                  onBackToWebsite={() => setViewMode("website")}
                 />
-              )}
-            </>
-          )}
-        </div>
-      )}
+
+                <main className="w-full">
+                  {view === "list" ? (
+                    <div key="list-view-container">
+                      <CalendarView tasks={tasks} onEdit={handleEdit} />
+                      <div className="h-4 bg-app-bg" />
+                      <TaskTable
+                        tasks={filteredTasks}
+                        onEdit={handleEdit}
+                        onAdd={handleAdd}
+                        onToggleComplete={handleToggleComplete}
+                      />
+                    </div>
+                  ) : view === "calendar" ? (
+                    <div key="calendar-view-container">
+                      <CalendarView tasks={filteredTasks} onEdit={handleEdit} defaultExpanded={true} />
+                    </div>
+                  ) : view === "personalNote" ? (
+                    <div key="personal-note-container" className="h-[calc(100vh-120px)]">
+                      {user && <NoteEditor docPath={`personal_notes/${user.sub}`} title="개인 노트" />}
+                    </div>
+                  ) : view === "sharedNote" ? (
+                    <div key="shared-note-container" className="h-[calc(100vh-120px)]">
+                      <NoteEditor
+                        docPath="notes/shared_note"
+                        title="공유 노트"
+                        isShared={true}
+                        completedTasks={tasks.filter(t => t.status === "완료").sort((a,b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())}
+                        onToggleComplete={handleToggleComplete}
+                      />
+                    </div>
+                  ) : (
+                    <BackConsultations assignees={allAssignees} currentUserId={user?.sub || ""} />
+                  )}
+                </main>
+
+                <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+                <TodayTasksNotification tasks={tasks} />
+                <NotificationManager tasks={tasks} />
+
+                {isModalOpen && (
+                  <TaskModal
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    onSave={handleSave}
+                    onDelete={deleteTask}
+                    task={editingTask}
+                    assignees={allAssignees}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </React.Suspense>
     </div>
   );
 }

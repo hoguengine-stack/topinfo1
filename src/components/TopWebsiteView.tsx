@@ -5,11 +5,11 @@ import { motion, AnimatePresence } from "motion/react";
 // Import modular sub-components
 import { WebsiteHeader } from "./WebsiteHeader";
 import { WebsiteFooter } from "./WebsiteFooter";
-import { WebsiteHUDPanel } from "./WebsiteHUDPanel";
 import { WebsiteLoginModal } from "./WebsiteLoginModal";
 import { WebsiteBlockRenderer } from "./WebsiteBlockRenderer";
 
-import { WebAdmin } from "./WebAdmin";
+const WebsiteHUDPanel = React.lazy(() => import("./WebsiteHUDPanel").then(m => ({ default: m.WebsiteHUDPanel })));
+const WebAdmin = React.lazy(() => import("./WebAdmin").then(m => ({ default: m.WebAdmin })));
 
 export interface TopWebsiteViewProps {
   currentUrl: string;
@@ -208,7 +208,9 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
               exit={{ opacity: 0, y: -15 }}
               transition={{ duration: 0.25 }}
             >
-              <WebAdmin onOpenTasks={onEnterInternalDashboard} />
+              <React.Suspense fallback={<div className="text-center py-20 text-slate-400">관리자 화면을 로드하는 중...</div>}>
+                <WebAdmin onOpenTasks={onEnterInternalDashboard} />
+              </React.Suspense>
             </motion.div>
           )}
 
@@ -244,21 +246,25 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
       />
 
       {/* 5. Dynamic Inspector HUD Sidebar */}
-      <WebsiteHUDPanel
-        isEditModeActive={isEditModeActive}
-        activeEditTarget={activeEditTarget}
-        setActiveEditTarget={setActiveEditTarget}
-        pages={pages}
-        setPages={setPages}
-        handleHUDChange={handleHUDChange}
-        handleHUDCardChange={handleHUDCardChange}
-        handleHUDDeleteCardItem={handleHUDDeleteCardItem}
-        handleNavTitleChange={handleNavTitleChange}
-        handleNavVisibilityChange={handleNavVisibilityChange}
-        navigationSettings={navigationSettings}
-        db={db}
-        isCmsSaving={isCmsSaving}
-      />
+      {isEditModeActive && (
+        <React.Suspense fallback={null}>
+          <WebsiteHUDPanel
+            isEditModeActive={isEditModeActive}
+            activeEditTarget={activeEditTarget}
+            setActiveEditTarget={setActiveEditTarget}
+            pages={pages}
+            setPages={setPages}
+            handleHUDChange={handleHUDChange}
+            handleHUDCardChange={handleHUDCardChange}
+            handleHUDDeleteCardItem={handleHUDDeleteCardItem}
+            handleNavTitleChange={handleNavTitleChange}
+            handleNavVisibilityChange={handleNavVisibilityChange}
+            navigationSettings={navigationSettings}
+            db={db}
+            isCmsSaving={isCmsSaving}
+          />
+        </React.Suspense>
+      )}
 
     </div>
   );

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
-import { collection, onSnapshot, doc, setDoc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, updateDoc, getDoc, getDocs } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
 import { CMSPage, Product, CMSBlock, NavigationSettings } from "../types";
 import { DEFAULT_NAVIGATION_SETTINGS, createDefaultCMSPages, mergeNavigationSettings, restoreStandardCMSPages } from "../utils/cmsSettings";
@@ -216,10 +216,9 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
 
   // Check and initialize default pages/products if Firestore is blank
   useEffect(() => {
-    // CMS Pages snapshot listener
-    const unsubPages = onSnapshot(collection(db, "cms_pages"), async (snap) => {
+    const handleCmsPagesData = async (snap: any) => {
       const items: CMSPage[] = [];
-      snap.forEach(d => items.push({ id: d.id, ...d.data() } as CMSPage));
+      snap.forEach((d: any) => items.push({ id: d.id, ...d.data() } as CMSPage));
 
       const renderableItems = restoreStandardCMSPages(items, defaultCmsPages);
 
@@ -347,15 +346,11 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       }
 
       setPages(sanitizedItems);
-    }, (err) => {
-      console.error("CMS pages listener failed. Rendering local default pages instead:", err);
-      setPages(defaultCmsPages);
-    });
+    };
 
-    // Products snapshot listener
-    const unsubProducts = onSnapshot(collection(db, "products"), async (snap) => {
+    const handleProductsData = async (snap: any) => {
       const items: Product[] = [];
-      snap.forEach(d => items.push({ id: d.id, ...d.data() } as Product));
+      snap.forEach((d: any) => items.push({ id: d.id, ...d.data() } as Product));
 
       const initDocRef = doc(db, "settings", "initialization_state");
       try {
@@ -415,13 +410,9 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         console.error("Initialization state check failed: ", err);
         setProducts(items);
       }
-    }, (err) => {
-      console.error("Products listener failed. Rendering without product data:", err);
-      setProducts([]);
-    });
+    };
 
-    // Navigation settings listener
-    const unsub_nav = onSnapshot(doc(db, "settings", "navigation"), (snap) => {
+    const handleNavData = (snap: any) => {
       if (!snap.exists()) {
         setNavigationSettings(DEFAULT_NAVIGATION_SETTINGS);
         if (isEmployee) {
@@ -432,13 +423,9 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       } else {
         setNavigationSettings(mergeNavigationSettings(snap.data() as NavigationSettings));
       }
-    }, (err) => {
-      console.error("Navigation settings listener failed. Using defaults:", err);
-      setNavigationSettings(DEFAULT_NAVIGATION_SETTINGS);
-    });
+    };
 
-    // Footer info settings listener
-    const unsub_footer = onSnapshot(doc(db, "settings", "footer"), (snap) => {
+    const handleFooterData = (snap: any) => {
       if (snap.exists()) {
         setFooterInfo(snap.data() as any);
       } else {
@@ -457,15 +444,68 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
           });
         }
       }
-    }, (err) => {
-      console.error("Footer settings listener failed. Keeping current footer info:", err);
-    });
+    };
+
+    let unsubPages: (() => void) | null = null;
+    let unsubProducts: (() => void) | null = null;
+    let unsub_nav: (() => void) | null = null;
+    let unsub_footer: (() => void) | null = null;
+
+    if (isEmployee) {
+      console.log("[CMS] Subscribing to real-time Firestore updates for employee...");
+      unsubPages = onSnapshot(collection(db, "cms_pages"), handleCmsPagesData, (err) => {
+        console.error("CMS pages listener failed. Rendering local default pages instead:", err);
+        setPages(defaultCmsPages);
+      });
+
+      unsubProducts = onSnapshot(collection(db, "products"), handleProductsData, (err) => {
+        console.error("Products listener failed. Rendering without product data:", err);
+        setProducts([]);
+      });
+
+      unsub_nav = onSnapshot(doc(db, "settings", "navigation"), handleNavData, (err) => {
+        console.error("Navigation settings listener failed. Using defaults:", err);
+        setNavigationSettings(DEFAULT_NAVIGATION_SETTINGS);
+      });
+
+      unsub_footer = onSnapshot(doc(db, "settings", "footer"), handleFooterData, (err) => {
+        console.error("Footer settings listener failed. Keeping current footer info:", err);
+      });
+    } else {
+      console.log("[CMS] Performing one-time Firestore get fetches for public visitor...");
+      getDocs(collection(db, "cms_pages"))
+        .then(handleCmsPagesData)
+        .catch((err) => {
+          console.error("One-time CMS pages fetch failed. Rendering local default pages instead:", err);
+          setPages(defaultCmsPages);
+        });
+
+      getDocs(collection(db, "products"))
+        .then(handleProductsData)
+        .catch((err) => {
+          console.error("One-time Products fetch failed. Rendering without product data:", err);
+          setProducts([]);
+        });
+
+      getDoc(doc(db, "settings", "navigation"))
+        .then(handleNavData)
+        .catch((err) => {
+          console.error("One-time Navigation settings fetch failed. Using defaults:", err);
+          setNavigationSettings(DEFAULT_NAVIGATION_SETTINGS);
+        });
+
+      getDoc(doc(db, "settings", "footer"))
+        .then(handleFooterData)
+        .catch((err) => {
+          console.error("One-time Footer settings fetch failed. Keeping current footer info:", err);
+        });
+    }
 
     return () => {
-      unsubPages();
-      unsubProducts();
-      unsub_nav();
-      unsub_footer();
+      if (unsubPages) unsubPages();
+      if (unsubProducts) unsubProducts();
+      if (unsub_nav) unsub_nav();
+      if (unsub_footer) unsub_footer();
     };
   }, [user, isEmployee, defaultCmsPages]);
 

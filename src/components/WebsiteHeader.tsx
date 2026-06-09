@@ -229,7 +229,10 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                   {isEmployee && <span className="bg-blue-50 text-blue-600 text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0">임직원</span>}
                 </div>
                 <button
-                  onClick={logout}
+                  onClick={() => {
+                    logout();
+                    handleLinkClick("home");
+                  }}
                   className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition shrink-0"
                   title="로그아웃"
                 >
@@ -289,7 +292,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
             {user ? (
               <div className="flex items-center justify-between px-4">
                 <span className="text-xs font-bold text-slate-700">{profile?.nickname} 대표님</span>
-                <button onClick={() => { setMobileMenuOpen(false); logout(); }} className="text-red-500 font-bold text-xs">로그아웃</button>
+                <button onClick={() => { setMobileMenuOpen(false); logout(); handleLinkClick("home"); }} className="text-red-500 font-bold text-xs">로그아웃</button>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2 w-full">
