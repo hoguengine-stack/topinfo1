@@ -4,7 +4,7 @@ import { collection, onSnapshot, doc, setDoc, updateDoc, getDoc, getDocs } from 
 import { useAuth } from "../contexts/AuthContext";
 import { CMSPage, Product, CMSBlock, NavigationSettings } from "../types";
 import { DEFAULT_NAVIGATION_SETTINGS, createDefaultCMSPages, mergeNavigationSettings, restoreStandardCMSPages } from "../utils/cmsSettings";
-import { DEFAULT_FOOTER_INFO, mergeFooterInfo } from "../utils/footerSettings";
+import { DEFAULT_FOOTER_INFO, footerInfoNeedsMigration, mergeFooterInfo } from "../utils/footerSettings";
 import { TopWebsiteView } from "./TopWebsiteView";
 import { Trash2, Sparkles } from "lucide-react";
 
@@ -421,7 +421,14 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
 
     const handleFooterData = (snap: any) => {
       if (snap.exists()) {
-        setFooterInfo(mergeFooterInfo(snap.data()));
+        const storedFooter = snap.data();
+        const mergedFooter = mergeFooterInfo(storedFooter);
+        setFooterInfo(mergedFooter);
+        if (isEmployee && footerInfoNeedsMigration(storedFooter)) {
+          setDoc(doc(db, "settings", "footer"), mergedFooter).catch((err) => {
+            console.warn("Footer company info migration failed", err);
+          });
+        }
       } else {
         setFooterInfo(DEFAULT_FOOTER_INFO);
         if (isEmployee) {

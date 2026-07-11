@@ -57,7 +57,7 @@ export function ConsultationForm() {
         <h3 className="text-2xl font-bold text-slate-900 mb-3">상담 신청 완료</h3>
         <p className="text-slate-500 leading-relaxed mb-6">
           탑정보통신에 문의해주셔서 감사합니다.<br />
-          신속하게 내용을 파악하여 담당 엔지니어가 24시간 이내에 전화를 드리겠습니다.
+          접수 내용을 확인한 후 담당자가 순차적으로 연락드리겠습니다.
         </p>
         <button
           onClick={() => {
@@ -221,7 +221,7 @@ export function ConsultationForm() {
           disabled={loading}
           className="w-full bg-blue-600 disabled:opacity-55 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-600/20 active:scale-[0.98] transition flex items-center justify-center gap-2"
         >
-          {loading ? "신청서 전달 중..." : "24시간 내 빠른 전화 신청하기"}
+          {loading ? "신청서 전달 중..." : "무료 가맹 상담 신청하기"}
           <Send className="w-4 h-4" />
         </button>
       </form>
@@ -279,8 +279,8 @@ export function PaperRollRequestForm() {
         <h3 className="text-2xl font-bold text-slate-900 mb-3">무상 용지 요청 접수 완료</h3>
         <p className="text-slate-500 leading-relaxed mb-6">
           제휴 가맹점 무상 용지 요청이 정상적으로 처리되었습니다.<br />
-          택배(로젠택배)를 통하여 당일 또는 익일 즉시 발송됩니다.<br />
-          (송장 정보는 전산 승인 완료 후 문자 메시지로 전송됩니다)
+          담당자가 요청 내용을 확인한 후 배송을 진행합니다.<br />
+          배송 관련 안내는 입력한 연락처로 전달됩니다.
         </p>
         <button
           onClick={() => {
@@ -356,7 +356,7 @@ export function PaperRollRequestForm() {
             required
             maxLength={500}
             disabled={loading}
-            placeholder="서울특별시 구로구 경인로 123 탑에스프레소"
+            placeholder="경기도 안산시 상록구 예시로 00, 2층"
             value={formData.address}
             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
             className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl px-4 py-3 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"

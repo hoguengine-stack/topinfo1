@@ -79,7 +79,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-slate-400">대표이사</label>
+                  <label className="text-[10px] text-slate-400">대표자</label>
                   <input
                     type="text"
                     value={footerInfo.ceo}
@@ -103,7 +103,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-slate-400">장애대표번호</label>
+                  <label className="text-[10px] text-slate-400">대표/AS 전화</label>
                   <input
                     type="text"
                     value={footerInfo.phone}
@@ -175,9 +175,9 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
             </div>
           ) : (
             <p className="text-xs text-slate-400 font-medium mt-2 leading-relaxed text-left">
-              {footerInfo.companyName} | 대표이사: {footerInfo.ceo} | 주소: {footerInfo.address} <br />
+              {footerInfo.companyName} | 대표자: {footerInfo.ceo} | 주소: {footerInfo.address} <br />
               {footerInfo.businessRegistrationNumber && <>사업자등록번호: {footerInfo.businessRegistrationNumber} | </>}
-              고객보급지원 전산망 대표번호: {footerInfo.phone} | 이메일: {footerInfo.email}
+              대표/AS 전화: {footerInfo.phone} | 이메일: {footerInfo.email}
             </p>
           )}
         </div>
