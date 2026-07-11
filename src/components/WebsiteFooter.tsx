@@ -1,19 +1,14 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { doc, setDoc } from "firebase/firestore";
 import { Settings } from "lucide-react";
 import { useToast } from "../contexts/ToastContext";
+import { FooterInfo } from "../utils/footerSettings";
+import { LegalDocumentModal, LegalDocumentType } from "./LegalDocumentModal";
 
 export interface WebsiteFooterProps {
   isEditModeActive: boolean;
-  footerInfo: {
-    companyName: string;
-    ceo: string;
-    address: string;
-    phone: string;
-    email: string;
-    copyright: string;
-  };
-  setFooterInfo: (info: any) => void;
+  footerInfo: FooterInfo;
+  setFooterInfo: (info: FooterInfo) => void;
   isEmployee: boolean;
   db: any;
   setCurrentUrl: (url: string) => void;
@@ -30,6 +25,12 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
   handleLinkClick,
 }) => {
   const { showToast } = useToast();
+  const [legalDocument, setLegalDocument] = useState<LegalDocumentType | null>(null);
+  const closeLegalDocument = useCallback(() => setLegalDocument(null), []);
+
+  const updateFooterField = (field: keyof FooterInfo, value: string) => {
+    setFooterInfo({ ...footerInfo, [field]: value });
+  };
 
   const saveFooterInfo = async () => {
     try {
@@ -71,11 +72,10 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                     type="text"
                     value={footerInfo.companyName}
                     onChange={(e) => {
-                      const updated = { ...footerInfo, companyName: e.target.value };
-                      setFooterInfo(updated);
+                      updateFooterField("companyName", e.target.value);
                     }}
                     onBlur={saveFooterInfo}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -84,11 +84,10 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                     type="text"
                     value={footerInfo.ceo}
                     onChange={(e) => {
-                      const updated = { ...footerInfo, ceo: e.target.value };
-                      setFooterInfo(updated);
+                      updateFooterField("ceo", e.target.value);
                     }}
                     onBlur={saveFooterInfo}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1 col-span-2">
@@ -97,11 +96,10 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                     type="text"
                     value={footerInfo.address}
                     onChange={(e) => {
-                      const updated = { ...footerInfo, address: e.target.value };
-                      setFooterInfo(updated);
+                      updateFooterField("address", e.target.value);
                     }}
                     onBlur={saveFooterInfo}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -110,11 +108,10 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                     type="text"
                     value={footerInfo.phone}
                     onChange={(e) => {
-                      const updated = { ...footerInfo, phone: e.target.value };
-                      setFooterInfo(updated);
+                      updateFooterField("phone", e.target.value);
                     }}
                     onBlur={saveFooterInfo}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -123,11 +120,43 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                     type="text"
                     value={footerInfo.email}
                     onChange={(e) => {
-                      const updated = { ...footerInfo, email: e.target.value };
-                      setFooterInfo(updated);
+                      updateFooterField("email", e.target.value);
                     }}
                     onBlur={saveFooterInfo}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-slate-400">사업자등록번호</label>
+                  <input
+                    type="text"
+                    value={footerInfo.businessRegistrationNumber}
+                    onChange={(e) => updateFooterField("businessRegistrationNumber", e.target.value)}
+                    onBlur={saveFooterInfo}
+                    placeholder="실제 번호 입력"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-slate-400">개인정보 담당자</label>
+                  <input
+                    type="text"
+                    value={footerInfo.privacyOfficer}
+                    onChange={(e) => updateFooterField("privacyOfficer", e.target.value)}
+                    onBlur={saveFooterInfo}
+                    placeholder="담당자 또는 부서"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                  />
+                </div>
+                <div className="flex flex-col gap-1 col-span-2">
+                  <label className="text-[10px] text-slate-400">개인정보 문의 연락처</label>
+                  <input
+                    type="text"
+                    value={footerInfo.privacyContact}
+                    onChange={(e) => updateFooterField("privacyContact", e.target.value)}
+                    onBlur={saveFooterInfo}
+                    placeholder="미입력 시 대표 이메일 사용"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                   />
                 </div>
                 <div className="flex flex-col gap-1 col-span-2">
@@ -136,11 +165,10 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                     type="text"
                     value={footerInfo.copyright}
                     onChange={(e) => {
-                      const updated = { ...footerInfo, copyright: e.target.value };
-                      setFooterInfo(updated);
+                      updateFooterField("copyright", e.target.value);
                     }}
                     onBlur={saveFooterInfo}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                   />
                 </div>
               </div>
@@ -148,13 +176,14 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
           ) : (
             <p className="text-xs text-slate-400 font-medium mt-2 leading-relaxed text-left">
               {footerInfo.companyName} | 대표이사: {footerInfo.ceo} | 주소: {footerInfo.address} <br />
+              {footerInfo.businessRegistrationNumber && <>사업자등록번호: {footerInfo.businessRegistrationNumber} | </>}
               고객보급지원 전산망 대표번호: {footerInfo.phone} | 이메일: {footerInfo.email}
             </p>
           )}
         </div>
         <div className="flex flex-wrap gap-4 text-xs font-semibold text-slate-400">
-          <button onClick={() => showToast("이용약관: 본 서비스의 이용에 관한 세부 조항 및 약관입니다. 상세 문의는 고객지원실로 부탁드립니다.", "info")} className="hover:text-slate-600">이용약관</button>
-          <button onClick={() => showToast("개인정보처리방침: 탑정보통신은 관련 법령에 따라 이용자의 개인정보를 소중히 보호하고 관리합니다.", "info")} className="hover:text-slate-600">개인정보처리방침</button>
+          <button type="button" onClick={() => setLegalDocument("terms")} className="hover:text-slate-600">이용약관</button>
+          <button type="button" onClick={() => setLegalDocument("privacy")} className="hover:text-slate-600">개인정보처리방침</button>
           {isEmployee && (
             <button onClick={() => setCurrentUrl("admin")} className="font-bold text-blue-600 flex items-center gap-1">
               <Settings className="w-3.5 h-3.5" /> 임직원 제어포털
@@ -165,6 +194,13 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
       <div className="max-w-6xl mx-auto text-center border-t border-slate-50 mt-8 pt-8 text-[11px] font-medium text-slate-350">
         {footerInfo.copyright}
       </div>
+      {legalDocument && (
+        <LegalDocumentModal
+          type={legalDocument}
+          company={footerInfo}
+          onClose={closeLegalDocument}
+        />
+      )}
     </footer>
   );
 };

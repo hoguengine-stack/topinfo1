@@ -70,6 +70,12 @@ service cloud.firestore {
       return listData is list && listData.size() <= maxSize;
     }
 
+    function hasCurrentPrivacyConsent() {
+      return request.resource.data.privacyConsentAt == request.resource.data.createdAt &&
+             request.resource.data.overseasTransferConsentAt == request.resource.data.createdAt &&
+             request.resource.data.privacyPolicyVersion == '2026-07-11';
+    }
+
     // ===============================================================
     // Domain Validators
     // ===============================================================
@@ -86,10 +92,20 @@ service cloud.firestore {
     }
 
     function isAdmin(uid) {
-      return isGoogleProvider() &&
-             request.auth.uid == uid &&
+      return isEmployee(uid) &&
              exists(/databases/$(database)/documents/users/$(uid)) &&
-             get(/databases/$(database)/documents/users/$(uid)).data.isAccessCodeVerified == true;
+             exists(/databases/$(database)/documents/settings/security) &&
+             (
+               (
+                 'adminUids' in get(/databases/$(database)/documents/settings/security).data &&
+                 get(/databases/$(database)/documents/settings/security).data.adminUids is list &&
+                 uid in get(/databases/$(database)/documents/settings/security).data.adminUids
+               ) ||
+               (
+                 !('adminUids' in get(/databases/$(database)/documents/settings/security).data) &&
+                 get(/databases/$(database)/documents/settings/security).data.updatedBy == uid
+               )
+             );
     }
 
     function isCorrectAccessCodeHash(accessCodeHash) {
@@ -125,7 +141,12 @@ service cloud.firestore {
     }
 
     function isValidJobTitle() {
-      return true;
+      return !('profile' in request.resource.data) ||
+             !('jobTitle' in request.resource.data.profile) ||
+             (
+               request.resource.data.profile.jobTitle is string &&
+               request.resource.data.profile.jobTitle.size() <= 100
+             );
     }
 
     function isValidUser(userId) {
@@ -149,10 +170,16 @@ service cloud.firestore {
     }
 
     function isValidSecuritySettings() {
-      return request.resource.data.keys().hasOnly(['accessCodeHash', 'updatedAt', 'updatedBy']) &&
+      return request.resource.data.keys().hasOnly(['accessCodeHash', 'updatedAt', 'updatedBy', 'adminUids']) &&
+             request.resource.data.keys().hasAll(['accessCodeHash', 'updatedAt', 'updatedBy', 'adminUids']) &&
              request.resource.data.accessCodeHash is string &&
              request.resource.data.accessCodeHash.size() == 64 &&
-             request.resource.data.updatedBy == request.auth.uid;
+             request.resource.data.updatedAt is int &&
+             request.resource.data.updatedBy == request.auth.uid &&
+             request.resource.data.adminUids is list &&
+             request.resource.data.adminUids.size() > 0 &&
+             request.resource.data.adminUids.size() <= 10 &&
+             request.auth.uid in request.resource.data.adminUids;
     }
 
     function isValidTask() {
@@ -178,13 +205,28 @@ service cloud.firestore {
                'productOfInterest',
                'message',
                'status',
-               'createdAt'
+               'createdAt',
+               'privacyConsentAt',
+               'overseasTransferConsentAt',
+               'privacyPolicyVersion'
              ]) &&
-             hasRequiredFields(['customerName', 'contact', 'status', 'createdAt']) &&
+             hasRequiredFields([
+               'customerName',
+               'contact',
+               'status',
+               'createdAt',
+               'privacyConsentAt',
+               'overseasTransferConsentAt',
+               'privacyPolicyVersion'
+             ]) &&
              validStringLength('customerName', 1, 100) &&
              validStringLength('contact', 1, 50) &&
              request.resource.data.status == '대기' &&
              validStringLength('createdAt', 1, 50) &&
+             validStringLength('privacyConsentAt', 1, 50) &&
+             validStringLength('overseasTransferConsentAt', 1, 50) &&
+             validStringLength('privacyPolicyVersion', 1, 30) &&
+             hasCurrentPrivacyConsent() &&
              validOptionalString('businessName', 150) &&
              validOptionalString('businessType', 100) &&
              validOptionalString('productOfInterest', 100) &&
@@ -199,14 +241,30 @@ service cloud.firestore {
                'deviceModel',
                'quantity',
                'status',
-               'createdAt'
+               'createdAt',
+               'privacyConsentAt',
+               'overseasTransferConsentAt',
+               'privacyPolicyVersion'
              ]) &&
-             hasRequiredFields(['customerName', 'contact', 'address', 'status', 'createdAt']) &&
+             hasRequiredFields([
+               'customerName',
+               'contact',
+               'address',
+               'status',
+               'createdAt',
+               'privacyConsentAt',
+               'overseasTransferConsentAt',
+               'privacyPolicyVersion'
+             ]) &&
              validStringLength('customerName', 1, 100) &&
              validStringLength('contact', 1, 50) &&
              validStringLength('address', 1, 500) &&
              request.resource.data.status == '대기' &&
              validStringLength('createdAt', 1, 50) &&
+             validStringLength('privacyConsentAt', 1, 50) &&
+             validStringLength('overseasTransferConsentAt', 1, 50) &&
+             validStringLength('privacyPolicyVersion', 1, 30) &&
+             hasCurrentPrivacyConsent() &&
              validOptionalString('deviceModel', 120) &&
              validOptionalString('quantity', 30);
     }
@@ -219,9 +277,21 @@ service cloud.firestore {
                'authorId',
                'isSecret',
                'replies',
-               'createdAt'
+               'createdAt',
+               'privacyConsentAt',
+               'overseasTransferConsentAt',
+               'privacyPolicyVersion'
              ]) &&
-             hasRequiredFields(['title', 'content', 'authorName', 'isSecret', 'createdAt']) &&
+             hasRequiredFields([
+               'title',
+               'content',
+               'authorName',
+               'isSecret',
+               'createdAt',
+               'privacyConsentAt',
+               'overseasTransferConsentAt',
+               'privacyPolicyVersion'
+             ]) &&
              validStringLength('title', 1, 200) &&
              validStringLength('content', 1, 5000) &&
              validStringLength('authorName', 1, 100) &&
@@ -229,6 +299,10 @@ service cloud.firestore {
              (!request.resource.data.isSecret ||
                (isAuthenticated() && request.resource.data.authorId == request.auth.uid)) &&
              validStringLength('createdAt', 1, 50) &&
+             validStringLength('privacyConsentAt', 1, 50) &&
+             validStringLength('overseasTransferConsentAt', 1, 50) &&
+             validStringLength('privacyPolicyVersion', 1, 30) &&
+             hasCurrentPrivacyConsent() &&
              validOptionalString('authorId', 128) &&
              (!request.resource.data.keys().hasAny(['replies']) || isValidList(request.resource.data.replies, 100));
     }
@@ -289,21 +363,23 @@ service cloud.firestore {
 
     match /system/{document=**} {
       allow read: if true;
-      allow write: if isAuthenticated() && isEmployee(request.auth.uid);
+      allow write: if isAuthenticated() && isAdmin(request.auth.uid);
     }
 
     match /settings/security {
       allow read: if isAuthenticated() && isAdmin(request.auth.uid);
-      allow create, update: if isAuthenticated() && isAdmin(request.auth.uid) && isValidSecuritySettings();
+      allow create: if isAuthenticated() &&
+        isEmployee(request.auth.uid) &&
+        !exists(/databases/$(database)/documents/settings/security) &&
+        request.resource.data.adminUids == [request.auth.uid] &&
+        isValidSecuritySettings();
+      allow update: if isAuthenticated() && isAdmin(request.auth.uid) && isValidSecuritySettings();
       allow delete: if false;
     }
 
     match /settings/{id} {
       allow read: if id != 'security';
-      allow write: if id != 'security' && isAuthenticated() && (
-        (id == 'initialization_state' && !exists(/databases/$(database)/documents/settings/initialization_state)) ||
-        isEmployee(request.auth.uid)
-      );
+      allow write: if id != 'security' && isAuthenticated() && isEmployee(request.auth.uid);
     }
 
     match /products/{id} {

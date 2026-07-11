@@ -8,6 +8,7 @@ import {
   getPaperRequestValidationError,
 } from "../utils/publicRequests";
 import { Phone, User, Landmark, HelpCircle, Check, Send, Sparkles } from "lucide-react";
+import { PrivacyConsentField } from "./PrivacyConsentField";
 
 export function ConsultationForm() {
   const [formData, setFormData] = useState({
@@ -17,6 +18,8 @@ export function ConsultationForm() {
     businessType: "일반음식점",
     productOfInterest: "포스",
     message: "",
+    privacyConsent: false,
+    overseasTransferConsent: false,
   });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -66,6 +69,8 @@ export function ConsultationForm() {
               businessType: "일반음식점",
               productOfInterest: "포스",
               message: "",
+              privacyConsent: false,
+              overseasTransferConsent: false,
             });
             setErrorMessage("");
           }}
@@ -102,6 +107,7 @@ export function ConsultationForm() {
               <input
                 type="text"
                 required
+                maxLength={100}
                 disabled={loading}
                 placeholder="홍길동 대표님"
                 value={formData.customerName}
@@ -117,6 +123,7 @@ export function ConsultationForm() {
               <input
                 type="tel"
                 required
+                maxLength={50}
                 disabled={loading}
                 placeholder="010-1234-5678"
                 value={formData.contact}
@@ -134,6 +141,7 @@ export function ConsultationForm() {
               <Landmark className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
               <input
                 type="text"
+                maxLength={150}
                 disabled={loading}
                 placeholder="탑에스프레소 신도림점"
                 value={formData.businessName}
@@ -190,6 +198,7 @@ export function ConsultationForm() {
             <HelpCircle className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
             <textarea
               rows={3}
+              maxLength={2000}
               disabled={loading}
               placeholder="지원 혜택 문의 또는 간편 기기 대여 방식이 궁금합니다."
               value={formData.message}
@@ -198,6 +207,14 @@ export function ConsultationForm() {
             />
           </div>
         </div>
+
+        <PrivacyConsentField
+          privacyConsent={formData.privacyConsent}
+          overseasTransferConsent={formData.overseasTransferConsent}
+          onPrivacyConsentChange={(checked) => setFormData((prev) => ({ ...prev, privacyConsent: checked }))}
+          onOverseasTransferConsentChange={(checked) => setFormData((prev) => ({ ...prev, overseasTransferConsent: checked }))}
+          disabled={loading}
+        />
 
         <button
           type="submit"
@@ -223,6 +240,8 @@ export function PaperRollRequestForm() {
     address: "",
     deviceModel: "",
     quantity: "1박스 (50롤)",
+    privacyConsent: false,
+    overseasTransferConsent: false,
   });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -272,6 +291,8 @@ export function PaperRollRequestForm() {
               address: "",
               deviceModel: "",
               quantity: "1박스 (50롤)",
+              privacyConsent: false,
+              overseasTransferConsent: false,
             });
             setErrorMessage("");
           }}
@@ -305,6 +326,7 @@ export function PaperRollRequestForm() {
           <input
             type="text"
             required
+            maxLength={100}
             disabled={loading}
             placeholder="예시: 탑 에스프레소 (김대표)"
             value={formData.customerName}
@@ -318,6 +340,7 @@ export function PaperRollRequestForm() {
           <input
             type="tel"
             required
+            maxLength={50}
             disabled={loading}
             placeholder="010-1234-5678"
             value={formData.contact}
@@ -331,6 +354,7 @@ export function PaperRollRequestForm() {
           <input
             type="text"
             required
+            maxLength={500}
             disabled={loading}
             placeholder="서울특별시 구로구 경인로 123 탑에스프레소"
             value={formData.address}
@@ -344,6 +368,7 @@ export function PaperRollRequestForm() {
             <label className="block text-xs font-semibold text-slate-600 mb-2">단말기 모델명 (선택)</label>
             <input
               type="text"
+              maxLength={120}
               disabled={loading}
               placeholder="K-30 또는 T-8000"
               value={formData.deviceModel}
@@ -365,6 +390,14 @@ export function PaperRollRequestForm() {
             </select>
           </div>
         </div>
+
+        <PrivacyConsentField
+          privacyConsent={formData.privacyConsent}
+          overseasTransferConsent={formData.overseasTransferConsent}
+          onPrivacyConsentChange={(checked) => setFormData((prev) => ({ ...prev, privacyConsent: checked }))}
+          onOverseasTransferConsentChange={(checked) => setFormData((prev) => ({ ...prev, overseasTransferConsent: checked }))}
+          disabled={loading}
+        />
 
         <button
           type="submit"

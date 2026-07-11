@@ -7,6 +7,7 @@ import { WebsiteHeader } from "./WebsiteHeader";
 import { WebsiteFooter } from "./WebsiteFooter";
 import { WebsiteLoginModal } from "./WebsiteLoginModal";
 import { WebsiteBlockRenderer } from "./WebsiteBlockRenderer";
+import { FooterInfo } from "../utils/footerSettings";
 
 const WebsiteHUDPanel = React.lazy(() => import("./WebsiteHUDPanel").then(m => ({ default: m.WebsiteHUDPanel })));
 const WebAdmin = React.lazy(() => import("./WebAdmin").then(m => ({ default: m.WebAdmin })));
@@ -25,8 +26,8 @@ export interface TopWebsiteViewProps {
   setIsEditModeActive: (val: boolean) => void;
   activeEditTarget: any;
   setActiveEditTarget: (val: any) => void;
-  footerInfo: any;
-  setFooterInfo: (val: any) => void;
+  footerInfo: FooterInfo;
+  setFooterInfo: (val: FooterInfo) => void;
   navigationSettings: NavigationSettings;
 
   user: any;

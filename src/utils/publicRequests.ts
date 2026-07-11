@@ -5,6 +5,8 @@ export interface ConsultationRequestInput {
   businessType?: string;
   productOfInterest?: string;
   message?: string;
+  privacyConsent?: boolean;
+  overseasTransferConsent?: boolean;
 }
 
 export interface PaperRequestInput {
@@ -13,7 +15,11 @@ export interface PaperRequestInput {
   address?: string;
   deviceModel?: string;
   quantity?: string;
+  privacyConsent?: boolean;
+  overseasTransferConsent?: boolean;
 }
+
+export const PRIVACY_POLICY_VERSION = "2026-07-11";
 
 function trim(value: string | undefined) {
   return value?.trim() || "";
@@ -30,12 +36,18 @@ export function getConsultationValidationError(input: ConsultationRequestInput) 
   if (!trim(input.customerName) || !trim(input.contact)) {
     return "담당자 성함과 대표 연락처를 작성해주세요.";
   }
+  if (!input.privacyConsent || !input.overseasTransferConsent) {
+    return "개인정보 수집·이용 및 국외 처리 동의가 필요합니다.";
+  }
   return null;
 }
 
 export function getPaperRequestValidationError(input: PaperRequestInput) {
   if (!trim(input.customerName) || !trim(input.contact) || !trim(input.address)) {
     return "가맹점 상호/대표자 성함, 수령 연락처, 배송지 주소를 모두 작성해주세요.";
+  }
+  if (!input.privacyConsent || !input.overseasTransferConsent) {
+    return "개인정보 수집·이용 및 국외 처리 동의가 필요합니다.";
   }
   return null;
 }
@@ -50,11 +62,17 @@ export function buildConsultationRequest(input: ConsultationRequestInput, create
     message?: string;
     status: "대기";
     createdAt: string;
+    privacyConsentAt: string;
+    overseasTransferConsentAt: string;
+    privacyPolicyVersion: string;
   } = {
     customerName: trim(input.customerName),
     contact: trim(input.contact),
     status: "대기",
     createdAt,
+    privacyConsentAt: createdAt,
+    overseasTransferConsentAt: createdAt,
+    privacyPolicyVersion: PRIVACY_POLICY_VERSION,
   };
 
   withOptionalString(request, "businessName", input.businessName);
@@ -73,12 +91,18 @@ export function buildPaperRequest(input: PaperRequestInput, createdAt: string) {
     quantity?: string;
     status: "대기";
     createdAt: string;
+    privacyConsentAt: string;
+    overseasTransferConsentAt: string;
+    privacyPolicyVersion: string;
   } = {
     customerName: trim(input.customerName),
     contact: trim(input.contact),
     address: trim(input.address),
     status: "대기",
     createdAt,
+    privacyConsentAt: createdAt,
+    overseasTransferConsentAt: createdAt,
+    privacyPolicyVersion: PRIVACY_POLICY_VERSION,
   };
 
   withOptionalString(request, "deviceModel", input.deviceModel);

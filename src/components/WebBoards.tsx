@@ -11,6 +11,8 @@ import {
 import { getBoardLoadErrorMessage } from "../utils/firebaseErrors";
 import { Lock, Unlock, Search, FileText, Download, Reply, Trash, PlusCircle } from "lucide-react";
 import { useToast } from "../contexts/ToastContext";
+import { PrivacyConsentField } from "./PrivacyConsentField";
+import { PRIVACY_POLICY_VERSION } from "../utils/publicRequests";
 
 // =========================================================================
 // 1. Suggestion Board Context & Provider
@@ -42,6 +44,8 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
     content: "",
     authorName: "",
     isSecret: false,
+    privacyConsent: false,
+    overseasTransferConsent: false,
   });
 
   useEffect(() => {
@@ -140,8 +144,13 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
       showToast("비밀글은 로그인한 사용자만 등록할 수 있습니다.", "warning");
       return;
     }
+    if (!newPost.privacyConsent || !newPost.overseasTransferConsent) {
+      showToast("개인정보 수집·이용 및 국외 처리 동의가 필요합니다.", "warning");
+      return;
+    }
 
     try {
+      const createdAt = new Date().toISOString();
       const postData = {
         title: newPost.title,
         content: newPost.content,
@@ -149,14 +158,24 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
         isSecret: newPost.isSecret,
         authorId: user?.sub || "anonymous",
         replies: [],
-        createdAt: new Date().toISOString(),
+        createdAt,
+        privacyConsentAt: createdAt,
+        overseasTransferConsentAt: createdAt,
+        privacyPolicyVersion: PRIVACY_POLICY_VERSION,
       };
       const createdPost = await addDoc(collection(db, "suggestions"), postData);
       if (!isAdmin) {
         setPosts((prev) => [{ id: createdPost.id, ...postData }, ...prev]);
       }
       setIsCreating(false);
-      setNewPost({ title: "", content: "", authorName: "", isSecret: false });
+      setNewPost({
+        title: "",
+        content: "",
+        authorName: "",
+        isSecret: false,
+        privacyConsent: false,
+        overseasTransferConsent: false,
+      });
       showToast("건의사항이 등록되었습니다.", "success");
     } catch (err) {
       console.error("Suggestion save failed:", err);
@@ -332,6 +351,7 @@ export function SuggestionBoardBody() {
               <input
                 type="text"
                 required
+                maxLength={100}
                 placeholder="상호 또는 성함"
                 value={newPost.authorName}
                 onChange={(e) => setNewPost({ ...newPost, authorName: e.target.value })}
@@ -363,6 +383,7 @@ export function SuggestionBoardBody() {
             <input
               type="text"
               required
+              maxLength={200}
               placeholder="예시: 단말기 교환 건의 또는 세무 프로그램 오류 개선"
               value={newPost.title}
               onChange={(e) => setNewPost({ ...newPost, title: e.target.value })}
@@ -375,12 +396,20 @@ export function SuggestionBoardBody() {
             <textarea
               required
               rows={5}
+              maxLength={5000}
               placeholder="제안하고자 하시는 내용을 솔직하고 상세히 기재해 주십시오."
               value={newPost.content}
               onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600 resize-none"
             />
           </div>
+
+          <PrivacyConsentField
+            privacyConsent={newPost.privacyConsent}
+            overseasTransferConsent={newPost.overseasTransferConsent}
+            onPrivacyConsentChange={(checked) => setNewPost({ ...newPost, privacyConsent: checked })}
+            onOverseasTransferConsentChange={(checked) => setNewPost({ ...newPost, overseasTransferConsent: checked })}
+          />
 
           <button
             type="submit"

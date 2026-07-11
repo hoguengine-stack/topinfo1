@@ -4,6 +4,7 @@ import { collection, onSnapshot, doc, setDoc, updateDoc, getDoc, getDocs } from 
 import { useAuth } from "../contexts/AuthContext";
 import { CMSPage, Product, CMSBlock, NavigationSettings } from "../types";
 import { DEFAULT_NAVIGATION_SETTINGS, createDefaultCMSPages, mergeNavigationSettings, restoreStandardCMSPages } from "../utils/cmsSettings";
+import { DEFAULT_FOOTER_INFO, mergeFooterInfo } from "../utils/footerSettings";
 import { TopWebsiteView } from "./TopWebsiteView";
 import { Trash2, Sparkles } from "lucide-react";
 
@@ -192,14 +193,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     }, 1000);
   };
 
-  const [footerInfo, setFooterInfo] = useState({
-    companyName: "(주)탑정보통신",
-    ceo: "탑정보통신전담",
-    address: "서울특별시 구로구 신도림동",
-    phone: "24시간 장애접수 1544-0000",
-    email: "support@topinfo.com",
-    copyright: "Copyright © 2026 TOP Information & Communication. All Rights Reserved."
-  });
+  const [footerInfo, setFooterInfo] = useState(DEFAULT_FOOTER_INFO);
 
   const [customConfirm, setCustomConfirm] = useState<{
     show: boolean;
@@ -427,19 +421,11 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
 
     const handleFooterData = (snap: any) => {
       if (snap.exists()) {
-        setFooterInfo(snap.data() as any);
+        setFooterInfo(mergeFooterInfo(snap.data()));
       } else {
-        const defaultFooter = {
-          companyName: "(주)탑정보통신",
-          ceo: "탑정보통신전담",
-          address: "서울특별시 구로구 신도림동",
-          phone: "24시간 장애접수 1544-0000",
-          email: "support@topinfo.com",
-          copyright: "Copyright © 2026 TOP Information & Communication. All Rights Reserved."
-        };
-        setFooterInfo(defaultFooter);
+        setFooterInfo(DEFAULT_FOOTER_INFO);
         if (isEmployee) {
-          setDoc(doc(db, "settings", "footer"), defaultFooter).catch((err) => {
+          setDoc(doc(db, "settings", "footer"), DEFAULT_FOOTER_INFO).catch((err) => {
             console.warn("Footer settings initialization failed", err);
           });
         }

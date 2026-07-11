@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { auth, db, googleProvider } from "../firebase";
 import { signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, User as FirebaseUser } from "firebase/auth";
-import { deleteDoc, deleteField, doc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
+import { deleteDoc, deleteField, doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { getAccessCodeFailureMessage, isFirestoreQuotaError } from "../utils/firebaseErrors";
 
 interface User {
@@ -45,6 +45,7 @@ export const defaultNotificationSettings: NotificationSettings = {
 
 export interface VerifyResult {
   success: boolean;
+  isAdmin?: boolean;
   locked?: boolean;
   lockoutUntil?: number | null;
   attemptsLeft?: number;
@@ -128,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isGoogleAdmin, setIsGoogleAdmin] = useState(false);
+  const [isAdminAccount, setIsAdminAccount] = useState(false);
   const [isAccessCodeVerified, setIsAccessCodeVerified] = useState(() => {
     return localStorage.getItem("isAccessCodeVerified") === "true";
   });
@@ -141,8 +143,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const initTimeRef = useRef(Date.now());
 
-  const isAdmin = isGoogleAdmin && isAccessCodeVerified;
   const isEmployee = isGoogleAdmin && isAccessCodeVerified;
+  const isAdmin = isEmployee && isAdminAccount;
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -161,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setProfile(null);
         setIsGoogleAdmin(false);
+        setIsAdminAccount(false);
         setIsAccessCodeVerified(false);
         localStorage.removeItem("isAccessCodeVerified");
         setIsLoading(false);
@@ -169,6 +172,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return () => unsubscribeAuth();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!user || !isEmployee) {
+      setIsAdminAccount(false);
+      return;
+    }
+
+    getDoc(doc(db, "settings", "security"))
+      .then((securitySnapshot) => {
+        if (!cancelled) setIsAdminAccount(securitySnapshot.exists());
+      })
+      .catch(() => {
+        // Only the designated administrator can read the security document.
+        if (!cancelled) setIsAdminAccount(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isEmployee]);
 
   useEffect(() => {
     if (!user || !isEmployee) return;
@@ -312,6 +337,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await signOut(auth);
       setIsGoogleAdmin(false);
+      setIsAdminAccount(false);
       localStorage.removeItem("isAccessCodeVerified");
     } catch (error) {
       console.error("Logout failed:", error);
@@ -342,10 +368,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.warn("Access verification cleanup failed:", cleanupError);
         });
 
+        const securityRef = doc(db, "settings", "security");
+        let adminConfirmed = false;
+
+        try {
+          const securitySnapshot = await getDoc(securityRef);
+          if (securitySnapshot.exists()) {
+            const securityData = securitySnapshot.data();
+            const adminUids = Array.isArray(securityData.adminUids) && securityData.adminUids.length > 0
+              ? securityData.adminUids
+              : [securityData.updatedBy || user.sub];
+
+            await setDoc(securityRef, {
+              accessCodeHash,
+              updatedAt: Date.now(),
+              updatedBy: user.sub,
+              adminUids,
+            }, { merge: true });
+            adminConfirmed = true;
+          }
+        } catch {
+          // A non-admin cannot read this document. A missing document is handled below.
+        }
+
+        if (!adminConfirmed) {
+          try {
+            await setDoc(securityRef, {
+              accessCodeHash,
+              updatedAt: Date.now(),
+              updatedBy: user.sub,
+              adminUids: [user.sub],
+            });
+            adminConfirmed = true;
+          } catch {
+            // Existing security settings reject writes from ordinary employees by design.
+          }
+        }
+
         setIsAccessCodeVerified(true);
+        setIsAdminAccount(adminConfirmed);
         localStorage.setItem("isAccessCodeVerified", "true");
         await saveLockoutState({ failedAttempts: 0, lockoutTier: 0, lockoutUntil: null });
-        return { success: true };
+        return { success: true, isAdmin: adminConfirmed };
       } catch (err: any) {
         console.warn("Verification write failed (likely invalid access code):", err);
 
@@ -392,11 +456,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user && isAdmin) {
       try {
         const accessCodeHash = await hashAccessCode(newCode);
-        await setDoc(doc(db, "settings", "security"), {
+        const securityRef = doc(db, "settings", "security");
+        const securitySnapshot = await getDoc(securityRef);
+        const securityData = securitySnapshot.data();
+        const adminUids = Array.isArray(securityData?.adminUids) && securityData.adminUids.length > 0
+          ? securityData.adminUids
+          : [securityData?.updatedBy || user.sub];
+
+        await setDoc(securityRef, {
           accessCodeHash,
           updatedAt: Date.now(),
           updatedBy: user.sub,
-        });
+          adminUids,
+        }, { merge: true });
         console.log("[Security] Master access code hash updated in settings/security");
       } catch (err) {
         console.error("Failed to update master access code in settings/security:", err);

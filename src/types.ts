@@ -45,6 +45,9 @@ export interface Consultation {
   message: string;
   status: "대기" | "완료";
   createdAt: string;
+  privacyConsentAt?: string;
+  overseasTransferConsentAt?: string;
+  privacyPolicyVersion?: string;
   linkedTaskId?: string;
   taskLinkedAt?: string;
   taskLinkedBy?: string;
@@ -59,6 +62,9 @@ export interface PaperRequest {
   quantity: string;
   status: "대기" | "완료";
   createdAt: string;
+  privacyConsentAt?: string;
+  overseasTransferConsentAt?: string;
+  privacyPolicyVersion?: string;
   linkedTaskId?: string;
   taskLinkedAt?: string;
   taskLinkedBy?: string;
@@ -73,6 +79,9 @@ export interface Suggestion {
   isSecret: boolean;
   replies?: Comment[];
   createdAt: string;
+  privacyConsentAt?: string;
+  overseasTransferConsentAt?: string;
+  privacyPolicyVersion?: string;
 }
 
 export interface Comment {

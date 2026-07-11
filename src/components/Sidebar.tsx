@@ -3,6 +3,10 @@ import { useAuth } from "../contexts/AuthContext";
 import { X, LogOut, Settings, User, Camera, ChevronRight, Mail, Shield, Bell, Globe, Lock, Eye, ListFilter, Plus, Trash, RefreshCw, GripVertical } from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "motion/react";
 import { useToast } from "../contexts/ToastContext";
+import { db } from "../firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { DEFAULT_FOOTER_INFO, FooterInfo, mergeFooterInfo } from "../utils/footerSettings";
+import { LegalDocumentModal, LegalDocumentType } from "./LegalDocumentModal";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -11,12 +15,14 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const {
-    user, profile, logout, updateProfilePicture, updateJobTitle, updateNickname, updateAccessCode,
+    user, profile, logout, updateProfilePicture, updateJobTitle, updateNickname, updateAccessCode, verifyAccessCode,
     taskTypes, taskTypeColors, priorities, jobTitles, notificationSettings, updateTaskTypes, updateTaskTypeColors, updatePriorities, updateJobTitles, updateNotificationSettings, forceRefreshAllPCs,
     isAdmin
   } = useAuth();
   const { showToast } = useToast();
   const [activeSubModal, setActiveSubModal] = React.useState<string | null>(null);
+  const [legalDocument, setLegalDocument] = React.useState<LegalDocumentType | null>(null);
+  const [legalCompanyInfo, setLegalCompanyInfo] = React.useState<FooterInfo>(DEFAULT_FOOTER_INFO);
   const [isDarkMode, setIsDarkMode] = React.useState(() => {
     return document.documentElement.classList.contains("dark");
   });
@@ -52,17 +58,43 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   if (!user || !profile) return null;
 
+  const openLegalDocument = async (type: LegalDocumentType) => {
+    try {
+      const footerSnapshot = await getDoc(doc(db, "settings", "footer"));
+      if (footerSnapshot.exists()) {
+        setLegalCompanyInfo(mergeFooterInfo(footerSnapshot.data()));
+      }
+    } catch (error) {
+      console.warn("Legal document company info load failed:", error);
+    }
+    setLegalDocument(type);
+  };
+
   const handleSave = async () => {
     if (activeSubModal === "profile") {
       updateNickname(tempNickname);
     } else if (activeSubModal === "privacy" && tempAccessCode) {
-      try {
-        await updateAccessCode(tempAccessCode);
+      if (isAdmin) {
+        try {
+          await updateAccessCode(tempAccessCode);
+          setTempAccessCode("");
+          showToast("접속 코드가 성공적으로 변경되었습니다.", "success");
+        } catch {
+          showToast("접속 코드 변경에 실패했습니다. 관리자 권한을 확인해 주세요.", "error");
+          return;
+        }
+      } else {
+        const result = await verifyAccessCode(tempAccessCode);
         setTempAccessCode("");
-        showToast("접속 코드가 성공적으로 변경되었습니다.", "success");
-      } catch {
-        showToast("접속 코드 변경에 실패했습니다. 관리자 권한을 확인해 주세요.", "error");
-        return;
+        if (!result.success) {
+          showToast(result.errorMessage || "접속 코드를 확인하지 못했습니다.", "error");
+          return;
+        }
+        if (!result.isAdmin) {
+          showToast("접속 코드는 확인됐지만 이미 다른 최고관리자 계정이 등록되어 있습니다.", "warning");
+          return;
+        }
+        showToast("이 계정이 최고관리자로 등록되었습니다.", "success");
       }
     } else if (activeSubModal === "categories") {
       updateTaskTypes(editTaskTypes.map(t => t.value));
@@ -356,29 +388,30 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
             {activeSubModal === "privacy" && (
               <div className="space-y-4">
-                {isAdmin && (
-                  <div className="p-4 bg-[#2d2d2d] rounded-2xl border border-white/5 space-y-4">
-                    <div className="flex items-center gap-3">
-                      <Lock className="w-5 h-5 text-orange-500" />
-                      <span className="text-sm text-white font-medium">접속 코드 변경</span>
-                    </div>
-                    <input
-                      type="password"
-                      placeholder="새로운 접속 코드 입력"
-                      value={tempAccessCode}
-                      onChange={(e) => setTempAccessCode(e.target.value)}
-                      className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                    />
+                <div className="p-4 bg-[#2d2d2d] rounded-2xl border border-white/5 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <Lock className="w-5 h-5 text-orange-500" />
+                    <span className="text-sm text-white font-medium">{isAdmin ? "접속 코드 변경" : "최고관리자 권한 확인"}</span>
                   </div>
-                )}
-                <button className="w-full p-4 flex items-center justify-between text-sm text-gray-300 hover:bg-white/5 transition-colors bg-[#2d2d2d] rounded-2xl border border-white/5">
+                  <input
+                    type="password"
+                    placeholder={isAdmin ? "새로운 접속 코드 입력" : "현재 접속 코드 입력"}
+                    value={tempAccessCode}
+                    onChange={(e) => setTempAccessCode(e.target.value)}
+                    className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  />
+                  {!isAdmin && (
+                    <p className="text-xs leading-5 text-gray-400">보안 설정이 아직 없는 초기 설치에서만 최초 최고관리자로 등록됩니다.</p>
+                  )}
+                </div>
+                <button type="button" onClick={() => openLegalDocument("privacy")} className="w-full p-4 flex items-center justify-between text-sm text-gray-300 hover:bg-white/5 transition-colors bg-[#2d2d2d] rounded-2xl border border-white/5">
                   <div className="flex items-center gap-3">
                     <Shield className="w-4 h-4 text-gray-500" />
                     개인정보 처리방침
                   </div>
                   <ChevronRight className="w-4 h-4 text-gray-600" />
                 </button>
-                <button className="w-full p-4 flex items-center justify-between text-sm text-gray-300 hover:bg-white/5 transition-colors bg-[#2d2d2d] rounded-2xl border border-white/5">
+                <button type="button" onClick={() => openLegalDocument("terms")} className="w-full p-4 flex items-center justify-between text-sm text-gray-300 hover:bg-white/5 transition-colors bg-[#2d2d2d] rounded-2xl border border-white/5">
                   <div className="flex items-center gap-3">
                     <Mail className="w-4 h-4 text-gray-500" />
                     서비스 이용약관
@@ -541,6 +574,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
           </motion.div>
           {renderSubModal()}
+          {legalDocument && (
+            <LegalDocumentModal
+              type={legalDocument}
+              company={legalCompanyInfo}
+              onClose={() => setLegalDocument(null)}
+            />
+          )}
         </>
       )}
     </AnimatePresence>
