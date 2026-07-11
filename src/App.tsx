@@ -83,12 +83,12 @@ export default function App() {
     ? tasks.filter((t) => t.assignee === filterAssignee)
     : tasks;
 
-  const handleSave = (taskData: Partial<Task>) => {
+  const handleSave = async (taskData: Partial<Task>) => {
     if (editingTask) {
-      updateTask(editingTask.id, taskData as Omit<Task, "id" | "updatedAt" | "createdAt">);
-    } else {
-      addTask(taskData as Omit<Task, "id" | "updatedAt" | "createdAt">);
+      return updateTask(editingTask.id, taskData as Omit<Task, "id" | "updatedAt" | "createdAt">);
     }
+
+    return addTask(taskData as Omit<Task, "id" | "updatedAt" | "createdAt">);
   };
 
   const handleEdit = (task: Task) => {

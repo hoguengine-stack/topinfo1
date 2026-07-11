@@ -188,11 +188,55 @@ const ScrollTimePicker = ({ value, onChange }: { value: string; onChange: (val: 
   );
 };
 
+const MAX_TASK_ATTACHMENTS = 3;
+const MAX_TASK_ATTACHMENT_DATA_URL_LENGTH = 280_000;
+
+function compressTaskImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("file-read-failed"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("image-load-failed"));
+      img.onload = () => {
+        const maxDimension = 720;
+        const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d");
+
+        if (!context) {
+          reject(new Error("canvas-unavailable"));
+          return;
+        }
+
+        context.drawImage(img, 0, 0, width, height);
+        let dataUrl = canvas.toDataURL("image/jpeg", 0.68);
+        if (dataUrl.length > MAX_TASK_ATTACHMENT_DATA_URL_LENGTH) {
+          dataUrl = canvas.toDataURL("image/jpeg", 0.45);
+        }
+
+        if (dataUrl.length > MAX_TASK_ATTACHMENT_DATA_URL_LENGTH) {
+          reject(new Error("compressed-image-too-large"));
+          return;
+        }
+
+        resolve(dataUrl);
+      };
+      img.src = String(reader.result || "");
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (task: Partial<Task>) => void;
-  onDelete?: (id: string) => void;
+  onSave: (task: Partial<Task>) => Promise<boolean>;
+  onDelete?: (id: string) => Promise<boolean>;
   task?: Task | null;
   assignees: string[];
 }
@@ -225,6 +269,8 @@ export function TaskModal({
 
   const [timeMode, setTimeMode] = useState<"direct" | "preset">("direct");
   const [dateMode, setDateMode] = useState<"direct" | "preset">("direct");
+  const [isSaving, setIsSaving] = useState(false);
+  const [deleteConfirmationActive, setDeleteConfirmationActive] = useState(false);
 
   const titleRef = React.useRef<HTMLInputElement>(null);
   const statusRef = React.useRef<HTMLSelectElement>(null);
@@ -233,6 +279,7 @@ export function TaskModal({
   const timeRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    setDeleteConfirmationActive(false);
     if (task) {
       setFormData({ 
         ...task, 
@@ -258,13 +305,16 @@ export function TaskModal({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
-    onClose();
+    if (isSaving) return;
+    setIsSaving(true);
+    const saved = await onSave(formData);
+    setIsSaving(false);
+    if (saved) onClose();
   };
 
-  const handleCompleteTask = () => {
+  const handleCompleteTask = async () => {
     if (!formData.title) {
       showToast("작업 이름을 입력해주세요.", "warning");
       titleRef.current?.focus();
@@ -275,17 +325,23 @@ export function TaskModal({
     const newStatus = formData.status === "완료" ? "예정" : "완료";
     const updatedForm = { ...formData, status: newStatus as Status };
     setFormData(updatedForm);
-    onSave(updatedForm);
-    onClose();
+    setIsSaving(true);
+    const saved = await onSave(updatedForm);
+    setIsSaving(false);
+    if (saved) onClose();
   };
 
-  const handleSaveAndShare = () => {
+  const handleSaveAndShare = async () => {
     if (!formData.title) {
       showToast("작업 이름을 입력해주세요.", "warning");
       titleRef.current?.focus();
       return;
     }
-    onSave(formData);
+    if (isSaving) return;
+    setIsSaving(true);
+    const saved = await onSave(formData);
+    setIsSaving(false);
+    if (!saved) return;
     
     // Format text for sharing
     const shareText = `${formData.title} ${formData.dueDate} ${formData.visitTime || ""}`.trim();
@@ -335,21 +391,44 @@ export function TaskModal({
     onClose();
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (selectedFiles.length === 0) return;
 
-    Array.from(files).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setFormData(prev => ({
-          ...prev,
-          attachments: [...(prev.attachments || []), base64]
-        }));
-      };
-      reader.readAsDataURL(file);
-    });
+    const currentCount = formData.attachments?.length || 0;
+    const remainingSlots = MAX_TASK_ATTACHMENTS - currentCount;
+    if (remainingSlots <= 0) {
+      showToast("첨부 이미지는 최대 3장까지 등록할 수 있습니다.", "warning");
+      return;
+    }
+
+    const imageFiles = selectedFiles.filter((file) => file.type.startsWith("image/"));
+    if (imageFiles.length !== selectedFiles.length) {
+      showToast("작업 첨부는 이미지 파일만 지원합니다.", "warning");
+    }
+
+    const filesToProcess = imageFiles.slice(0, remainingSlots);
+    if (imageFiles.length > remainingSlots) {
+      showToast(`첨부 이미지는 최대 ${MAX_TASK_ATTACHMENTS}장까지 등록됩니다.`, "warning");
+    }
+
+    const compressedImages: string[] = [];
+    for (const file of filesToProcess) {
+      try {
+        compressedImages.push(await compressTaskImage(file));
+      } catch (err) {
+        console.error("Task attachment compression failed:", err);
+        showToast(`${file.name} 이미지를 첨부할 수 없습니다.`, "error");
+      }
+    }
+
+    if (compressedImages.length > 0) {
+      setFormData((prev) => ({
+        ...prev,
+        attachments: [...(prev.attachments || []), ...compressedImages].slice(0, MAX_TASK_ATTACHMENTS),
+      }));
+    }
   };
 
   const removeAttachment = (index: number) => {
@@ -379,11 +458,20 @@ export function TaskModal({
           <div className="flex gap-2">
             {task && onDelete && (
               <button
-                onClick={() => {
-                  onDelete(task.id);
-                  onClose();
+                disabled={isSaving}
+                onClick={async () => {
+                  if (!deleteConfirmationActive) {
+                    setDeleteConfirmationActive(true);
+                    showToast("휴지통 버튼을 한 번 더 누르면 작업이 삭제됩니다.", "warning");
+                    return;
+                  }
+                  setIsSaving(true);
+                  const deleted = await onDelete(task.id);
+                  setIsSaving(false);
+                  if (deleted) onClose();
                 }}
-                className="p-2 text-red-400 hover:bg-red-400/10 rounded-xl transition-colors"
+                className={`p-2 rounded-xl transition-colors ${deleteConfirmationActive ? "bg-red-600 text-white" : "text-red-400 hover:bg-red-400/10"}`}
+                title={deleteConfirmationActive ? "한 번 더 눌러 삭제" : "작업 삭제"}
               >
                 <Trash2 className="w-5 h-5" />
               </button>
@@ -645,7 +733,7 @@ export function TaskModal({
                   <input 
                     type="file" 
                     multiple 
-                    accept="image/*,application/pdf" 
+                    accept="image/*"
                     className="hidden" 
                     onChange={handleFileUpload}
                   />
@@ -675,6 +763,7 @@ export function TaskModal({
           <button
             type="button"
             onClick={handleCompleteTask}
+            disabled={isSaving}
             className={`flex-1 ${formData.status === "완료" ? "bg-gray-600 hover:bg-gray-500 shadow-gray-500/20" : "bg-emerald-500 hover:bg-emerald-400 shadow-emerald-500/20"} text-white font-bold py-4 rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 shadow-xl active:scale-95 transition-all text-[10px] sm:text-xs tracking-tighter`}
           >
             <Check className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
@@ -683,14 +772,16 @@ export function TaskModal({
           <button
             type="submit"
             form="task-form"
+            disabled={isSaving}
             className="flex-1 bg-[#2d2d2d] hover:bg-[#363636] text-white font-bold py-4 rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 active:scale-95 transition-all border border-white/5 text-[10px] sm:text-xs tracking-tighter"
           >
             <Check className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span>작업 저장하기</span>
+            <span>{isSaving ? "저장 중..." : "작업 저장하기"}</span>
           </button>
           <button
             type="button"
             onClick={handleSaveAndShare}
+            disabled={isSaving}
             className="flex-1 bg-[#2d2d2d] hover:bg-[#363636] text-white font-bold py-4 rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 active:scale-95 transition-all border border-white/5 text-[10px] sm:text-xs tracking-tighter"
           >
             <Share2 className="w-4 h-4 sm:w-5 sm:h-5 text-white" />

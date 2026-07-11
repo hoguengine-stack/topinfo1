@@ -3,6 +3,7 @@ import { Task } from "../types";
 import { db, auth } from "../firebase";
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
 
 enum OperationType {
   CREATE = 'create',
@@ -32,7 +33,7 @@ interface FirestoreErrorInfo {
   }
 }
 
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+function getFirestoreErrorInfo(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -52,12 +53,13 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  return errInfo;
 }
 
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const { user, isEmployee } = useAuth();
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (!user || !isEmployee) {
@@ -77,14 +79,16 @@ export function useTasks() {
       fetchedTasks.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       setTasks(fetchedTasks);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, path);
+      getFirestoreErrorInfo(error, OperationType.GET, path);
+      setTasks([]);
+      showToast("작업 목록을 불러오지 못했습니다. 로그인 상태와 Firebase 연결을 확인해 주세요.", "error");
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, isEmployee, showToast]);
 
   const addTask = async (task: Omit<Task, "id" | "updatedAt" | "createdAt">) => {
-    if (!user) return;
+    if (!user) return false;
     const path = `tasks`;
     const taskId = Math.random().toString(36).substring(2, 9);
     const now = new Date().toISOString();
@@ -97,8 +101,11 @@ export function useTasks() {
     
     try {
       await setDoc(doc(db, path, taskId), newTask);
+      return true;
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `${path}/${taskId}`);
+      getFirestoreErrorInfo(error, OperationType.CREATE, `${path}/${taskId}`);
+      showToast("작업 저장에 실패했습니다.", "error");
+      return false;
     }
   };
 
@@ -106,7 +113,7 @@ export function useTasks() {
     id: string,
     updates: Partial<Omit<Task, "id" | "updatedAt" | "createdAt">>,
   ) => {
-    if (!user) return;
+    if (!user) return false;
     const path = `tasks/${id}`;
     
     try {
@@ -114,19 +121,25 @@ export function useTasks() {
         ...updates,
         updatedAt: new Date().toISOString()
       });
+      return true;
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, path);
+      getFirestoreErrorInfo(error, OperationType.UPDATE, path);
+      showToast("작업 수정에 실패했습니다.", "error");
+      return false;
     }
   };
 
   const deleteTask = async (id: string) => {
-    if (!user) return;
+    if (!user) return false;
     const path = `tasks/${id}`;
     
     try {
       await deleteDoc(doc(db, "tasks", id));
+      return true;
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, path);
+      getFirestoreErrorInfo(error, OperationType.DELETE, path);
+      showToast("작업 삭제에 실패했습니다.", "error");
+      return false;
     }
   };
 

@@ -31,6 +31,15 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
 }) => {
   const { showToast } = useToast();
 
+  const saveFooterInfo = async () => {
+    try {
+      await setDoc(doc(db, "settings", "footer"), footerInfo);
+    } catch (err) {
+      console.error("Footer settings save failed:", err);
+      showToast("하단 회사 정보 저장에 실패했습니다.", "error");
+    }
+  };
+
   const renderLogo = () => (
     <div
       className="flex items-center gap-3 cursor-pointer select-none"
@@ -61,11 +70,11 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                   <input
                     type="text"
                     value={footerInfo.companyName}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const updated = { ...footerInfo, companyName: e.target.value };
                       setFooterInfo(updated);
-                      await setDoc(doc(db, "settings", "footer"), updated);
                     }}
+                    onBlur={saveFooterInfo}
                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>
@@ -74,11 +83,11 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                   <input
                     type="text"
                     value={footerInfo.ceo}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const updated = { ...footerInfo, ceo: e.target.value };
                       setFooterInfo(updated);
-                      await setDoc(doc(db, "settings", "footer"), updated);
                     }}
+                    onBlur={saveFooterInfo}
                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>
@@ -87,11 +96,11 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                   <input
                     type="text"
                     value={footerInfo.address}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const updated = { ...footerInfo, address: e.target.value };
                       setFooterInfo(updated);
-                      await setDoc(doc(db, "settings", "footer"), updated);
                     }}
+                    onBlur={saveFooterInfo}
                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>
@@ -100,11 +109,11 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                   <input
                     type="text"
                     value={footerInfo.phone}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const updated = { ...footerInfo, phone: e.target.value };
                       setFooterInfo(updated);
-                      await setDoc(doc(db, "settings", "footer"), updated);
                     }}
+                    onBlur={saveFooterInfo}
                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>
@@ -113,11 +122,11 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                   <input
                     type="text"
                     value={footerInfo.email}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const updated = { ...footerInfo, email: e.target.value };
                       setFooterInfo(updated);
-                      await setDoc(doc(db, "settings", "footer"), updated);
                     }}
+                    onBlur={saveFooterInfo}
                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>
@@ -126,11 +135,11 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                   <input
                     type="text"
                     value={footerInfo.copyright}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const updated = { ...footerInfo, copyright: e.target.value };
                       setFooterInfo(updated);
-                      await setDoc(doc(db, "settings", "footer"), updated);
                     }}
+                    onBlur={saveFooterInfo}
                     className="bg-white border border-slate-200 rounded px-2 py-1 text-xs focus:ring-2 focus:ring-blue-505/20 focus:border-blue-505 outline-none"
                   />
                 </div>

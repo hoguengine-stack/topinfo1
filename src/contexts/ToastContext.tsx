@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Info, CheckCircle, AlertTriangle, XCircle, X } from "lucide-react";
 
@@ -17,17 +17,22 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const showToast = (message: string, type: Toast["type"] = "success") => {
+  const showToast = useCallback((message: string, type: Toast["type"] = "success") => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, message, type }]);
-  };
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== id));
+    }, 5000);
+  }, []);
 
-  const removeToast = (id: string) => {
+  const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
+  }, []);
+
+  const value = useMemo(() => ({ showToast }), [showToast]);
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={value}>
       {children}
       {/* Toast Render Portal */}
       <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0">

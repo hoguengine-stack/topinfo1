@@ -18,6 +18,8 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
   const [activeTab, setActiveTab] = useState<"consult" | "paper">("consult");
   const [consults, setConsults] = useState<Consultation[]>([]);
   const [papers, setPapers] = useState<PaperRequest[]>([]);
+  const [consultLoadError, setConsultLoadError] = useState("");
+  const [paperLoadError, setPaperLoadError] = useState("");
   
   // Filters
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "complete">("pending");
@@ -46,7 +48,11 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
       // Sort by newest first
       items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setConsults(items);
-    }, (err) => console.error(err));
+      setConsultLoadError("");
+    }, (err) => {
+      console.error("Consultations listener failed:", err);
+      setConsultLoadError("상담 신청 내역을 불러오지 못했습니다.");
+    });
 
     // Subscribe to Paper Requests
     const unsubPapers = onSnapshot(collection(db, "paper_requests"), (snap) => {
@@ -55,7 +61,11 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
       // Sort by newest first
       items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setPapers(items);
-    }, (err) => console.error(err));
+      setPaperLoadError("");
+    }, (err) => {
+      console.error("Paper requests listener failed:", err);
+      setPaperLoadError("용지 배송요청 내역을 불러오지 못했습니다.");
+    });
 
     return () => {
       unsubConsults();
@@ -247,6 +257,11 @@ export function BackConsultations({ assignees, currentUserId }: BackConsultation
 
   return (
     <div className="bg-[#121212] min-h-screen text-slate-100 p-4 md:p-6 pb-24">
+      {(activeTab === "consult" ? consultLoadError : paperLoadError) ? (
+        <div className="mb-4 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300">
+          {activeTab === "consult" ? consultLoadError : paperLoadError} Firebase 연결과 로그인 권한을 확인해 주세요.
+        </div>
+      ) : null}
       {/* 1. Header Information Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div 

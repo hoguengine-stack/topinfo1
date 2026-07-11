@@ -1,6 +1,6 @@
 import React, { useState, useEffect, createContext, useContext } from "react";
 import { db } from "../firebase";
-import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, deleteField, getDocs, query, where } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
 import { ResourceItem } from "../types";
 import {
@@ -11,62 +11,6 @@ import {
 import { getBoardLoadErrorMessage } from "../utils/firebaseErrors";
 import { Lock, Unlock, Search, FileText, Download, Reply, Trash, PlusCircle } from "lucide-react";
 import { useToast } from "../contexts/ToastContext";
-
-const MOCK_SUGGESTIONS = [
-  {
-    id: "mock-sug-1",
-    title: "구형 단말기 K-1000 교체 주기 문의드립니다.",
-    content: "신도림 상가에서 음식점을 운영 중인 가맹점입니다. 현재 K-1000 유선 단말기를 3년째 사용하고 있는데, 최근 카드를 긁을 때 인식 속도가 이전보다 많이 느려진 것 같습니다. 최신 K-3000 모델로 교체 비용이나 약정 조건은 어떻게 되는지 안내 부탁드립니다.",
-    authorName: "오성식당",
-    isSecret: false,
-    authorId: "mock-user-1",
-    replies: [
-      {
-        id: "mock-rep-1",
-        authorName: "김팀장",
-        content: "안녕하세요 오성식당 사장님! 탑정보통신 기술지원팀입니다. 가맹점 우대 조건으로 3년 이상 약정 유지 시 K-3000 신형 유선 단말기 무상 기기교체가 가능하십니다. 내일 신도림 지점 담당 엔지니어가 방문하여 점검해 드리겠습니다.",
-        createdAt: new Date(Date.now() - 3600000).toISOString(),
-      }
-    ],
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: "mock-sug-2",
-    title: "식음료 전용 무인 결제 키오스크 도입 상담 건",
-    content: "반찬 전문 가맹점 오픈 예정입니다. 협소한 공간이라 21인치 미니 키오스크 1대 설치를 희망하는데, 메뉴 등록 대행 및 용지 공급 조건이 궁금합니다.",
-    authorName: "가람반찬",
-    isSecret: true,
-    password: "1234",
-    authorId: "mock-user-2",
-    replies: [],
-    createdAt: new Date(Date.now() - 172800000).toISOString(),
-  }
-];
-
-const MOCK_RESOURCES = [
-  {
-    id: "mock-res-1",
-    title: "탑정보통신 프리미엄 통합 서명패드 드라이버 v4.1",
-    description: "K-3000 단말기 및 POS 결제 연동 시 서명 패드 인식이 안 되거나 인식 오류가 날 때 설치하는 최신 Windows 통합 드라이버 파일입니다.",
-    downloadUrl: "/downloads/SignPad_Driver_v4.1.zip",
-    fileSize: "12.4 MB",
-    fileType: "ZIP / Driver",
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    authorName: "최팀장",
-    authorId: "mock-author-1"
-  },
-  {
-    id: "mock-res-2",
-    title: "POS 가맹점 긴급 세무 자가 진단 매뉴얼 PDF",
-    description: "부가세 및 종합소득세 신고 시 매출 누락 대조 및 자동 마감 매출 조회 방법에 대한 상세 자가 진단 가이드라인입니다.",
-    downloadUrl: "/downloads/Tax_Manual_v1.0.pdf",
-    fileSize: "2.1 MB",
-    fileType: "PDF / Document",
-    createdAt: new Date(Date.now() - 172800000).toISOString(),
-    authorName: "최팀장",
-    authorId: "mock-author-1"
-  }
-];
 
 // =========================================================================
 // 1. Suggestion Board Context & Provider
@@ -89,8 +33,6 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
   const [filteredPosts, setFilteredPosts] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [selectedPost, setSelectedPost] = useState<any | null>(null);
-  const [unlockPassword, setUnlockPassword] = useState("");
-  const [unlockError, setUnlockError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [commentText, setCommentText] = useState("");
   const [confirmDeletePostId, setConfirmDeletePostId] = useState<string | null>(null);
@@ -100,25 +42,81 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
     content: "",
     authorName: "",
     isSecret: false,
-    password: "",
   });
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "suggestions"), (snap) => {
+    setLoadError("");
+    let cancelled = false;
+    let publicPosts: any[] = [];
+    let ownedSecretPosts: any[] = [];
+    const unsubscribers: Array<() => void> = [];
+
+    const publishPosts = () => {
+      const merged = new Map<string, any>();
+      [...publicPosts, ...ownedSecretPosts].forEach((post) => merged.set(post.id, post));
+      setPosts(
+        Array.from(merged.values()).sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        ),
+      );
+    };
+
+    const readSnapshot = (snap: any) => {
       const items: any[] = [];
-      snap.forEach((d) => {
-        items.push({ id: d.id, ...d.data() });
+      snap.forEach((item: any) => {
+        const data = item.data();
+        items.push({ id: item.id, ...data });
+        if (isAdmin && Object.prototype.hasOwnProperty.call(data, "password")) {
+          updateDoc(doc(db, "suggestions", item.id), { password: deleteField() }).catch((err) => {
+            console.warn("Legacy suggestion password cleanup failed:", err);
+          });
+        }
       });
-      items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setPosts(items);
-      setLoadError("");
-    }, (err) => {
+      return items;
+    };
+
+    const handleListenerError = (err: unknown) => {
       console.error("Suggestion board listener failed:", err);
-      setPosts(MOCK_SUGGESTIONS);
-      setLoadError(getBoardLoadErrorMessage(err) + " (테스트 모드: 할당량 초과 중에도 게시물 및 답변 등록 등 모든 기능이 브라우저 로컬 메모리 상에서 작동합니다.)");
-    });
-    return () => unsub();
-  }, []);
+      setLoadError(getBoardLoadErrorMessage(err));
+    };
+
+    if (isAdmin) {
+      unsubscribers.push(onSnapshot(collection(db, "suggestions"), (snap) => {
+        publicPosts = readSnapshot(snap);
+        ownedSecretPosts = [];
+        publishPosts();
+      }, handleListenerError));
+    } else {
+      const loadPublicPosts = async () => {
+        try {
+          const publicSnapshot = await getDocs(
+            query(collection(db, "suggestions"), where("isSecret", "==", false)),
+          );
+          if (cancelled) return;
+          publicPosts = readSnapshot(publicSnapshot);
+
+          if (user?.sub) {
+            const ownedSnapshot = await getDocs(
+              query(collection(db, "suggestions"), where("authorId", "==", user.sub)),
+            );
+            if (cancelled) return;
+            ownedSecretPosts = readSnapshot(ownedSnapshot).filter((post) => post.isSecret === true);
+          }
+
+          publishPosts();
+        } catch (err) {
+          if (!cancelled) handleListenerError(err);
+        }
+      };
+
+      void loadPublicPosts();
+    }
+
+    return () => {
+      cancelled = true;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [isAdmin, user?.sub]);
 
   useEffect(() => {
     if (!search.trim()) {
@@ -138,40 +136,31 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
       showToast("모든 빈칸을 채워주세요.", "warning");
       return;
     }
-    if (newPost.isSecret && !newPost.password) {
-      showToast("비밀 게시글의 수정/조회를 위한 비밀번호를 입력해주세요.", "warning");
+    if (newPost.isSecret && !user) {
+      showToast("비밀글은 로그인한 사용자만 등록할 수 있습니다.", "warning");
       return;
     }
 
     try {
-      await addDoc(collection(db, "suggestions"), {
+      const postData = {
         title: newPost.title,
         content: newPost.content,
         authorName: newPost.authorName,
         isSecret: newPost.isSecret,
-        password: newPost.password ? newPost.password : "",
-        authorId: user?.sub || "anonymous",
-        replies: [],
-        createdAt: new Date().toISOString(),
-      });
-      setIsCreating(false);
-      setNewPost({ title: "", content: "", authorName: "", isSecret: false, password: "" });
-    } catch (err) {
-      console.warn("Firestore save failed, saving post locally:", err);
-      const localPost = {
-        id: "local-sug-" + Math.random().toString(36).substring(2, 9),
-        title: newPost.title,
-        content: newPost.content,
-        authorName: newPost.authorName,
-        isSecret: newPost.isSecret,
-        password: newPost.password ? newPost.password : "",
         authorId: user?.sub || "anonymous",
         replies: [],
         createdAt: new Date().toISOString(),
       };
-      setPosts((prev) => [localPost, ...prev]);
+      const createdPost = await addDoc(collection(db, "suggestions"), postData);
+      if (!isAdmin) {
+        setPosts((prev) => [{ id: createdPost.id, ...postData }, ...prev]);
+      }
       setIsCreating(false);
-      setNewPost({ title: "", content: "", authorName: "", isSecret: false, password: "" });
+      setNewPost({ title: "", content: "", authorName: "", isSecret: false });
+      showToast("건의사항이 등록되었습니다.", "success");
+    } catch (err) {
+      console.error("Suggestion save failed:", err);
+      showToast("건의사항 저장에 실패했습니다. 입력 내용은 유지되므로 잠시 후 다시 시도해 주세요.", "error");
     }
   };
 
@@ -192,53 +181,30 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
 
       setSelectedPost((prev: any) => ({ ...prev, replies: updatedReplies }));
       setCommentText("");
+      showToast("답변이 등록되었습니다.", "success");
     } catch (err) {
-      console.warn("Firestore update failed, updating reply locally:", err);
-      const reply = {
-        id: "local-rep-" + Math.random().toString(36).substring(2, 9),
-        authorName: profile?.nickname || "관리자",
-        content: commentText,
-        createdAt: new Date().toISOString(),
-      };
-      const updatedReplies = [...(selectedPost.replies || []), reply];
-      setSelectedPost((prev: any) => ({ ...prev, replies: updatedReplies }));
-      setPosts((prevPosts) =>
-        prevPosts.map((p) => (p.id === selectedPost.id ? { ...p, replies: updatedReplies } : p))
-      );
-      setCommentText("");
+      console.error("Suggestion reply save failed:", err);
+      showToast("답변 저장에 실패했습니다. 작성한 내용은 유지됩니다.", "error");
     }
   };
 
   const handleDeletePost = async (postId: string) => {
     try {
       await deleteDoc(doc(db, "suggestions", postId));
+      setPosts((prev) => prev.filter((post) => post.id !== postId));
       setSelectedPost(null);
       setConfirmDeletePostId(null);
+      showToast("건의사항이 삭제되었습니다.", "success");
     } catch (err) {
-      console.warn("Firestore delete failed, deleting post locally:", err);
-      setPosts((prev) => prev.filter((p) => p.id !== postId));
-      setSelectedPost(null);
-      setConfirmDeletePostId(null);
-    }
-  };
-
-  const handleUnlockAndOpen = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedPost) return;
-    if (unlockPassword === selectedPost.password || isAdmin) {
-      setSelectedPost((prev: any) => ({ ...prev, _unlocked: true }));
-      setUnlockError("");
-      setUnlockPassword("");
-    } else {
-      setUnlockError("비밀번호가 일치하지 않습니다.");
+      console.error("Suggestion delete failed:", err);
+      showToast("건의사항 삭제에 실패했습니다.", "error");
     }
   };
 
   const canViewDetail = (post: any) => {
     if (!post.isSecret) return true;
     if (isAdmin) return true;
-    if (post.authorId === user?.sub && user?.sub !== "anonymous") return true;
-    return post._unlocked === true;
+    return post.authorId === user?.sub && user?.sub !== "anonymous";
   };
 
   return (
@@ -252,10 +218,6 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
       setSearch,
       selectedPost,
       setSelectedPost,
-      unlockPassword,
-      setUnlockPassword,
-      unlockError,
-      setUnlockError,
       commentText,
       setCommentText,
       confirmDeletePostId,
@@ -268,7 +230,6 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
       handleCreatePost,
       handleAddReply,
       handleDeletePost,
-      handleUnlockAndOpen,
       canViewDetail,
     }}>
       {children}
@@ -329,10 +290,6 @@ export function SuggestionBoardBody() {
     filteredPosts,
     selectedPost,
     setSelectedPost,
-    unlockPassword,
-    setUnlockPassword,
-    unlockError,
-    setUnlockError,
     commentText,
     setCommentText,
     confirmDeletePostId,
@@ -345,7 +302,6 @@ export function SuggestionBoardBody() {
     handleCreatePost,
     handleAddReply,
     handleDeletePost,
-    handleUnlockAndOpen,
     canViewDetail,
   } = useSuggestionBoard();
 
@@ -389,32 +345,18 @@ export function SuggestionBoardBody() {
                   <input
                     type="checkbox"
                     checked={newPost.isSecret}
+                    disabled={!user}
                     onChange={(e) => setNewPost({ ...newPost, isSecret: e.target.checked })}
                     className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                   />
                   <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
                     {newPost.isSecret ? <Lock className="w-3.5 h-3.5 text-orange-500" /> : <Unlock className="w-3.5 h-3.5 text-slate-400" />}
-                    비밀글로 설정하기
+                    {user ? "비밀글로 설정하기" : "비밀글은 로그인 후 등록 가능"}
                   </span>
                 </label>
               </div>
             </div>
           </div>
-
-          {newPost.isSecret && (
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">조회용 비밀번호 (숫자 4자리) *</label>
-              <input
-                type="password"
-                required
-                maxLength={4}
-                placeholder="비밀번호 4자리"
-                value={newPost.password}
-                onChange={(e) => setNewPost({ ...newPost, password: e.target.value })}
-                className="w-44 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-center tracking-[0.5em] font-bold text-lg focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
-              />
-            </div>
-          )}
 
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">건의 글 제목 *</label>
@@ -470,7 +412,6 @@ export function SuggestionBoardBody() {
                         setSelectedPost(null);
                       } else {
                         setSelectedPost(post);
-                        setUnlockError("");
                       }
                     }}
                     className="grid grid-cols-1 md:grid-cols-12 items-center px-6 py-4 cursor-pointer text-sm"
@@ -500,32 +441,15 @@ export function SuggestionBoardBody() {
                   {selectedPost?.id === post.id && (
                     <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-6 md:px-12">
                       {!canViewDetail(post) ? (
-                        <form onSubmit={handleUnlockAndOpen} className="max-w-md mx-auto text-center space-y-4 py-4">
+                        <div className="max-w-md mx-auto text-center space-y-4 py-4">
                           <div className="w-12 h-12 bg-orange-50 border border-orange-100 rounded-full flex items-center justify-center mx-auto mb-2 text-orange-500">
                             <Lock className="w-5 h-5" />
                           </div>
                           <div>
-                            <h4 className="text-sm font-bold text-slate-800">이 글은 비밀 보장을 위해 잠겨있습니다</h4>
-                            <p className="text-xs text-slate-500 mt-1">작성 시 정하신 숫자 비밀번호 4자리를 입력해주세요.</p>
+                            <h4 className="text-sm font-bold text-slate-800">비밀글 열람 권한이 없습니다</h4>
+                            <p className="text-xs text-slate-500 mt-1">작성에 사용한 계정으로 로그인하거나 관리자에게 문의해 주세요.</p>
                           </div>
-                          <div className="flex gap-2 justify-center items-center">
-                            <input
-                              type="password"
-                              maxLength={4}
-                              placeholder="••••"
-                              value={unlockPassword}
-                              onChange={(e) => { setUnlockPassword(e.target.value); setUnlockError(""); }}
-                              className="bg-white border border-slate-200 text-center text-lg w-24 py-2 font-bold tracking-[0.2em] rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600/20"
-                            />
-                            <button
-                              type="submit"
-                              className="bg-slate-900 border border-transparent text-white text-xs font-semibold px-4 py-2.5 rounded-xl hover:bg-slate-800 transition"
-                            >
-                              게시글 해제
-                            </button>
-                          </div>
-                          {unlockError && <p className="text-xs text-red-500 font-semibold">{unlockError}</p>}
-                        </form>
+                        </div>
                       ) : (
                         <div className="space-y-6">
                           <div className="border-b border-slate-100 pb-5">
@@ -682,6 +606,26 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
   };
 
   useEffect(() => {
+    if (!isAdmin) {
+      let cancelled = false;
+      getDocs(collection(db, "resources")).then((snap) => {
+        if (cancelled) return;
+        const items: ResourceItem[] = [];
+        snap.forEach((item) => items.push({ id: item.id, ...item.data() } as ResourceItem));
+        items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setResources(items);
+        setLoadError("");
+      }).catch((err) => {
+        if (cancelled) return;
+        console.error("Resource board load failed:", err);
+        setResources([]);
+        setLoadError(getBoardLoadErrorMessage(err));
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const unsub = onSnapshot(collection(db, "resources"), (snap) => {
       const items: ResourceItem[] = [];
       snap.forEach((d) => {
@@ -692,11 +636,11 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
       setLoadError("");
     }, (err) => {
       console.error("Resource board listener failed:", err);
-      setResources(MOCK_RESOURCES);
-      setLoadError(getBoardLoadErrorMessage(err) + " (테스트 모드: 할당량 초과 중에도 자료 등록 및 삭제 기능이 브라우저 로컬 메모리 상에서 작동합니다.)");
+      setResources([]);
+      setLoadError(getBoardLoadErrorMessage(err));
     });
     return () => unsub();
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     fetch("/downloads/manifest.json", { cache: "no-store" })
@@ -727,22 +671,10 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
       );
       setIsUploading(false);
       setNewResource({ title: "", description: "", downloadUrl: "", fileSize: "", fileType: "" });
+      showToast("자료 링크가 등록되었습니다.", "success");
     } catch (err) {
-      console.warn("Firestore upload failed, adding resource locally:", err);
-      const localItem = {
-        id: "local-res-" + Math.random().toString(36).substring(2, 9),
-        title: newResource.title,
-        description: newResource.description,
-        downloadUrl: newResource.downloadUrl,
-        fileSize: newResource.fileSize || "1.0 MB",
-        fileType: newResource.fileType || "ZIP / Utility",
-        createdAt: new Date().toISOString(),
-        authorName: profile?.nickname || "대표 관리자",
-        authorId: user?.sub,
-      } as ResourceItem;
-      setResources((prev) => [localItem, ...prev]);
-      setIsUploading(false);
-      setNewResource({ title: "", description: "", downloadUrl: "", fileSize: "", fileType: "" });
+      console.error("Resource save failed:", err);
+      showToast("자료 링크 저장에 실패했습니다. 입력 내용은 유지됩니다.", "error");
     }
   };
 
@@ -750,10 +682,10 @@ export function ResourceBoardProvider({ children }: { children: React.ReactNode 
     try {
       await deleteDoc(doc(db, "resources", item.id));
       setConfirmDeleteResourceId(null);
+      showToast("자료가 삭제되었습니다.", "success");
     } catch (err) {
-      console.warn("Firestore delete failed, deleting resource locally:", err);
-      setResources((prev) => prev.filter((r) => r.id !== item.id));
-      setConfirmDeleteResourceId(null);
+      console.error("Resource delete failed:", err);
+      showToast("자료 삭제에 실패했습니다.", "error");
     }
   };
 

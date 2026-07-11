@@ -18,6 +18,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [consults, setConsults] = useState<Consultation[]>([]);
   const [papers, setPapers] = useState<PaperRequest[]>([]);
+  const [loadError, setLoadError] = useState("");
 
   // Page Editor States
   const [selectedPage, setSelectedPage] = useState<CMSPage | null>(null);
@@ -48,6 +49,9 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       if (items.length > 0 && !selectedPage) {
         setSelectedPage(items[0]);
       }
+    }, (err) => {
+      console.error("CMS pages listener failed:", err);
+      setLoadError("홈페이지 페이지 정보를 불러오지 못했습니다.");
     });
 
     // Subscriber Products
@@ -55,6 +59,9 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       const items: Product[] = [];
       snap.forEach(d => items.push({ id: d.id, ...d.data() } as Product));
       setProducts(items);
+    }, (err) => {
+      console.error("Products listener failed:", err);
+      setLoadError("제품 정보를 불러오지 못했습니다.");
     });
 
     // Subscriber Consultations
@@ -63,6 +70,9 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       snap.forEach(d => items.push({ id: d.id, ...d.data() } as Consultation));
       items.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setConsults(items);
+    }, (err) => {
+      console.error("Consultations listener failed:", err);
+      setLoadError("상담 신청 내역을 불러오지 못했습니다.");
     });
 
     // Subscriber Paper Requests
@@ -71,6 +81,9 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
       snap.forEach(d => items.push({ id: d.id, ...d.data() } as PaperRequest));
       items.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setPapers(items);
+    }, (err) => {
+      console.error("Paper requests listener failed:", err);
+      setLoadError("용지 신청 내역을 불러오지 못했습니다.");
     });
 
     return () => {
@@ -338,6 +351,11 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
 
       {/* Admin Central Area */}
       <div className="flex-1 overflow-y-auto p-8 md:p-10">
+        {loadError ? (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {loadError} Firebase 연결과 로그인 권한을 확인해 주세요.
+          </div>
+        ) : null}
         
         {/* --- Dynamic Page Builder --- */}
         {activeSubTab === "cms" && (

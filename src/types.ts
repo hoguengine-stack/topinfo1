@@ -71,7 +71,6 @@ export interface Suggestion {
   authorName: string;
   authorId?: string;
   isSecret: boolean;
-  password?: string; // For anonymous secret posts
   replies?: Comment[];
   createdAt: string;
 }
