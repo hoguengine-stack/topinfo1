@@ -1,13 +1,23 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import {
   createDefaultCMSPages,
+  getPublicBlockSubtitle,
   getNavigationLabel,
   getOrderedVisiblePages,
+  HOME_SECTOR_MEDIA_SOURCE_IDS,
+  HOME_SECTOR_ITEMS,
+  HOME_SERVICE_ITEMS,
+  HOME_SYSTEM_GRAPHICS,
   mergeBlockFields,
+  PUBLIC_DESIGN_VERSION,
   restoreStandardCMSPages,
 } from "./cmsSettings";
 import { CMSBlock, CMSPage, NavigationSettings } from "../types";
+import { DEPRECATED_PUBLIC_MEDIA, PUBLIC_MEDIA } from "./publicMedia";
+import { SECTOR_CONTENT_DEFAULTS } from "./sectorContent";
 
 const pages: CMSPage[] = [
   { id: "home", slug: "home", title: "홈", isCustom: false, createdAt: "now", blocks: [] },
@@ -46,11 +56,133 @@ test("mergeBlockFields updates only the selected block", () => {
 test("default CMS pages provide renderable public homepage content", () => {
   const defaultPages = createDefaultCMSPages("fixed-date");
   const home = defaultPages.find((page) => page.id === "home");
+  const aiPhone = defaultPages.find((page) => page.id === "uplus_ai_phone");
 
   assert.ok(home);
   assert.equal(home.slug, "home");
   assert.ok(home.blocks.length >= 1);
   assert.equal(home.createdAt, "fixed-date");
+  assert.ok(aiPhone);
+  assert.equal(aiPhone.blocks[0].imageUrl, PUBLIC_MEDIA.homeTelecom.aiPhoneHero);
+});
+
+test("default home media excludes retired assets and keeps physical media unique", () => {
+  const home = createDefaultCMSPages("fixed-date").find((page) => page.id === "home");
+  assert.ok(home);
+
+  const urls = home.blocks.flatMap((block) => [
+    block.imageUrl,
+    ...(block.items || []).flatMap((item) => [item.imageUrl, item.staticImageUrl]),
+  ]).filter((url): url is string => Boolean(url));
+  Object.values(DEPRECATED_PUBLIC_MEDIA).forEach((deprecatedPath) => {
+    assert.equal(urls.includes(deprecatedPath), false);
+  });
+  assert.equal(new Set(urls).size, urls.length);
+
+  const hero = home.blocks.find((block) => block.id === "home-hero");
+  const offer = home.blocks.find((block) => block.id === "home-package");
+  const telecom = home.blocks.find((block) => block.id === "home-internet");
+  const services = home.blocks.find((block) => block.id === "home-services");
+
+  assert.equal(hero?.imageUrl, undefined);
+  assert.equal(offer?.imageUrl, PUBLIC_MEDIA.homePackage.overview);
+  assert.equal(telecom?.imageUrl, undefined);
+  assert.equal(services, undefined);
+  assert.equal(offer?.items?.find((item) => item.title.includes("토스포스"))?.imageUrl, undefined);
+
+  const generatedOverviewItems = [
+    ...(hero?.items || []).filter((item) => /AI전화|CCTV|인터넷 500M/.test(item.title)),
+    ...(offer?.items || [])
+      .filter((item) => /토스포스|AI전화|CCTV|인터넷전화|500M 인터넷/.test(item.title)),
+  ];
+  assert.ok(generatedOverviewItems.length >= 7);
+  assert.equal(generatedOverviewItems.every((item) => !item.imageUrl), true);
+});
+
+test("default public pages use existing local media without same-page repetition", () => {
+  const deprecatedPaths = new Set<string>(Object.values(DEPRECATED_PUBLIC_MEDIA));
+
+  createDefaultCMSPages("fixed-date").forEach((page) => {
+    const urls = page.blocks.flatMap((block) => [
+      block.imageUrl,
+      ...(block.items || []).flatMap((item) => [item.imageUrl, item.staticImageUrl]),
+    ]).filter((url): url is string => Boolean(url));
+
+    assert.equal(new Set(urls).size, urls.length, `${page.id} has repeated media`);
+    urls.forEach((url) => {
+      assert.equal(deprecatedPaths.has(url), false, `${page.id} uses retired media: ${url}`);
+      assert.equal(url.startsWith("/assets/"), true, `${page.id} uses non-local media: ${url}`);
+      assert.equal(fs.existsSync(path.join(process.cwd(), "public", url)), true, `${page.id} is missing media: ${url}`);
+    });
+  });
+});
+
+test("home sectors use unique source content, correct industry media, and motion in every industry", () => {
+  const activeSourceIds: string[] = [];
+  const allUrls = HOME_SECTOR_ITEMS.flatMap((item) => {
+    assert.ok((item.mediaPlaylist?.length || 0) >= 4, `${item.title} has fewer than four scenes`);
+    const playlist = item.mediaPlaylist || [];
+    const hasMotion = playlist.some((media) => {
+      const localPath = path.join(process.cwd(), "public", media.imageUrl);
+      assert.equal(fs.existsSync(localPath), true, `${item.title} is missing ${media.imageUrl}`);
+      const bytes = fs.readFileSync(localPath);
+      return bytes.includes(Buffer.from("ANMF")) || bytes.includes(Buffer.from("fcTL"));
+    });
+    assert.equal(hasMotion, true, `${item.title} has no animated scene`);
+    playlist.forEach((media) => {
+      const sourceId = HOME_SECTOR_MEDIA_SOURCE_IDS[media.imageUrl];
+      assert.ok(sourceId, `${item.title} has no canonical source id for ${media.imageUrl}`);
+      activeSourceIds.push(sourceId);
+    });
+    return playlist.map((media) => media.imageUrl);
+  });
+  assert.equal(new Set(allUrls).size, allUrls.length, "sector playlists repeat the same media");
+  assert.equal(new Set(activeSourceIds).size, activeSourceIds.length, "sector playlists reuse the same original content under another file name");
+
+  const cafeUrls = HOME_SECTOR_ITEMS.find((item) => item.title === "카페·베이커리")?.mediaPlaylist?.map((media) => media.imageUrl) || [];
+  assert.equal(cafeUrls.includes("/assets/sector/feature-cafe-kiosk.webp"), false, "cafe repeats the same kiosk source twice");
+
+  const restaurantUrls = HOME_SECTOR_ITEMS.find((item) => item.title === "음식점")?.mediaPlaylist?.map((media) => media.imageUrl) || [];
+  assert.equal(restaurantUrls.some((url) => /market-price|retail|barcode|customer-analysis/.test(url)), false, "restaurant contains retail media");
+});
+
+test("sector detail content keeps variable-price media in retail instead of restaurant", () => {
+  const restaurantUrls = SECTOR_CONTENT_DEFAULTS.restaurant.groups.flatMap((group) => group.features.map((feature) => feature.imageUrl || ""));
+  const retailUrls = SECTOR_CONTENT_DEFAULTS.retail.groups.flatMap((group) => group.features.map((feature) => feature.imageUrl || ""));
+
+  assert.equal(restaurantUrls.includes("/assets/sector/feature-market-price.webp"), false);
+  assert.equal(retailUrls.includes("/assets/sector/feature-market-price.webp"), true);
+});
+
+test("restoreStandardCMSPages upgrades only exact legacy sector playlists and preserves operator media", () => {
+  const legacyCafe = {
+    ...HOME_SECTOR_ITEMS[0],
+    mediaPlaylist: [
+      { imageUrl: "/assets/sector/sector-cafe.webp" },
+      { imageUrl: "/assets/sector/feature-cafe-kiosk.webp" },
+      { imageUrl: "/assets/sector/feature-cafe-pickup.png" },
+      { imageUrl: "/assets/sector/feature-cafe-receipt.png" },
+    ],
+  };
+  const operatorRestaurant = {
+    ...HOME_SECTOR_ITEMS[1],
+    mediaPlaylist: [{ imageUrl: "/assets/operator/restaurant-custom.webp", caption: "운영자 장면" }],
+  };
+  const restored = restoreStandardCMSPages([{
+    id: "home",
+    slug: "home",
+    title: "홈",
+    isCustom: false,
+    createdAt: "old",
+    designVersion: 19,
+    blocks: [{ id: "home-sector", type: "features", items: [legacyCafe, operatorRestaurant] }],
+  }]);
+  const sector = restored.find((page) => page.id === "home")?.blocks.find((block) => block.id === "home-sector");
+  const cafeUrls = sector?.items?.[0].mediaPlaylist?.map((media) => media.imageUrl) || [];
+  const restaurantUrls = sector?.items?.[1].mediaPlaylist?.map((media) => media.imageUrl) || [];
+
+  assert.deepEqual(cafeUrls, HOME_SECTOR_ITEMS[0].mediaPlaylist?.map((media) => media.imageUrl));
+  assert.deepEqual(restaurantUrls, ["/assets/operator/restaurant-custom.webp"]);
 });
 
 test("restoreStandardCMSPages fills missing and empty standard pages", () => {
@@ -80,4 +212,273 @@ test("restoreStandardCMSPages fills missing and empty standard pages", () => {
   assert.ok(products);
   assert.ok(custom);
   assert.deepEqual(custom.blocks, [{ id: "custom-text", type: "text", content: "유지" }]);
+});
+
+test("restoreStandardCMSPages preserves edited blocks at the current design version", () => {
+  const editedBlocks: CMSBlock[] = [{ id: "edited-hero", type: "hero", title: "운영자 수정 제목" }];
+  const restored = restoreStandardCMSPages([
+    {
+      id: "home",
+      slug: "home",
+      title: "홈",
+      isCustom: false,
+      createdAt: "old",
+      designVersion: PUBLIC_DESIGN_VERSION,
+      blocks: editedBlocks,
+    },
+  ]);
+
+  assert.deepEqual(restored.find((page) => page.id === "home")?.blocks, editedBlocks);
+});
+
+test("standard verbose copy is shortened while custom copy and custom sections are preserved", () => {
+  const verboseHero: CMSBlock = {
+    id: "home-hero",
+    type: "hero",
+    subtitle: "LG U+ 인터넷·AI전화·지능형 CCTV부터 토스포스, 결제단말기, 카드사 가맹과 설치 이후 AS까지 한 담당 흐름으로 연결합니다.",
+  };
+  const customHero: CMSBlock = { ...verboseHero, subtitle: "운영자가 직접 작성한 설명" };
+  assert.equal(getPublicBlockSubtitle(verboseHero), "인터넷·통신·결제 장비를 한 번에 설치하고 관리합니다.");
+  assert.equal(getPublicBlockSubtitle(customHero), "운영자가 직접 작성한 설명");
+
+  const restored = restoreStandardCMSPages([
+    {
+      id: "home",
+      slug: "home",
+      title: "홈",
+      isCustom: false,
+      createdAt: "old",
+      designVersion: PUBLIC_DESIGN_VERSION,
+      blocks: [
+        verboseHero,
+        {
+          id: "home-services",
+          type: "features",
+          title: "오픈에 필요한 일을 따로 맡기지 마세요",
+          items: HOME_SERVICE_ITEMS,
+        },
+        {
+          id: "home-services-custom",
+          type: "features",
+          title: "운영자 맞춤 섹션",
+          items: HOME_SERVICE_ITEMS,
+        },
+      ],
+    },
+  ]);
+  const blocks = restored.find((page) => page.id === "home")?.blocks || [];
+  assert.equal(blocks.find((block) => block.id === "home-hero")?.subtitle, "인터넷·통신·결제 장비를 한 번에 설치하고 관리합니다.");
+  assert.equal(blocks.some((block) => block.id === "home-services"), false);
+  assert.equal(blocks.some((block) => block.id === "home-services-custom"), true);
+});
+
+test("current home media migration removes retired defaults but preserves custom media", () => {
+  const restored = restoreStandardCMSPages([
+    {
+      id: "home",
+      slug: "home",
+      title: "홈",
+      isCustom: false,
+      createdAt: "old",
+      designVersion: PUBLIC_DESIGN_VERSION,
+      blocks: [
+        {
+          id: "home-hero",
+          type: "hero",
+          imageUrl: "/assets/product/toss-lineup.webp",
+          items: [
+            { title: "LG U+ 인터넷 500M", desc: "기존 기본 이미지", imageUrl: "/assets/uplus/uplus-internet-pos-network.png" },
+            { title: "U+ AI전화", desc: "퇴역 인물 사진", imageUrl: DEPRECATED_PUBLIC_MEDIA.aiPhonePortrait },
+            { title: "운영자 이미지", desc: "직접 지정", imageUrl: "https://example.com/custom.jpg" },
+          ],
+        },
+        {
+          id: "home-package",
+          type: "banner",
+          imageUrl: "/assets/product/toss-lineup.webp",
+          items: [
+            { title: "LG U+ 500M 인터넷", desc: "기존 공유기", imageUrl: "/assets/uplus/uplus-internet-router.png" },
+            { title: "U+ AI전화", desc: "기존 인물", imageUrl: DEPRECATED_PUBLIC_MEDIA.aiPhonePortrait },
+            { title: "U+ 지능형 CCTV", desc: "기존 카메라", imageUrl: "/assets/uplus/uplus-cctv-indoor.png" },
+            { title: "토스포스 + 토스프론트", desc: "제품 구성", imageUrl: "/assets/product/toss-lineup.webp" },
+          ],
+        },
+        {
+          id: "home-services",
+          type: "features",
+          imageUrl: "/assets/product/toss-lineup-compact.webp",
+          items: [
+            { title: "토스포스·토스프론트", desc: "기존 포스", imageUrl: "/assets/product/toss-pos-receipt.webp" },
+            { title: "U+ AI전화", desc: "기존 인물", imageUrl: DEPRECATED_PUBLIC_MEDIA.aiPhonePortrait },
+            { title: "U+ 지능형 CCTV", desc: "기존 카메라", imageUrl: "/assets/uplus/uplus-cctv-indoor.png" },
+            { title: "U+ 인터넷전화", desc: "기존 전화기", imageUrl: "/assets/uplus/uplus-phone-wireless.png" },
+          ],
+        },
+        {
+          id: "home-internet",
+          type: "features",
+          items: [
+            { title: "토스포스 주문·결제", desc: "기존 기본 장면", imageUrl: "/assets/product/toss-delivery-sales.webp" },
+            { title: "U+ AI전화", desc: "이미지 누락" },
+            { title: "소상공인 인터넷 500M", desc: "운영자 지정 장면", imageUrl: "https://example.com/custom-scene.webp", imageAlt: "운영자가 직접 입력한 설명" },
+          ],
+        },
+        {
+          id: "home-sector",
+          type: "features",
+          items: [
+            { title: "카페·베이커리", desc: "운영자 지정", imageUrl: "https://example.com/custom-cafe.webp" },
+            { title: "음식점", desc: "기존 기본 장면", imageUrl: "/assets/sector/sector-restaurant.webp" },
+            { title: "도·소매업", desc: "기존 기본 장면", imageUrl: "/assets/sector/sector-retail.webp" },
+            { title: "뷰티·서비스", desc: "기존 기본 장면", imageUrl: "/assets/sector/sector-beauty.webp" },
+          ],
+        },
+      ],
+    },
+  ]);
+
+  const hero = restored.find((page) => page.id === "home")?.blocks[0];
+  assert.equal(hero?.imageUrl, undefined);
+  assert.equal(hero?.items?.[0].imageUrl, undefined);
+  assert.equal(hero?.items?.[1].imageUrl, undefined);
+  assert.equal(hero?.items?.[2].imageUrl, "https://example.com/custom.jpg");
+
+  const offer = restored.find((page) => page.id === "home")?.blocks[1];
+  assert.equal(offer?.imageUrl, PUBLIC_MEDIA.homePackage.overview);
+  assert.equal(offer?.items?.slice(0, 3).every((item) => !item.imageUrl), true);
+  assert.equal(offer?.items?.[3].imageUrl, undefined);
+
+  const services = restored.find((page) => page.id === "home")?.blocks[2];
+  assert.equal(services?.imageUrl, undefined);
+  assert.equal(services?.items?.every((item) => !item.imageUrl), true);
+
+  const system = restored.find((page) => page.id === "home")?.blocks.find((block) => block.id === "home-internet");
+  assert.equal(system?.items?.[0].imageUrl, HOME_SYSTEM_GRAPHICS.pos);
+  assert.equal(system?.items?.[0].mediaKind, "pos");
+  assert.equal(Boolean(system?.items?.[0].imageAlt), true);
+  assert.equal(system?.items?.[1].imageUrl, HOME_SYSTEM_GRAPHICS.ai);
+  assert.equal(system?.items?.[1].mediaKind, "ai");
+  assert.equal(system?.items?.[1].buttonLink, "uplus_ai_phone");
+  assert.equal(system?.items?.[2].imageUrl, "https://example.com/custom-scene.webp");
+  assert.equal(system?.items?.[2].mediaKind, "internet");
+  assert.equal(system?.items?.[2].imageAlt, "운영자가 직접 입력한 설명");
+
+  const sector = restored.find((page) => page.id === "home")?.blocks.find((block) => block.id === "home-sector");
+  assert.equal(sector?.items?.[0].imageUrl, "https://example.com/custom-cafe.webp");
+  assert.equal(sector?.items?.[1].imageUrl, "/assets/sector/feature-table-order.webp");
+  assert.equal(sector?.items?.[2].imageUrl, "/assets/sector/sector-retail-scan.webp");
+  assert.equal(sector?.items?.[3].imageUrl, "/assets/sector/beauty-reservation-register.webp");
+  assert.equal(Boolean(sector?.items?.[1].imageAlt), true);
+  assert.equal(Boolean(sector?.items?.[2].imageAlt), true);
+  assert.equal(Boolean(sector?.items?.[3].imageAlt), true);
+});
+
+test("current Toss page migration removes the baked-background configurator fallback", () => {
+  const restored = restoreStandardCMSPages([
+    {
+      id: "toss_pos",
+      slug: "toss_pos",
+      title: "토스포스",
+      isCustom: false,
+      createdAt: "old",
+      designVersion: PUBLIC_DESIGN_VERSION,
+      blocks: [
+        {
+          id: "toss-hero",
+          type: "hero",
+          imageUrl: "/assets/product/toss-pos-receipt.webp",
+          items: [{ title: "주문·결제", desc: "기존 중복 이미지", imageUrl: "/assets/product/toss-pos-receipt.webp" }],
+        },
+        {
+          id: "toss-sector-configurator",
+          type: "features",
+          imageUrl: DEPRECATED_PUBLIC_MEDIA.tossLineupCompactBakedBackground,
+          items: [
+            { title: "음식점", desc: "기존 기본 장면", imageUrl: "/assets/sector/sector-restaurant.webp" },
+            { title: "도·소매업", desc: "기존 기본 장면", imageUrl: "/assets/sector/sector-retail.webp" },
+            { title: "뷰티·서비스", desc: "기존 기본 장면", imageUrl: "/assets/sector/sector-beauty.webp" },
+          ],
+        },
+        { id: "toss-operation", type: "features", imageUrl: "/assets/product/toss-sales.webp" },
+        { id: "custom-toss-media", type: "image", imageUrl: "https://example.com/operator-image.png" },
+      ],
+    },
+  ]);
+
+  const tossPage = restored.find((page) => page.id === "toss_pos");
+  assert.equal(tossPage?.blocks[0].imageUrl, PUBLIC_MEDIA.homeHero.tossPos);
+  assert.equal(tossPage?.blocks[0].items?.[0].imageUrl, undefined);
+  assert.equal(tossPage?.blocks[1].imageUrl, undefined);
+  assert.equal(tossPage?.blocks[1].items?.[0].imageUrl, "/assets/sector/feature-table-order.webp");
+  assert.equal(tossPage?.blocks[1].items?.[1].imageUrl, "/assets/sector/sector-retail-scan.webp");
+  assert.equal(tossPage?.blocks[1].items?.[2].imageUrl, "/assets/sector/beauty-reservation-register.webp");
+  assert.equal(tossPage?.blocks[2].imageUrl, undefined);
+  assert.equal(tossPage?.blocks[3].imageUrl, "https://example.com/operator-image.png");
+});
+
+test("standard APEXA X copy is upgraded while operator copy is preserved", () => {
+  const restored = restoreStandardCMSPages([
+    {
+      id: "home",
+      slug: "home",
+      title: "홈",
+      isCustom: false,
+      createdAt: "old",
+      designVersion: PUBLIC_DESIGN_VERSION,
+      blocks: [
+        {
+          id: "home-hero",
+          type: "hero",
+          items: [
+            { title: "토스포스", desc: "주문·결제·매장 운영 연결" },
+            { title: "운영자 항목", desc: "직접 작성한 설명" },
+          ],
+        },
+        {
+          id: "home-faq",
+          type: "features",
+          itemLayout: "faq",
+          items: [
+            { title: "토스포스는 어떤 기기에서 사용할 수 있나요?", desc: "Windows, Android, iOS, Mac 환경을 지원하며 매장 장비 구성에 맞춰 설치를 안내합니다." },
+            { title: "운영자 질문", desc: "직접 작성한 답변" },
+          ],
+        },
+      ],
+    },
+  ]);
+
+  const blocks = restored.find((page) => page.id === "home")?.blocks || [];
+  assert.equal(blocks[0].items?.[0].desc, "APEXA X · 주문·결제·매장 운영");
+  assert.equal(blocks[0].items?.[1].desc, "직접 작성한 설명");
+  assert.equal(blocks[1].items?.[0].title, "탑정보통신의 기본 토스포스 장비는 무엇인가요?");
+  assert.equal(blocks[1].items?.[0].desc?.includes("APEXA X-1500"), true);
+  assert.equal(blocks[1].items?.[1].desc, "직접 작성한 답변");
+});
+
+test("restoreStandardCMSPages upgrades only outdated standard page blocks", () => {
+  const outdatedBlocks: CMSBlock[] = [{ id: "old-hero", type: "hero", title: "이전 디자인" }];
+  const customBlocks: CMSBlock[] = [{ id: "custom-text", type: "text", content: "커스텀 유지" }];
+  const restored = restoreStandardCMSPages([
+    {
+      id: "home",
+      slug: "home",
+      title: "홈",
+      isCustom: false,
+      createdAt: "old",
+      designVersion: PUBLIC_DESIGN_VERSION - 1,
+      blocks: outdatedBlocks,
+    },
+    {
+      id: "custom",
+      slug: "custom",
+      title: "커스텀",
+      isCustom: true,
+      createdAt: "old",
+      designVersion: PUBLIC_DESIGN_VERSION - 1,
+      blocks: customBlocks,
+    },
+  ]);
+
+  assert.notDeepEqual(restored.find((page) => page.id === "home")?.blocks, outdatedBlocks);
+  assert.deepEqual(restored.find((page) => page.id === "custom")?.blocks, customBlocks);
 });

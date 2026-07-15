@@ -8,6 +8,7 @@ import { WebsiteFooter } from "./WebsiteFooter";
 import { WebsiteLoginModal } from "./WebsiteLoginModal";
 import { WebsiteBlockRenderer } from "./WebsiteBlockRenderer";
 import { FooterInfo } from "../utils/footerSettings";
+import { PublicActionDock, PublicScrollProgress } from "./public-v3/PublicExperience";
 
 const WebsiteHUDPanel = React.lazy(() => import("./WebsiteHUDPanel").then(m => ({ default: m.WebsiteHUDPanel })));
 const WebAdmin = React.lazy(() => import("./WebAdmin").then(m => ({ default: m.WebAdmin })));
@@ -51,6 +52,9 @@ export interface TopWebsiteViewProps {
   isSignUpMode: boolean;
   setIsSignUpMode: (val: boolean) => void;
   isCmsSaving?: boolean;
+  isCmsPublishing?: boolean;
+  hasUnpublishedChanges?: boolean;
+  onPublishWebsite?: () => void;
   schedulePageWrite?: (pageId: string, blocks: CMSPage["blocks"]) => void;
 
   handleLinkClick: (slug: string) => void;
@@ -61,7 +65,7 @@ export interface TopWebsiteViewProps {
   handleUpdateBlockData: (page: CMSPage, blockId: string, updatedData: Partial<CMSBlock>) => Promise<void>;
 
   handleHUDChange: (updatedFields: Partial<CMSBlock>) => Promise<void>;
-  handleHUDCardChange: (updatedFields: Partial<{ title: string; desc: string; icon: string; buttonText?: string; buttonLink?: string }>) => Promise<void>;
+  handleHUDCardChange: (updatedFields: Partial<NonNullable<CMSBlock["items"]>[number]>) => Promise<void>;
   handleHUDDeleteCardItem: () => Promise<void>;
   handleNavTitleChange: (newTitle: string) => Promise<void>;
   handleNavVisibilityChange: (visible: boolean) => Promise<void>;
@@ -113,6 +117,9 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
     isSignUpMode,
     setIsSignUpMode,
     isCmsSaving,
+    isCmsPublishing,
+    hasUnpublishedChanges,
+    onPublishWebsite,
     schedulePageWrite,
     handleLinkClick,
     handleMoveBlockUp,
@@ -133,7 +140,16 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
   } = props;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-blue-600/10 selection:text-blue-600 transition-all duration-300 overflow-x-hidden">
+    <div className={`public-site public-v3 min-h-screen selection:bg-blue-600/15 selection:text-blue-950 overflow-x-clip ${isEditModeActive ? "is-editing" : ""}`}>
+
+      <PublicScrollProgress />
+
+      <a
+        href="#public-main-content"
+        className="fixed left-4 top-4 z-[1000] -translate-y-24 bg-white px-4 py-3 text-sm font-bold text-slate-950 shadow-lg transition-transform focus:translate-y-0"
+      >
+        본문으로 바로가기
+      </a>
 
       {/* 1. Header Component */}
       <WebsiteHeader
@@ -155,10 +171,13 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
         setShowLoginModal={setShowLoginModal}
         mobileMenuOpen={mobileMenuOpen}
         setMobileMenuOpen={setMobileMenuOpen}
+        isCmsPublishing={isCmsPublishing}
+        hasUnpublishedChanges={hasUnpublishedChanges}
+        onPublishWebsite={onPublishWebsite}
       />
 
       {/* 2. Main Space contents */}
-      <main className="py-12 md:py-16">
+      <main id="public-main-content" className="public-main" tabIndex={-1}>
         <AnimatePresence mode="wait">
 
           {/* Dynamic Pages Renderer via WebsiteBlockRenderer */}
@@ -167,10 +186,10 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
             return (
               <motion.div
                 key={page.id}
-                initial={{ opacity: 0, y: 15 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                transition={{ duration: 0.25, ease: "easeInOut" }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
               >
                 <WebsiteBlockRenderer
                   page={page}
@@ -195,6 +214,7 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
                   productFilter={productFilter}
                   setProductFilter={setProductFilter}
                   scheduleProductWrite={scheduleProductWrite}
+                  footerInfo={footerInfo}
                 />
               </motion.div>
             );
@@ -218,6 +238,13 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
         </AnimatePresence>
       </main>
 
+      <PublicActionDock
+        currentUrl={currentUrl}
+        phone={footerInfo.phone}
+        isEditModeActive={isEditModeActive}
+        onNavigate={handleLinkClick}
+      />
+
       {/* 3. Footer */}
       <WebsiteFooter
         isEditModeActive={isEditModeActive}
@@ -227,6 +254,8 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
         db={db}
         setCurrentUrl={setCurrentUrl}
         handleLinkClick={handleLinkClick}
+        pages={pages}
+        navigationSettings={navigationSettings}
       />
 
       {/* 4. Unified Authentication Modal Overlay */}
@@ -263,6 +292,9 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
             navigationSettings={navigationSettings}
             db={db}
             isCmsSaving={isCmsSaving}
+            products={products}
+            setProducts={setProducts}
+            scheduleProductWrite={scheduleProductWrite}
           />
         </React.Suspense>
       )}

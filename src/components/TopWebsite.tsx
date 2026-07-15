@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
-import { collection, onSnapshot, doc, setDoc, updateDoc, getDoc, getDocs } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, updateDoc, getDoc, getDocs, writeBatch, deleteField } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
 import { CMSPage, Product, CMSBlock, NavigationSettings } from "../types";
-import { DEFAULT_NAVIGATION_SETTINGS, createDefaultCMSPages, mergeNavigationSettings, restoreStandardCMSPages } from "../utils/cmsSettings";
+import { DEFAULT_NAVIGATION_SETTINGS, PUBLIC_DESIGN_VERSION, createDefaultCMSPages, mergeNavigationSettings, restoreStandardCMSPages } from "../utils/cmsSettings";
 import { DEFAULT_FOOTER_INFO, footerInfoNeedsMigration, mergeFooterInfo } from "../utils/footerSettings";
+import { createVerifiedPublicProducts, normalizeKnownSeedProducts } from "../utils/publicProducts";
 import { TopWebsiteView } from "./TopWebsiteView";
 import { Trash2, Sparkles } from "lucide-react";
 
@@ -50,7 +51,10 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
   const { user, profile, logout, emailLogin, emailSignUp, login, setIsAccessCodeVerified, isAdmin, isEmployee } = useAuth();
 
   // Navigation states
-  const [currentUrl, setCurrentUrl] = useState<string>("home");
+  const [currentUrl, setCurrentUrl] = useState<string>(() => {
+    if (typeof window === "undefined") return "home";
+    return new URLSearchParams(window.location.search).get("page") || "home";
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
 
@@ -83,6 +87,32 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
   // Local active product tab
   const [productFilter, setProductFilter] = useState<string>("전체");
 
+  useEffect(() => {
+    if (!isEmployee && currentUrl === "admin") {
+      setCurrentUrl("home");
+      setMobileMenuOpen(false);
+    }
+    if (currentUrl !== "admin" && pages.length > 0 && !pages.some((page) => page.slug === currentUrl)) {
+      setCurrentUrl("home");
+      setMobileMenuOpen(false);
+    }
+    if (!isAdmin && isEditModeActive) {
+      setIsEditModeActive(false);
+      setActiveEditTarget(null);
+      setShowAddBlockMenuAtIndex(null);
+    }
+  }, [currentUrl, isAdmin, isEditModeActive, isEmployee, pages]);
+
+  useEffect(() => {
+    const syncPageFromHistory = () => {
+      const page = new URLSearchParams(window.location.search).get("page") || "home";
+      setCurrentUrl(page);
+      setMobileMenuOpen(false);
+    };
+    window.addEventListener("popstate", syncPageFromHistory);
+    return () => window.removeEventListener("popstate", syncPageFromHistory);
+  }, []);
+
   // Email form state
   const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [authFormData, setAuthFormData] = useState({
@@ -96,6 +126,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
   const [authLoading, setAuthLoading] = useState(false);
 
   const [isCmsSaving, setIsCmsSaving] = useState(false);
+  const [isCmsPublishing, setIsCmsPublishing] = useState(false);
+  const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
   const pendingWritesRef = React.useRef<Record<string, { pageId: string; blocks: CMSPage["blocks"] }>>({});
   const writeTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const pendingNavWritesRef = React.useRef<{
@@ -119,6 +151,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
   const schedulePageWrite = (pageId: string, blocks: CMSPage["blocks"]) => {
     pendingWritesRef.current[pageId] = { pageId, blocks };
     setIsCmsSaving(true);
+    setHasUnpublishedChanges(true);
 
     if (writeTimeoutRef.current) {
       clearTimeout(writeTimeoutRef.current);
@@ -131,7 +164,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       for (const pId in pending) {
         const { blocks: blocksToWrite } = pending[pId];
         try {
-          await updateDoc(doc(db, "cms_pages", pId), { blocks: blocksToWrite });
+          await updateDoc(doc(db, "cms_pages", pId), { draftBlocks: blocksToWrite, designVersion: PUBLIC_DESIGN_VERSION });
           console.log(`[CMS] Debounced write success for page ${pId}`);
         } catch (e) {
           console.error(`[CMS] Debounced write failed for page ${pId}:`, e);
@@ -212,7 +245,18 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
   useEffect(() => {
     const handleCmsPagesData = async (snap: any) => {
       const items: CMSPage[] = [];
-      snap.forEach((d: any) => items.push({ id: d.id, ...d.data() } as CMSPage));
+      let hasDrafts = false;
+      snap.forEach((d: any) => {
+        const data = d.data() as CMSPage;
+        const draftBlocks = Array.isArray(data.draftBlocks) ? data.draftBlocks : null;
+        if (isEmployee && draftBlocks) hasDrafts = true;
+        items.push({
+          id: d.id,
+          ...data,
+          blocks: isEmployee && draftBlocks ? draftBlocks : data.blocks,
+        } as CMSPage);
+      });
+      if (isEmployee) setHasUnpublishedChanges(hasDrafts);
 
       const renderableItems = restoreStandardCMSPages(items, defaultCmsPages);
 
@@ -305,7 +349,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
 
         if (pageModified) {
           if (isEmployee) {
-            const payload: Partial<CMSPage> = { blocks: nextBlocks };
+            const payload: Partial<CMSPage> = { draftBlocks: nextBlocks, designVersion: PUBLIC_DESIGN_VERSION };
             if (markCustomBoardInitialized) {
               payload.customBoardInitialized = true;
             }
@@ -343,66 +387,46 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     };
 
     const handleProductsData = async (snap: any) => {
-      const items: Product[] = [];
-      snap.forEach((d: any) => items.push({ id: d.id, ...d.data() } as Product));
+      const storedProducts: Product[] = [];
+      snap.forEach((d: any) => storedProducts.push({ id: d.id, ...d.data() } as Product));
+      const normalized = normalizeKnownSeedProducts(storedProducts);
 
       const initDocRef = doc(db, "settings", "initialization_state");
       try {
         const initSnap = await getDoc(initDocRef);
 
-        if (items.length === 0 && !initSnap.exists()) {
+        if (storedProducts.length === 0 && !initSnap.exists()) {
+          const defaultProducts = createVerifiedPublicProducts();
           if (!isEmployee) {
-            setProducts(items);
+            setProducts(defaultProducts);
             return;
           }
 
           console.log("Empty products collection and uninitialized database. Initializing defaults...");
-          const defaultProducts: Product[] = [
-            {
-              id: "pos-t8",
-              name: "Premium Touch POS T-8000",
-              category: "포스",
-              description: "심플하고 모던한 감성의 극슬림 프리미엄 15.6인치 태블릿 정전식 포스기",
-              features: ["무소음 팬리스 초고속 연동", "가입비 및 설치비 전액 면제", "고해상도 터치 듀얼 모니터 완비"],
-              specs: { "운영체제": "Smart POS OS (Android 13)", "결제범위": "IC, MS, QR, 삼성/애플페이", "크기": "350 x 210 x 300 mm" },
-              imageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=400&q=80",
-              createdAt: new Date().toISOString()
-            },
-            {
-              id: "term-k3",
-              name: "High Speed Terminal K-3000",
-              category: "단말기",
-              description: "애플페이 전격 지원, 수동식 영수증 자동절단 복합 탑재 유선 통합 단말기",
-              features: ["초고속 영수증 열전사 인쇄", "애플페이 전면 호환 및 사인패드 내장", "영업 마감 자동 매출 대조 지원"],
-              specs: { "통신연결": "네트워크 LAN 케이블 / 전화선 국선", "기능": "삼성페이, 카드, 현금영수증" },
-              imageUrl: "https://images.unsplash.com/photo-1563013544-824ae1d704d3?auto=format&fit=crop&w=400&q=80",
-              createdAt: new Date().toISOString()
-            },
-            {
-              id: "kiosk-s5",
-              name: "Contactless Self Kiosk S-500",
-              category: "키오스크",
-              description: "테이블 오더 및 대여 요양 무인 선결제용 21인치 세로형 멀티 터치 키오스크",
-              features: ["직관적 UI로 누구나 간편 주문", "스탠드/벽걸이 모드 전면 커스텀 조립", "식음료 전용 결제 앱 기본 내장"],
-              specs: { "디스플레이": "21.5인치 세로형 FHD IPS", "용지크기": "80mm 대용량 롤 지원" },
-              imageUrl: "https://images.unsplash.com/photo-1574634534894-89d7576c8259?auto=format&fit=crop&w=400&q=80",
-              createdAt: new Date().toISOString()
-            }
-          ];
-
-          for (const pr of defaultProducts) {
-            await setDoc(doc(db, "products", pr.id), pr);
-          }
-          await setDoc(initDocRef, { initialized: true });
+          const batch = writeBatch(db);
+          defaultProducts.forEach((product) => batch.set(doc(db, "products", product.id), product));
+          batch.set(initDocRef, { initialized: true });
+          await batch.commit();
+          setProducts(defaultProducts);
         } else {
-          setProducts(items);
-          if (isEmployee && !initSnap.exists() && items.length > 0) {
+          setProducts(normalized.products);
+
+          if (isEmployee && normalized.migratedIds.length > 0) {
+            const batch = writeBatch(db);
+            normalized.migratedIds.forEach((productId) => {
+              const replacement = normalized.products.find((product) => product.id === productId);
+              if (replacement) batch.set(doc(db, "products", productId), replacement);
+            });
+            await batch.commit();
+          }
+
+          if (isEmployee && !initSnap.exists() && storedProducts.length > 0) {
             await setDoc(initDocRef, { initialized: true });
           }
         }
       } catch (err) {
         console.error("Initialization state check failed: ", err);
-        setProducts(items);
+        setProducts(normalized.products.length > 0 ? normalized.products : createVerifiedPublicProducts());
       }
     };
 
@@ -563,7 +587,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     updatedBlocks[index] = updatedBlocks[index - 1];
     updatedBlocks[index - 1] = temp;
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+      setHasUnpublishedChanges(true);
     } catch (e) {
       console.error("Block move up fails: ", e);
     }
@@ -576,7 +601,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     updatedBlocks[index] = updatedBlocks[index + 1];
     updatedBlocks[index + 1] = temp;
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+      setHasUnpublishedChanges(true);
     } catch (e) {
       console.error("Block move down fails: ", e);
     }
@@ -599,7 +625,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       onConfirm: async () => {
         const updatedBlocks = page.blocks.filter((_, idx) => idx !== index);
         try {
-          await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+          await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+          setHasUnpublishedChanges(true);
         } catch (e) {
           console.error("Block remove fails: ", e);
         }
@@ -656,7 +683,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         id: newBlockId,
         type: "image",
         title: "신규 명품 제휴 단말 라인업",
-        imageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1200&q=80",
+        imageUrl: "/assets/product/toss-front.webp",
         buttonText: "가맹 우대 혜택 알아보기",
         buttonLink: "request_consult"
       };
@@ -672,7 +699,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     const updatedBlocks = [...page.blocks];
     updatedBlocks.splice(index + 1, 0, newBlock);
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+      setHasUnpublishedChanges(true);
       setShowAddBlockMenuAtIndex(null);
     } catch (e) {
       console.error("Insert block fails: ", e);
@@ -766,7 +794,8 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         setActiveEditTarget(null);
 
         try {
-          await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+          await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+          setHasUnpublishedChanges(true);
         } catch (err) {
           console.error("Real-time HUD card deletion failed: ", err);
         }
@@ -821,9 +850,66 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
   };
 
   const handleLinkClick = (target: string) => {
-    setCurrentUrl(target);
+    if (/^https?:\/\//i.test(target)) {
+      window.open(target, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (/^(tel:|mailto:)/i.test(target)) {
+      window.location.href = target;
+      return;
+    }
+    if (target.startsWith("#")) {
+      document.getElementById(target.slice(1).split(":")[0])?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    const [pageTarget, rawQuery = ""] = target.split("?", 2);
+    const nextPage = pageTarget || "home";
+    const nextLocation = new URL(window.location.href);
+    nextLocation.search = "";
+    nextLocation.hash = "";
+    if (nextPage !== "home") nextLocation.searchParams.set("page", nextPage);
+    new URLSearchParams(rawQuery).forEach((value, key) => nextLocation.searchParams.set(key, value));
+    window.history.pushState({ page: nextPage }, "", `${nextLocation.pathname}${nextLocation.search}`);
+    setCurrentUrl(nextPage);
     setMobileMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handlePublishWebsite = async () => {
+    if (!isEmployee || isCmsPublishing) return;
+
+    setIsCmsPublishing(true);
+    try {
+      const batch = writeBatch(db);
+      pages.forEach((page) => {
+        batch.set(
+          doc(db, "cms_pages", page.id),
+          {
+            blocks: page.blocks,
+            draftBlocks: deleteField(),
+            designVersion: PUBLIC_DESIGN_VERSION,
+          },
+          { merge: true }
+        );
+      });
+      await batch.commit();
+      setHasUnpublishedChanges(false);
+      setCustomAlert({
+        show: true,
+        title: "홈페이지 게시 완료",
+        message: "현재 미리보기 내용이 공개 홈페이지에 반영되었습니다.",
+      });
+    } catch (error) {
+      console.error("Website publish failed:", error);
+      setCustomAlert({
+        show: true,
+        title: "게시 실패",
+        message: "홈페이지 게시 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+      });
+    } finally {
+      setIsCmsPublishing(false);
+    }
   };
 
   return (
@@ -867,6 +953,9 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         isSignUpMode={isSignUpMode}
         setIsSignUpMode={setIsSignUpMode}
         isCmsSaving={isCmsSaving}
+        isCmsPublishing={isCmsPublishing}
+        hasUnpublishedChanges={hasUnpublishedChanges}
+        onPublishWebsite={handlePublishWebsite}
         handleLinkClick={handleLinkClick}
         handleMoveBlockUp={handleMoveBlockUp}
         handleMoveBlockDown={handleMoveBlockDown}

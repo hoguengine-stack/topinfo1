@@ -65,7 +65,7 @@ export function AuthScreens({ onComplete }: { onComplete: () => void }) {
             onClick={login}
             className="w-full bg-white text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-3 active:scale-95 transition-transform"
           >
-            <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+            <img src="/assets/brand/google.svg" className="w-5 h-5" alt="Google" />
             Google 계정으로 로그인
           </button>
         </motion.div>

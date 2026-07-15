@@ -15,7 +15,9 @@
     "test:resources": "tsx --test src/utils/resourceFiles.test.ts",
     "test:public": "tsx --test src/utils/publicRequests.test.ts",
     "test:firebase-errors": "tsx --test src/utils/firebaseErrors.test.ts",
-    "test": "npm run test:cms && npm run test:requests && npm run test:resources && npm run test:public && npm run test:firebase-errors",
+    "test:products": "tsx --test src/utils/publicProducts.test.ts",
+    "test:home": "tsx --test src/components/public-v3/PublicHomeExperience.test.tsx",
+    "test": "npm run test:cms && npm run test:requests && npm run test:resources && npm run test:public && npm run test:firebase-errors && npm run test:products && npm run test:home",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

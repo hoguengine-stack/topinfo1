@@ -1,11 +1,10 @@
 self.addEventListener('push', function(event) {
   if (event.data) {
     const data = event.data.json();
+    const options = { body: data.body };
+    if (data.icon) options.icon = data.icon;
     event.waitUntil(
-      self.registration.showNotification(data.title, {
-        body: data.body,
-        icon: data.icon || 'https://www.google.com/favicon.ico'
-      })
+      self.registration.showNotification(data.title, options)
     );
   }
 });

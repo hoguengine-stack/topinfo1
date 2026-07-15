@@ -1,6 +1,7 @@
 export interface FooterInfo {
   settingsVersion: string;
   companyName: string;
+  tagline: string;
   ceo: string;
   address: string;
   phone: string;
@@ -11,11 +12,12 @@ export interface FooterInfo {
   copyright: string;
 }
 
-export const FOOTER_SETTINGS_VERSION = "2026-07-11-company-info";
+export const FOOTER_SETTINGS_VERSION = "2026-07-12-editable-tagline";
 
 export const DEFAULT_FOOTER_INFO: FooterInfo = {
   settingsVersion: FOOTER_SETTINGS_VERSION,
   companyName: "탑정보통신",
+  tagline: "매장 오픈부터 운영 이후까지, 결제와 통신을 한 흐름으로 연결합니다.",
   ceo: "김다미",
   address: "경기도 안산시 상록구 천문로17 일영빌딩2층",
   phone: "031-487-4401",

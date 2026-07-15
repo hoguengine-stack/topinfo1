@@ -136,7 +136,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       updateNotificationSettings({ ...notificationSettings, pushEnabled: true });
       new Notification("알림 설정 완료", {
         body: "이제 실시간 알림을 받으실 수 있습니다.",
-        icon: "https://www.google.com/favicon.ico"
+        icon: "/assets/brand/google.svg"
       });
     } else {
       updateNotificationSettings({ ...notificationSettings, pushEnabled: false });
@@ -471,7 +471,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       <p className="text-xs text-gray-500 truncate">{user.email}</p>
                     </div>
                     <div className="bg-emerald-500/10 p-1.5 rounded-lg border border-emerald-500/20">
-                      <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="Google" />
+                      <img src="/assets/brand/google.svg" className="w-4 h-4" alt="Google" />
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-[10px] text-emerald-500 font-bold uppercase tracking-widest bg-emerald-500/10 px-2 py-1 rounded-md w-fit">

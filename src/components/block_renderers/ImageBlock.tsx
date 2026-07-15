@@ -45,7 +45,7 @@ export const ImageBlock: React.FC<ImageBlockProps> = ({
       }`}
     >
       <img
-        src={block.imageUrl || "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1200&q=80"}
+        src={block.imageUrl || "/assets/product/toss-front.webp"}
         alt={block.title || "홍보물 이미지"}
         referrerPolicy="no-referrer"
         className="transition"

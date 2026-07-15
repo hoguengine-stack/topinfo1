@@ -103,6 +103,33 @@ export interface ResourceItem {
   authorId?: string;
 }
 
+export interface CMSSectorFeature {
+  id: string;
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  icon?: string;
+  imageUrl?: string;
+  staticImageUrl?: string;
+  tone?: "blue" | "mint" | "coral" | "violet" | "amber" | "neutral";
+  size?: "standard" | "wide";
+}
+
+export interface CMSSectorFeatureGroup {
+  id: string;
+  title: string;
+  subtitle?: string;
+  features: CMSSectorFeature[];
+}
+
+export interface CMSMediaPlaylistItem {
+  imageUrl: string;
+  staticImageUrl?: string;
+  imageAlt?: string;
+  caption?: string;
+  durationMs?: number;
+}
+
 export interface CMSBlock {
   id: string;
   type: "hero" | "features" | "text" | "columns" | "banner" | "image" | "divider" | "custom_board";
@@ -110,6 +137,13 @@ export interface CMSBlock {
   title?: string;
   subtitle?: string;
   content?: string;
+  note?: string;
+  priceLabel?: string;
+  priceValue?: string;
+  priceUnit?: string;
+  priceDetails?: string;
+  listLabel?: string;
+  imageCaption?: string;
   imageUrl?: string;
   align?: "left" | "center" | "right";
   titleAlign?: "left" | "center" | "right";
@@ -163,7 +197,7 @@ export interface CMSBlock {
   button2Height?: string;
   button2FontSize?: string;
   button2LetterSpacing?: string;
-  bannerLayout?: "text-only" | "side-image" | "bg-image" | "inline" | "watermark";
+  bannerLayout?: "text-only" | "side-image" | "bg-image" | "inline" | "watermark" | "offer";
   bannerImagePosition?: "left" | "right" | "top" | "bottom";
   iconImageUrl?: string;
   iconRoundness?: string;
@@ -197,6 +231,12 @@ export interface CMSBlock {
     descColor?: string;
     buttonText?: string;
     buttonLink?: string;
+    imageUrl?: string;
+    imageAlt?: string;
+    staticImageUrl?: string;
+    mediaKind?: "pos" | "internet" | "ai" | "cctv" | "phone" | "other";
+    mediaPlaylist?: CMSMediaPlaylistItem[];
+    detailGroups?: CMSSectorFeatureGroup[];
   }[];
 }
 
@@ -205,8 +245,10 @@ export interface CMSPage {
   title: string;
   slug: string;
   blocks: CMSBlock[];
+  draftBlocks?: CMSBlock[];
   isCustom: boolean;
   createdAt: string;
+  designVersion?: number;
   customBoardInitialized?: boolean;
 }
 

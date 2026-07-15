@@ -4,6 +4,7 @@ import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, addDoc } fro
 import { Trash, Edit, Plus, Check, FileCode, ShoppingBag, Eye, EyeOff, LayoutTemplate, Layers, ClipboardList, Info, HelpCircle } from "lucide-react";
 import { CMSPage, CMSBlock, Product, Consultation, PaperRequest } from "../types";
 import { useToast } from "../contexts/ToastContext";
+import { PUBLIC_DESIGN_VERSION } from "../utils/cmsSettings";
 
 interface WebAdminProps {
   onOpenTasks: () => void;
@@ -44,7 +45,10 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
     // Subscriber CMS Pages
     const unsubPages = onSnapshot(collection(db, "cms_pages"), (snap) => {
       const items: CMSPage[] = [];
-      snap.forEach(d => items.push({ id: d.id, ...d.data() } as CMSPage));
+      snap.forEach(d => {
+        const data = d.data() as CMSPage;
+        items.push({ id: d.id, ...data, blocks: data.draftBlocks || data.blocks } as CMSPage);
+      });
       setPages(items);
       if (items.length > 0 && !selectedPage) {
         setSelectedPage(items[0]);
@@ -129,7 +133,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
   };
 
   const handleDeletePage = async (pageId: string) => {
-    if (["home", "products", "board_suggestions", "board_resources", "request_consult", "request_paper"].includes(pageId)) {
+    if (["home", "toss_pos", "products", "board_suggestions", "board_resources", "request_consult", "request_paper"].includes(pageId)) {
       showToast("기본 표준 시스템 페이지는 웹사이트 기둥이므로 삭제할 수 없습니다. 대신 상단 메뉴 라벨을 편집하시거나 비활성화해 사용하실 수 있습니다.", "warning");
       return;
     }
@@ -185,7 +189,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
 
     const updatedBlocks = [...page.blocks, block];
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
       setSelectedPage({ ...page, blocks: updatedBlocks });
     } catch (err) {
       showToast("블록 추가에 실패했습니다.", "error");
@@ -195,7 +199,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
   const handleUpdateBlockField = async (page: CMSPage, blockId: string, updates: Partial<CMSBlock>) => {
     const updatedBlocks = page.blocks.map(b => b.id === blockId ? { ...b, ...updates } : b);
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
       setSelectedPage({ ...page, blocks: updatedBlocks });
     } catch (err) {
       showToast("블록 업데이트에 실패했습니다.", "error");
@@ -210,7 +214,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
     if (!confirmDeleteAction(`block:${page.id}:${blockId}`)) return;
     const updatedBlocks = page.blocks.filter(b => b.id !== blockId);
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { blocks: updatedBlocks });
+      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
       setSelectedPage({ ...page, blocks: updatedBlocks });
     } catch (err) {
       showToast("블록 삭제에 실패했습니다.", "error");
@@ -537,7 +541,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                                 <label className="block text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-1">업로드 이미지 주소 (URL 경로)</label>
                                 <input
                                   type="text"
-                                  placeholder="예시: https://images.unsplash.com/... 또는 직접 업로드한 이미지 파일주소"
+                                  placeholder="예: /assets/product/toss-front.webp 또는 업로드한 이미지 주소"
                                   value={block.imageUrl || ""}
                                   onChange={(e) => handleUpdateBlockField(selectedPage, block.id, { imageUrl: e.target.value })}
                                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none"
@@ -659,10 +663,10 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                     name: "",
                     category: "포스",
                     description: "",
-                    imageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=400&q=80",
+                    imageUrl: "/assets/product/toss-front.webp",
                     price: "합리적 임대/구매 조건",
-                    features: ["무상용지 100% 지원", "애플페이 가능"],
-                    specs: { "제품구분": "프리미엄 POS", "가맹특전": "가입비 면제" }
+                    features: ["설치 구성 상담", "현장 사용 교육"],
+                    specs: { "제품구분": "상담 후 확정", "설치조건": "매장 환경 확인" }
                   });
                   setIsProductListOpen(false);
                 }}

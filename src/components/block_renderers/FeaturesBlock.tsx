@@ -1,5 +1,24 @@
 import React from "react";
-import { Trash2 } from "lucide-react";
+import {
+  BarChart3,
+  CircleHelp,
+  Clock3,
+  Cpu,
+  CreditCard,
+  Heart,
+  Layers3,
+  LockKeyhole,
+  Monitor,
+  Plus,
+  ReceiptText,
+  ScrollText,
+  ShieldCheck,
+  ShoppingBag,
+  Smartphone,
+  Sparkles,
+  Trash2,
+  Zap,
+} from "lucide-react";
 import { CMSPage, CMSBlock } from "../../types";
 
 
@@ -36,46 +55,55 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
       return (
         <img
           src={trimmed}
-          alt="icon"
+          alt=""
           referrerPolicy="no-referrer"
-          className="w-full h-full object-cover rounded-xl"
+          className="w-full h-full object-contain rounded-md"
         />
       );
     }
 
-    if (name === "zap") return <span className="text-xl">⚡</span>;
-    if (name === "clock") return <span className="text-xl">⏰</span>;
-    if (name === "creditcard" || name === "card" || name === "credit-card") return <span className="text-xl">💳</span>;
-    if (name === "barchart" || name === "chart" || name === "barchart3") return <span className="text-xl">📊</span>;
-    if (name === "monitor") return <span className="text-xl">📺</span>;
-    if (name === "smartphone" || name === "phone") return <span className="text-xl">📱</span>;
-    if (name === "cpu" || name === "chip") return <span className="text-xl">💻</span>;
-    if (name === "layers") return <span className="text-xl">🥞</span>;
-    if (name === "lock") return <span className="text-xl">🔒</span>;
-    if (name === "shield" || name === "alert" || name === "shieldalert") return <span className="text-xl">🛡️</span>;
-    if (name === "sparkles" || name === "star") return <span className="text-xl">✨</span>;
-    if (name === "scrolltext") return <span className="text-xl">📜</span>;
-    if (name === "heart") return <span className="text-xl">💖</span>;
-    if (name === "shoppingbag") return <span className="text-xl">🛍️</span>;
-    if (name === "helpcircle") return <span className="text-xl">❓</span>;
+    const iconClass = "h-5 w-5";
+    if (name === "zap") return <Zap className={iconClass} aria-hidden="true" />;
+    if (name === "clock") return <Clock3 className={iconClass} aria-hidden="true" />;
+    if (name === "creditcard" || name === "card" || name === "credit-card") return <CreditCard className={iconClass} aria-hidden="true" />;
+    if (name === "barchart" || name === "chart" || name === "barchart3") return <BarChart3 className={iconClass} aria-hidden="true" />;
+    if (name === "monitor") return <Monitor className={iconClass} aria-hidden="true" />;
+    if (name === "smartphone" || name === "phone") return <Smartphone className={iconClass} aria-hidden="true" />;
+    if (name === "cpu" || name === "chip") return <Cpu className={iconClass} aria-hidden="true" />;
+    if (name === "layers") return <Layers3 className={iconClass} aria-hidden="true" />;
+    if (name === "lock") return <LockKeyhole className={iconClass} aria-hidden="true" />;
+    if (name === "shield" || name === "alert" || name === "shieldalert") return <ShieldCheck className={iconClass} aria-hidden="true" />;
+    if (name === "sparkles" || name === "star") return <Sparkles className={iconClass} aria-hidden="true" />;
+    if (name === "scrolltext") return <ScrollText className={iconClass} aria-hidden="true" />;
+    if (name === "heart") return <Heart className={iconClass} aria-hidden="true" />;
+    if (name === "shoppingbag") return <ShoppingBag className={iconClass} aria-hidden="true" />;
+    if (name === "helpcircle") return <CircleHelp className={iconClass} aria-hidden="true" />;
 
     const val = defaultIdx % 4;
-    if (val === 0) return <span className="text-xl">⚡</span>;
-    if (val === 1) return <span className="text-xl">⏰</span>;
-    if (val === 2) return <span className="text-xl">💳</span>;
-    return <span className="text-xl">📊</span>;
+    if (val === 0) return <Zap className={iconClass} aria-hidden="true" />;
+    if (val === 1) return <ShieldCheck className={iconClass} aria-hidden="true" />;
+    if (val === 2) return <ReceiptText className={iconClass} aria-hidden="true" />;
+    return <BarChart3 className={iconClass} aria-hidden="true" />;
   };
 
-  const gridColsCount = block.gridCols || 2;
+  const isHomeFeatures = page.slug === "home";
+  const isTossFeatures = page.slug === "toss_pos";
+  const isEditorialFeatures = isHomeFeatures || isTossFeatures;
+  const isServiceRows = block.itemLayout === "service-rows" || (isHomeFeatures && block.id === "b2");
+  const isProcessLayout = block.itemLayout === "process";
+  const isFaqLayout = block.itemLayout === "faq";
+  const isActionGrid = block.itemLayout === "action-grid";
+  const gridColsCount = Number(block.gridCols) || (isProcessLayout ? Math.min(block.items?.length || 4, 5) : isEditorialFeatures ? 4 : 2);
   const isColumnLayout = block.itemLayout === "column";
+  const useColumnLayout = isColumnLayout || isEditorialFeatures || isServiceRows || isProcessLayout || isActionGrid;
   const cardBg = block.cardBgColor || "bg-white";
 
   const isCardDark = cardBg.includes("bg-slate-900");
   const defaultTitleColor = isCardDark ? "text-white" : "text-slate-800";
   const defaultDescColor = isCardDark ? "text-slate-300" : "text-slate-500";
 
-  const titleAlign = block.titleAlign || block.align || "center";
-  const subtitleAlign = block.subtitleAlign || block.align || "center";
+  const titleAlign = block.titleAlign || block.align || (isEditorialFeatures ? "left" : "center");
+  const subtitleAlign = block.subtitleAlign || block.align || (isEditorialFeatures ? "left" : "center");
 
   const titleTextAlign = titleAlign === "left" ? "text-left" : titleAlign === "right" ? "text-right" : "text-center";
   const titleMxClass = titleAlign === "left" ? "mr-auto ml-0" : titleAlign === "right" ? "ml-auto mr-0" : "mx-auto";
@@ -84,14 +112,14 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
   const subtitleMxClass = subtitleAlign === "left" ? "mr-auto ml-0" : subtitleAlign === "right" ? "ml-auto mr-0" : "mx-auto";
 
   return (
-    <section className="space-y-8 w-full">
+    <section className={isEditorialFeatures ? "w-full max-w-[1200px] mx-auto px-5 py-20 md:px-8 md:py-24 space-y-10" : "space-y-8 w-full"}>
       <div
         onClick={() => {
           if (isEditModeActive) {
             setActiveEditTarget({ type: "features", pageId: page.id, page, blockId: block.id, block, selectedElement: "block" });
           }
         }}
-        className={`w-full max-w-xl mx-auto space-y-3 ${
+        className={`w-full ${isEditorialFeatures ? "max-w-3xl mr-auto ml-0" : "max-w-xl mx-auto"} space-y-3 ${
           isEditModeActive ? "cursor-pointer hover:ring-2 hover:ring-blue-500 hover:ring-dashed rounded-3xl p-3 transition" : ""
         }`}
       >
@@ -155,7 +183,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                 fontSize: block.titleFontSize ? `${block.titleFontSize}pt` : undefined,
                 letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
               }}
-              className={`${block.titleSize || "text-xl md:text-3xl font-extrabold tracking-tight"} ${block.titleColor || "text-slate-950"} ${titleTextAlign} ${titleMxClass} block w-full`}
+              className={`${block.titleSize || "text-2xl md:text-4xl font-bold"} ${block.titleColor || "text-slate-950"} ${titleTextAlign} ${titleMxClass} block w-full leading-tight`}
             >
               {block.title || "타이틀 없음"}
             </h2>
@@ -164,7 +192,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                 fontSize: block.subtitleFontSize ? `${block.subtitleFontSize}pt` : undefined,
                 letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
               }}
-              className={`${block.subtitleSize || "text-sm"} ${block.subtitleColor || "text-slate-500"} mt-3 ${subtitleTextAlign} ${subtitleMxClass} block w-full`}
+              className={`${block.subtitleSize || "text-base"} ${block.subtitleColor || "text-slate-600"} mt-3 ${subtitleTextAlign} ${subtitleMxClass} block w-full leading-relaxed`}
             >
               {block.subtitle || "한 줄 메리트 설명 정렬과 기능을 드래그 또는 HUD로 자유롭게 편집하세요"}
             </p>
@@ -172,11 +200,25 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
         )}
       </div>
 
+      {isFaqLayout && !isEditModeActive ? (
+        <div className="border-t border-slate-300">
+          {(block.items || []).map((item, idx) => (
+            <details key={`${item.title}-${idx}`} className="group border-b border-slate-300 bg-transparent">
+              <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-6 py-5 text-left text-base font-bold text-slate-950 marker:content-none">
+                <span>{item.title}</span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-300 text-lg font-medium text-blue-700 transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+              </summary>
+              <p className="max-w-3xl pb-6 pr-12 text-sm leading-7 text-slate-600">{item.desc}</p>
+            </details>
+          ))}
+        </div>
+      ) : (
       <div className={`grid grid-cols-1 ${
         gridColsCount === 1 ? 'md:grid-cols-1' :
         gridColsCount === 3 ? 'md:grid-cols-3' :
-        gridColsCount === 4 ? 'md:grid-cols-4' : 'md:grid-cols-2'
-      } gap-6`}>
+        gridColsCount === 4 ? 'md:grid-cols-2 lg:grid-cols-4' :
+        gridColsCount === 5 ? 'md:grid-cols-3 lg:grid-cols-5' : 'md:grid-cols-2'
+      } gap-4 md:gap-5`}>
         {(block.items || []).map((item, idx) => {
           const isCurrentlyEditingThisCard = isEditModeActive && activeEditTarget && activeEditTarget.blockId === block.id && activeEditTarget.itemIndex === idx;
           return (
@@ -188,24 +230,32 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                   setActiveEditTarget({ type: "card", pageId: page.id, page, blockId: block.id, block, itemIndex: idx });
                 }
               }}
-              className={`rounded-3xl p-6 md:p-8 border shadow-xs transition-all flex relative group/feat ${cardBg} ${
-                isCurrentlyEditingThisCard ? "ring-4 ring-blue-500 border-transparent shadow-md bg-blue-50/5" : "border-slate-150 hover:shadow-md hover:border-slate-250"
+              className={`${isServiceRows
+                ? "rounded-none border-x-0 border-b-0 border-t border-slate-300 bg-transparent px-0 py-6 md:px-0 md:py-7 min-h-[170px] hover:bg-white/70"
+                : isProcessLayout
+                  ? "rounded-none border-x-0 border-b-0 border-t-2 border-blue-600 bg-transparent px-0 py-5 md:px-0 md:py-6 min-h-[190px]"
+                  : "rounded-lg border border-slate-200 p-5 md:p-6 min-h-[190px] bg-white hover:shadow-sm hover:border-blue-300"
+              } transition-colors flex relative group/feat ${block.cardBgColor ? cardBg : ""} ${
+                isCurrentlyEditingThisCard ? "ring-4 ring-blue-500 border-transparent shadow-md bg-blue-50/5" : ""
               } ${
                 isEditModeActive ? "cursor-pointer" : ""
               } ${
                 block.blockAlign
                   ? block.blockAlign
-                  : isColumnLayout
-                    ? "flex-col items-center text-center gap-4"
+                  : useColumnLayout
+                    ? "flex-col items-start text-left gap-5"
                     : "flex-col items-start text-left gap-4 md:flex-row"
               }`}
             >
+              {isProcessLayout && (
+                <span className="site-display text-sm font-bold text-blue-700">{String(idx + 1).padStart(2, "0")}</span>
+              )}
               <div className="flex flex-col items-center shrink-0">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-xs relative ${
+                <div className={`w-11 h-11 rounded-md flex items-center justify-center shrink-0 relative ${
                   item.icon && (item.icon.startsWith("http") || item.icon.startsWith("/") || item.icon.startsWith("data:"))
                     ? "bg-transparent border-0"
-                    : (item.iconBg || "bg-blue-50")
-                } ${item.iconColor || "text-blue-600"}`}>
+                    : (item.iconBg || (["bg-blue-50", "bg-emerald-50", "bg-amber-50", "bg-cyan-50"][idx % 4]))
+                } ${item.iconColor || (["text-blue-700", "text-emerald-700", "text-amber-700", "text-cyan-700"][idx % 4])}`}>
                   {renderIconComponent(item.icon || "", idx)}
                 </div>
               </div>
@@ -268,7 +318,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                     placeholder="혜택카드 대제목"
                   />
                 ) : (
-                  <h4 className={`${item.titleSize || "text-base"} font-extrabold ${item.titleColor || defaultTitleColor}`}>{item.title}</h4>
+                  <h3 className={`${item.titleSize || "text-base"} font-bold ${item.titleColor || defaultTitleColor}`}>{item.title}</h3>
                 )}
 
                 {isEditModeActive ? (
@@ -302,7 +352,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                 {item.buttonText && (
                   <div className={`pt-2 ${isColumnLayout ? "flex justify-center" : ""}`}>
                     {isEditModeActive ? (
-                      <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl font-bold bg-blue-600 text-white shadow-2xs">
+                      <div className="inline-flex min-h-11 items-center gap-1.5 px-4 py-2 rounded-md font-bold bg-blue-600 text-white shadow-2xs">
                         <input
                           type="text"
                           value={item.buttonText || ""}
@@ -336,7 +386,7 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
                             handleLinkClick(item.buttonLink || "request_consult");
                           }
                         }}
-                        className="px-4 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all active:scale-95 shadow-2xs"
+                        className="min-h-11 px-4 py-2 rounded-md text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors active:bg-blue-800"
                       >
                         {item.buttonText}
                       </button>
@@ -376,13 +426,14 @@ export const FeaturesBlock: React.FC<FeaturesBlockProps> = ({
               const updatedList = [...list, { title: "새로운 가맹 혜택", desc: "고객님의 비즈니스를 업그레이드 해 드리는 탑정보통신의 신규 혜택 상품입니다." }];
               handleUpdateBlockData?.(page, block.id, { items: updatedList });
             }}
-            className="border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50/5 text-blue-600 rounded-3xl p-6 flex flex-col items-center justify-center gap-2 transition min-h-[140px] font-bold text-xs"
+            className="border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50 text-blue-700 rounded-lg p-6 flex flex-col items-center justify-center gap-2 transition min-h-[190px] font-bold text-xs"
           >
-            <span className="text-lg">➕</span>
+            <Plus className="h-5 w-5" aria-hidden="true" />
             <span>새 혜택카드 요소 추가</span>
           </button>
         )}
       </div>
+      )}
     </section>
   );
 };

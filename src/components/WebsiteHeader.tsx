@@ -1,9 +1,20 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  Edit3, Menu, X, UserCircle, LogOut, LogIn
+  ArrowRight,
+  ChevronDown,
+  CloudUpload,
+  Edit3,
+  LogIn,
+  LogOut,
+  Menu,
+  Phone,
+  Truck,
+  UserRound,
+  X,
 } from "lucide-react";
 import { CMSPage, NavigationSettings } from "../types";
 import { getNavigationLabel, getOrderedVisiblePages } from "../utils/cmsSettings";
+import { BrandLogo } from "./public-v3/BrandLogo";
 
 export interface WebsiteHeaderProps {
   isAdmin: boolean;
@@ -11,7 +22,7 @@ export interface WebsiteHeaderProps {
   isEditModeActive: boolean;
   setIsEditModeActive: (active: boolean) => void;
   setEditingBlock: (block: any) => void;
-  setShowAddBlockMenuAtIndex: (val: any) => void;
+  setShowAddBlockMenuAtIndex: (value: any) => void;
   currentUrl: string;
   pages: CMSPage[];
   navigationSettings: NavigationSettings;
@@ -24,6 +35,9 @@ export interface WebsiteHeaderProps {
   setShowLoginModal: (show: boolean) => void;
   mobileMenuOpen: boolean;
   setMobileMenuOpen: (open: boolean) => void;
+  isCmsPublishing?: boolean;
+  hasUnpublishedChanges?: boolean;
+  onPublishWebsite?: () => void;
 }
 
 export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
@@ -45,317 +59,133 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   setShowLoginModal,
   mobileMenuOpen,
   setMobileMenuOpen,
+  isCmsPublishing = false,
+  hasUnpublishedChanges = false,
+  onPublishWebsite,
 }) => {
-  const [showProfilePopover, setShowProfilePopover] = useState(false);
-  const primaryPages = getOrderedVisiblePages(pages, navigationSettings, [
-    "home",
-    "products",
-    "board_suggestions",
-    "board_resources",
-  ]);
-  const actionPages = getOrderedVisiblePages(pages, navigationSettings, ["request_consult", "request_paper"]);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
+  const primaryPages = getOrderedVisiblePages(pages, navigationSettings, ["toss_pos", "products"]);
+  const supportPages = getOrderedVisiblePages(pages, navigationSettings, ["board_resources", "board_suggestions", "request_paper"]);
+  const supportIsActive = supportPages.some((page) => page.slug === currentUrl);
   const customPages = getOrderedVisiblePages(pages.filter((page) => page.isCustom), navigationSettings);
-  const mobilePages = getOrderedVisiblePages(pages, navigationSettings);
+  const mobilePages = getOrderedVisiblePages(pages, navigationSettings, ["toss_pos", "products", "board_resources", "board_suggestions", "request_paper"]);
 
-  const renderLogo = () => (
-    <div
-      className="flex items-center gap-3 cursor-pointer select-none"
-      onClick={() => handleLinkClick("home")}
-    >
-      <div className="w-10 h-10 rounded-full border-[3px] border-[#0f62fe] bg-white flex items-center justify-center relative overflow-hidden shrink-0 shadow-sm">
-        <span className="font-serif font-black text-2xl text-[#0f62fe] leading-none mb-0.5">T</span>
-        <div className="absolute inset-0 border-2 border-transparent hover:border-blue-500/10 rounded-full" />
-      </div>
-      <div className="flex flex-col">
-        <span className="text-lg font-black text-slate-900 tracking-tight leading-none font-sans">탑 정보통신</span>
-        <span className="text-[8px] text-[#0f62fe] font-bold tracking-widest leading-none mt-1 uppercase">Top Info & Comm</span>
-      </div>
-    </div>
-  );
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    const closeMenus = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMobileMenuOpen(false);
+      setSupportOpen(false);
+      setAccountOpen(false);
+    };
+    window.addEventListener("keydown", closeMenus);
+    return () => window.removeEventListener("keydown", closeMenus);
+  }, [setMobileMenuOpen]);
+
+  const navigate = (page: CMSPage) => {
+    setSupportOpen(false);
+    if (isEditModeActive) {
+      setActiveEditTarget({ type: "nav", pageId: page.id, page });
+      return;
+    }
+    handleLinkClick(page.slug);
+  };
+
+  const openLogin = (signUp: boolean) => {
+    setIsSignUpMode(signUp);
+    setShowLoginModal(true);
+  };
+
+  const jumpToHomeSection = (sectionId: string) => {
+    setSupportOpen(false);
+    setMobileMenuOpen(false);
+    const scrollToSection = () => document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (currentUrl === "home") {
+      scrollToSection();
+      return;
+    }
+    handleLinkClick("home");
+    window.setTimeout(scrollToSection, 220);
+  };
 
   return (
     <>
-      <header className="sticky top-0 z-50 bg-white/85 backdrop-blur-lg border-b border-slate-100 shadow-xs transition-all duration-300">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
-
-          {/* Logo elements with Edit Mode Toggle */}
-          <div className="flex items-center gap-4 shrink-0">
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsEditModeActive(!isEditModeActive);
-                  if (isEditModeActive) {
-                    setEditingBlock(null);
-                    setShowAddBlockMenuAtIndex(null);
-                  }
-                }}
-                className={`text-xs px-3.5 py-1.5 rounded-xl font-bold tracking-tight transition-all active:scale-95 flex items-center gap-1.5 border shadow-2xs shrink-0 ${
-                  isEditModeActive
-                    ? "bg-rose-500 hover:bg-rose-600 border-rose-500 text-white"
-                    : "bg-blue-600 hover:bg-blue-700 border-blue-600 text-white"
-                }`}
-              >
-                <Edit3 className="w-3.5 h-3.5 shrink-0" />
-                <span className="shrink-0">{isEditModeActive ? "편집 종료" : "편집 시작"}</span>
-              </button>
-            )}
-            {renderLogo()}
+      {isAdmin && (
+        <div className="public-admin-strip">
+          <div className="public-container">
+            <span>{isEditModeActive ? "홈페이지 초안 편집 중" : "홈페이지 관리"}</span>
+            <div>
+              <button type="button" onClick={() => {
+                setIsEditModeActive(!isEditModeActive);
+                setEditingBlock(null);
+                setShowAddBlockMenuAtIndex(null);
+              }}><Edit3 /> {isEditModeActive ? "편집 종료" : "편집 시작"}</button>
+              {isEditModeActive && <button type="button" className="is-publish" disabled={!hasUnpublishedChanges || isCmsPublishing} onClick={onPublishWebsite}><CloudUpload /> {isCmsPublishing ? "게시 중" : hasUnpublishedChanges ? "변경사항 게시" : "게시 완료"}</button>}
+            </div>
           </div>
+        </div>
+      )}
 
-          {/* Desktop Navigation */}
-          <nav className="hidden xl:flex items-center gap-2 shrink-0">
-            {primaryPages.map((p) => {
-              const isActive = currentUrl === p.slug;
-              return (
-                <button
-                  key={p.id}
-                  onClick={(e) => {
-                    if (isEditModeActive) {
-                      e.stopPropagation();
-                      setActiveEditTarget({ type: "nav", pageId: p.slug, page: p });
-                    } else {
-                      handleLinkClick(p.slug);
-                    }
-                  }}
-                  className={`px-3.5 py-2 rounded-xl text-sm font-bold transition flex items-center justify-center shrink-0 ${
-                    isEditModeActive ? "relative outline-blue-400 hover:outline hover:outline-dashed hover:outline-1" : ""
-                  } ${
-                    isActive ? "text-blue-600 bg-blue-50/60" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                  }`}
-                  title={isEditModeActive ? "클릭해서 탭 이름/설정 변경" : ""}
-                >
-                  {getNavigationLabel(p, navigationSettings)}
-                </button>
-              );
-            })}
+      <header className="public-header">
+        <div className="public-header__utility">
+          <div className="public-container">
+            <span>토스플레이스 직계약 대리점</span>
+            <nav aria-label="빠른 지원 메뉴">
+              <button type="button" onClick={() => handleLinkClick("request_paper")}><Truck /> 용지 배송</button>
+              <a href="tel:0314874401"><Phone /> 대표·AS 031-487-4401</a>
+            </nav>
+          </div>
+        </div>
 
-            {customPages.map(p => (
-              <button
-                key={p.id}
-                onClick={(e) => {
-                  if (isEditModeActive) {
-                    e.stopPropagation();
-                    setActiveEditTarget({ type: "nav", pageId: p.slug, page: p });
-                  } else {
-                    handleLinkClick(p.slug);
-                  }
-                }}
-                className={`px-3.5 py-2 rounded-xl text-sm font-bold transition shrink-0 ${
-                  isEditModeActive ? "relative outline-blue-400 hover:outline hover:outline-dashed hover:outline-1" : ""
-                } ${
-                  currentUrl === p.slug ? "text-blue-600 bg-blue-50/60" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                }`}
-                title={isEditModeActive ? "클릭해서 탭 이름/설정 변경" : ""}
-              >
-                {getNavigationLabel(p, navigationSettings)}
-              </button>
-            ))}
+        <div className="public-header__main public-container">
+          <BrandLogo onClick={() => handleLinkClick("home")} />
+
+          <nav className="public-header__nav" aria-label="주 메뉴">
+            <button type="button" onClick={() => jumpToHomeSection("recommendations")}>업종별 추천</button>
+            {primaryPages.map((page) => <button type="button" key={page.id} className={currentUrl === page.slug ? "is-active" : ""} aria-current={currentUrl === page.slug ? "page" : undefined} onClick={() => navigate(page)}>{getNavigationLabel(page, navigationSettings)}</button>)}
+            <button type="button" onClick={() => jumpToHomeSection("promotion")}>프로모션</button>
+            {supportPages.length > 0 && <div className={`public-header__support ${supportOpen ? "is-open" : ""} ${supportIsActive ? "is-current" : ""}`}>
+              <button type="button" aria-haspopup="menu" aria-expanded={supportOpen} onClick={() => setSupportOpen((open) => !open)}>고객 지원 <ChevronDown /></button>
+              <div role="menu">{supportPages.map((page) => <button type="button" role="menuitem" key={page.id} onClick={() => navigate(page)}>{getNavigationLabel(page, navigationSettings)}<span>{page.slug === "request_paper" ? "가맹점 소모품 요청" : page.slug === "board_resources" ? "설치·사용 자료 확인" : "불편·개선 의견 접수"}</span></button>)}</div>
+            </div>}
+            {customPages.map((page) => <button type="button" key={page.id} className={currentUrl === page.slug ? "is-active" : ""} onClick={() => navigate(page)}>{getNavigationLabel(page, navigationSettings)}</button>)}
           </nav>
 
-          {/* Desktop Navigation md breakpoint fallback */}
-          <nav className="hidden md:flex xl:hidden items-center gap-1 shrink-0">
-            {primaryPages.map((p) => {
-              const isActive = currentUrl === p.slug;
-              return (
-                <button
-                  key={p.id}
-                  onClick={(e) => {
-                    if (isEditModeActive) {
-                      e.stopPropagation();
-                      setActiveEditTarget({ type: "nav", pageId: p.slug, page: p });
-                    } else {
-                      handleLinkClick(p.slug);
-                    }
-                  }}
-                  className={`px-2.5 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center shrink-0 ${
-                    isEditModeActive ? "relative outline-blue-400 hover:outline hover:outline-dashed hover:outline-1" : ""
-                  } ${
-                    isActive ? "text-blue-600 bg-blue-50/60" : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                  }`}
-                  title={isEditModeActive ? "클릭해서 탭 이름/설정 변경" : ""}
-                >
-                  {getNavigationLabel(p, navigationSettings)}
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Dual Action Gateways / Auth section */}
-          <div className="hidden md:flex items-center gap-2 shrink-0">
-            {actionPages.map((p, index) => {
-              const isPrimaryAction = p.slug === "request_consult" || index === 0;
-              return (
-                <button
-                  key={p.id}
-                  onClick={(e) => {
-                    if (isEditModeActive) {
-                      e.stopPropagation();
-                      setActiveEditTarget({ type: "nav", pageId: p.slug, page: p });
-                    } else {
-                      handleLinkClick(p.slug);
-                    }
-                  }}
-                  className={`${
-                    isPrimaryAction
-                      ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/10 min-w-28"
-                      : "bg-slate-100 hover:bg-slate-200 text-slate-800 min-w-24"
-                  } text-xs font-extrabold px-3 py-2.5 md:px-4 rounded-2xl transition flex items-center justify-center shrink-0 ${
-                    isEditModeActive ? "relative outline-amber-400 outline-offset-2 hover:outline hover:outline-dashed hover:outline-2" : ""
-                  }`}
-                  title={isEditModeActive ? "클릭해서 탭 이름/설정 변경" : ""}
-                >
-                  {getNavigationLabel(p, navigationSettings)}
-                </button>
-              );
-            })}
-
-            <div className="w-px h-5 bg-slate-200 mx-1.5" />
-
+          <div className="public-header__actions">
+            <a className="public-header__phone" href="tel:0314874401"><Phone /><span><small>설치·AS</small><strong>031-487-4401</strong></span></a>
             {user ? (
-              <div className="flex items-center gap-2 shrink-0 relative">
-                <div
-                  className="flex items-center gap-1.5 cursor-pointer text-slate-700 hover:text-blue-600 transition"
-                  onClick={() => {
-                    if (isEmployee) {
-                      handleLinkClick("admin");
-                    } else {
-                      setShowProfilePopover(!showProfilePopover);
-                    }
-                  }}
-                  title={isEmployee ? "관리자 포털 정보" : "내 정보"}
-                >
-                  <UserCircle className="w-5 h-5 text-slate-500" />
-                  <span className="text-xs font-extrabold shrink-0">{profile?.nickname || user?.name || "대표주님"}</span>
-                  {isEmployee && <span className="bg-blue-50 text-blue-600 text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0">임직원</span>}
-                </div>
-
-                {showProfilePopover && (
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-100 rounded-2xl shadow-xl p-4 z-[300] text-slate-800">
-                    <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-                      <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center">
-                        <UserCircle className="w-6 h-6 text-blue-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-xs font-extrabold truncate">{profile?.nickname || user?.name || "대표주님"}</h4>
-                        <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
-                      </div>
-                    </div>
-                    <div className="py-2 space-y-1.5 text-[11px] text-slate-600">
-                      <div className="flex justify-between">
-                        <span className="font-bold">회원 등급</span>
-                        <span className="font-medium text-slate-500">{isEmployee ? "임직원" : "일반 가맹점주"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="font-bold">직책 / 권한</span>
-                        <span className="font-medium text-slate-500">{profile?.jobTitle || "일반 가맹점주"}</span>
-                      </div>
-                    </div>
-                    <div className="pt-2 border-t border-slate-100 flex gap-2">
-                      <button
-                        onClick={() => setShowProfilePopover(false)}
-                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold py-2 rounded-xl transition"
-                      >
-                        닫기
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowProfilePopover(false);
-                          logout();
-                          handleLinkClick("home");
-                        }}
-                        className="flex-1 bg-red-50 hover:bg-red-100 text-red-650 text-[10px] font-bold py-2 rounded-xl transition"
-                      >
-                        로그아웃
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => {
-                    logout();
-                    handleLinkClick("home");
-                  }}
-                  className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition shrink-0"
-                  title="로그아웃"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
+              <div className="public-account">
+                <button type="button" className="public-account__trigger" onClick={() => isEmployee ? handleLinkClick("admin") : setAccountOpen(!accountOpen)}><UserRound /><span>{profile?.nickname || user?.name || "내 계정"}</span></button>
+                {accountOpen && !isEmployee && <div className="public-account__menu"><strong>{profile?.nickname || user?.name}</strong><small>{user?.email}</small><button type="button" onClick={() => { setAccountOpen(false); logout(); handleLinkClick("home"); }}><LogOut /> 로그아웃</button></div>}
+                <button type="button" className="public-icon-button public-account__logout" onClick={() => { logout(); handleLinkClick("home"); }} aria-label="로그아웃" title="로그아웃"><LogOut /></button>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={() => { setIsSignUpMode(false); setShowLoginModal(true); }}
-                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-50 text-xs font-bold px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shrink-0"
-                >
-                  로그인
-                </button>
-                <button
-                  onClick={() => { setIsSignUpMode(true); setShowLoginModal(true); }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold px-3.5 py-2.5 rounded-xl transition shrink-0 shadow-sm shadow-blue-600/10 active:scale-95"
-                >
-                  회원가입
-                </button>
-              </div>
+              <button type="button" className="public-header__login" onClick={() => openLogin(false)}><LogIn /> 로그인</button>
             )}
+            <button type="button" className="public-button public-button--primary public-header__cta" onClick={() => handleLinkClick("request_consult")}>무료 상담 <ArrowRight /></button>
           </div>
 
-          {/* Hamburger menu for mobile */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 text-slate-600 hover:bg-slate-50 rounded-xl transition focus:outline-none"
-          >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-
+          <button type="button" className="public-header__menu-button" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label={mobileMenuOpen ? "메뉴 닫기" : "메뉴 열기"} aria-expanded={mobileMenuOpen} aria-controls="public-mobile-menu">{mobileMenuOpen ? <X /> : <Menu />}</button>
         </div>
       </header>
 
-      {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-b border-slate-200 bg-white px-6 py-6 space-y-4">
-          <div className="flex flex-col gap-2">
-            {mobilePages.map((p) => {
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    handleLinkClick(p.slug);
-                  }}
-                  className="w-full text-left px-4 py-2.5 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition animate-in fade-in duration-100"
-                >
-                  {getNavigationLabel(p, navigationSettings)}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
-            {user ? (
-              <div className="flex items-center justify-between px-4">
-                <span className="text-xs font-bold text-slate-700">{profile?.nickname || user?.name || "대표주님"} 대표님</span>
-                <button onClick={() => { setMobileMenuOpen(false); logout(); handleLinkClick("home"); }} className="text-red-500 font-bold text-xs">로그아웃</button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 w-full">
-                <button
-                  onClick={() => { setMobileMenuOpen(false); setIsSignUpMode(false); setShowLoginModal(true); }}
-                  className="w-full text-center bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-3 rounded-xl text-xs transition"
-                >
-                  로그인
-                </button>
-                <button
-                  onClick={() => { setMobileMenuOpen(false); setIsSignUpMode(true); setShowLoginModal(true); }}
-                  className="w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs transition"
-                >
-                  회원가입
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <aside className="public-mobile-menu" id="public-mobile-menu">
+          <nav>
+            <button type="button" onClick={() => jumpToHomeSection("recommendations")}>업종별 추천<ArrowRight /></button>
+            {mobilePages.map((page) => <button type="button" key={page.id} className={currentUrl === page.slug ? "is-active" : ""} aria-current={currentUrl === page.slug ? "page" : undefined} onClick={() => { setMobileMenuOpen(false); navigate(page); }}>{getNavigationLabel(page, navigationSettings)}<ArrowRight /></button>)}
+            <button type="button" onClick={() => jumpToHomeSection("promotion")}>프로모션<ArrowRight /></button>
+          </nav>
+          <div className="public-mobile-menu__contact"><a href="tel:0314874401"><Phone /> 031-487-4401</a><button type="button" onClick={() => { setMobileMenuOpen(false); handleLinkClick("request_consult"); }}>무료 상담 신청</button></div>
+          {user ? <button type="button" className="public-mobile-menu__account" onClick={() => { setMobileMenuOpen(false); if (isEmployee) handleLinkClick("admin"); else { logout(); handleLinkClick("home"); } }}><UserRound /> {isEmployee ? "임직원 관리 화면" : "로그아웃"}</button> : <div className="public-mobile-menu__auth"><button type="button" onClick={() => { setMobileMenuOpen(false); openLogin(false); }}>로그인</button><button type="button" onClick={() => { setMobileMenuOpen(false); openLogin(true); }}>회원가입</button></div>}
+        </aside>
       )}
     </>
   );

@@ -1,5 +1,5 @@
 import React from "react";
-import { Sparkles, ArrowRight, Trash2, Check, Move } from "lucide-react";
+import { Radio, ArrowRight, Trash2, Check, Move } from "lucide-react";
 import { CMSPage, CMSBlock } from "../../types";
 
 
@@ -17,6 +17,8 @@ interface BannerBlockProps {
   handleLinkClick: (slug: string) => void;
   handleUpdateBlockData: (page: CMSPage, blockId: string, updatedData: Partial<CMSBlock>) => Promise<void>;
   db: any;
+  variant?: "home-hero" | "home-cta" | "package" | "feature-story" | "standard";
+  fallbackImageUrl?: string;
 }
 
 export const BannerBlock: React.FC<BannerBlockProps> = ({
@@ -33,10 +35,17 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
   handleLinkClick,
   handleUpdateBlockData,
   db,
+  variant = "standard",
+  fallbackImageUrl,
 }) => {
   const isCenterLayout = block.layoutStyle === "column_center";
   const isLeftColumnLayout = block.layoutStyle === "column_left";
   const bannerBg = block.bgColor || "bg-slate-900";
+  const isHomeHero = variant === "home-hero";
+  const isHomeCta = variant === "home-cta";
+  const isPackage = variant === "package";
+  const isFeatureStory = variant === "feature-story";
+  const effectiveImageUrl = block.imageUrl || fallbackImageUrl;
 
   const renderBannerSubElements = (block: CMSBlock, blockIdx: number) => {
     const list = block.elementOrder || ["badge", "title", "subtitle", "buttons", "iconImageUrl"];
@@ -59,7 +68,11 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
               width: block.elementSizes?.["badge"]?.width || undefined,
             }}
           >
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 text-blue-300 rounded-full text-xs font-bold mb-2 border border-white/5 uppercase tracking-widest">
+            <span className={`inline-flex min-h-8 items-center gap-2 border px-3 py-1 text-xs font-bold mb-2 ${
+              isHomeCta
+                ? "border-blue-200 bg-blue-50 text-blue-800 rounded-md"
+                : "border-white/15 bg-white/10 text-blue-100 rounded-md"
+            }`}>
               {block.badgeIconUrl ? (
                 <img
                   src={block.badgeIconUrl}
@@ -68,7 +81,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
                   className="w-4 h-4 object-contain rounded shrink-0"
                 />
               ) : (
-                <Sparkles className="w-3.5 h-3.5 shrink-0 text-amber-300" />
+                <Radio className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
               )}
               {isEditModeActive ? (
                 <input
@@ -99,10 +112,17 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
           </div>
         );
       } else if (el === "title" && block.title !== "") {
-        const titleSize = block.titleSize || "text-2xl md:text-3xl font-black";
-        const titleColor = block.titleColor || "text-white";
+        const titleSize = block.titleSize || (
+          isHomeHero
+            ? "text-4xl md:text-6xl font-black"
+            : isHomeCta
+              ? "text-3xl md:text-4xl font-bold"
+              : "text-2xl md:text-3xl font-black"
+        );
+        const titleColor = block.titleColor || (isHomeCta ? "text-slate-950" : "text-white");
         const titleAlign = block.titleAlign || block.align || (isCenterLayout ? "center" : "left");
         const titleAlignClass = titleAlign === "left" ? "text-left" : titleAlign === "right" ? "text-right" : "text-center";
+        const HeadingTag = isHomeHero ? "h1" : "h2";
 
         content = isEditModeActive ? (
           <textarea
@@ -127,25 +147,25 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
               letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["title"]?.width || undefined,
             }}
-            className={`w-full bg-white/10 hover:bg-white/20 border border-transparent focus:ring-1 focus:ring-blue-400 p-2 rounded-xl focus:outline-none resize-none leading-normal font-sans text-white ${titleSize} ${titleAlignClass}`}
+            className={`w-full bg-white/10 hover:bg-white/20 border border-transparent focus:ring-1 focus:ring-blue-400 p-2 rounded-lg focus:outline-none resize-none leading-[1.18] ${titleColor} ${titleSize} ${titleAlignClass}`}
             rows={Math.max(2, (block.title || "").split('\n').reduce((acc, val) => acc + Math.max(1, Math.ceil(val.length / 28)), 0))}
             placeholder="배너 메인 타이틀"
           />
         ) : (
-          <h3
+          <HeadingTag
             style={{
               fontSize: block.titleFontSize ? `${block.titleFontSize}pt` : (block.elementSizes?.["title"]?.fontSize || undefined),
               letterSpacing: block.titleLetterSpacing ? `${block.titleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["title"]?.width || undefined,
             }}
-            className={`${titleSize} leading-normal whitespace-pre-line w-full block ${titleColor} ${titleAlignClass}`}
+            className={`${titleSize} leading-[1.18] whitespace-pre-line w-full block ${titleColor} ${titleAlignClass}`}
           >
             {block.title || "배너 타이틀을 입력하세요"}
-          </h3>
+          </HeadingTag>
         );
       } else if (el === "subtitle" && block.subtitle !== "") {
-        const subtitleSize = block.subtitleSize || "text-sm";
-        const subtitleColor = block.subtitleColor || "text-slate-400";
+        const subtitleSize = block.subtitleSize || (isHomeHero ? "text-base md:text-lg" : "text-sm");
+        const subtitleColor = block.subtitleColor || (isHomeCta ? "text-slate-600" : isHomeHero ? "text-slate-200" : "text-slate-400");
         const subtitleAlign = block.subtitleAlign || block.align || (isCenterLayout ? "center" : "left");
         const subtitleAlignClass = subtitleAlign === "left" ? "text-left" : subtitleAlign === "right" ? "text-right" : "text-center";
         const subtitleMxClass = subtitleAlign === "left" ? "mr-auto ml-0" : subtitleAlign === "right" ? "ml-auto mr-0" : "mx-auto";
@@ -173,7 +193,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
               letterSpacing: block.subtitleLetterSpacing ? `${block.subtitleLetterSpacing}px` : undefined,
               width: block.elementSizes?.["subtitle"]?.width || undefined,
             }}
-            className={`w-full bg-white/10 hover:bg-white/20 border border-transparent focus:ring-1 focus:ring-blue-400 p-2 rounded-xl focus:outline-none resize-none leading-relaxed font-sans max-w-2xl ${subtitleSize} ${subtitleColor} ${subtitleAlignClass} ${subtitleMxClass}`}
+            className={`w-full bg-white/10 hover:bg-white/20 border border-transparent focus:ring-1 focus:ring-blue-400 p-2 rounded-lg focus:outline-none resize-none leading-relaxed max-w-2xl ${subtitleSize} ${subtitleColor} ${subtitleAlignClass} ${subtitleMxClass}`}
             rows={Math.max(2, (block.subtitle || "").split('\n').reduce((acc, val) => acc + Math.max(1, Math.ceil(val.length / 45)), 0))}
             placeholder="배너 상세 설명"
           />
@@ -190,15 +210,15 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
           </p>
         );
       } else if (el === "buttons" && (block.buttonText || block.button2Text)) {
-        const b1Bg = block.buttonBgColor || "bg-white";
-        const b1Text = block.buttonTextColor || "text-slate-950";
-        const b1Round = block.buttonRoundness || "rounded-2xl";
+        const b1Bg = block.buttonBgColor || (isHomeCta ? "bg-blue-600" : "bg-white");
+        const b1Text = block.buttonTextColor || (isHomeCta ? "text-white" : "text-slate-950");
+        const b1Round = block.buttonRoundness || "rounded-lg";
         const b1IsTailwindBg = b1Bg.startsWith("bg-");
         const b1IsTailwindText = b1Text.startsWith("text-");
 
         const b2Bg = block.button2BgColor || "bg-white/10";
         const b2Text = block.button2TextColor || "text-white";
-        const b2Round = block.button2Roundness || "rounded-2xl";
+        const b2Round = block.button2Roundness || "rounded-lg";
         const b2IsTailwindBg = b2Bg.startsWith("bg-");
         const b2IsTailwindText = b2Text.startsWith("text-");
 
@@ -474,12 +494,12 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
     });
   };
 
-  const hasSideImage = block.bannerLayout === "side-image" && block.imageUrl;
-  const hasBgImage = block.bannerLayout === "bg-image" && block.imageUrl;
-  const hasWatermark = block.bannerLayout === "watermark" && block.imageUrl;
+  const hasSideImage = block.bannerLayout === "side-image" && effectiveImageUrl;
+  const hasBgImage = block.bannerLayout === "bg-image" && effectiveImageUrl;
+  const hasWatermark = block.bannerLayout === "watermark" && effectiveImageUrl;
 
   const bannerStyle: React.CSSProperties = hasBgImage ? {
-    backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.85)), url(${block.imageUrl})`,
+    backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.85)), url(${effectiveImageUrl})`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -509,6 +529,233 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
     ? (block.align === "left" ? "items-start text-left" : block.align === "right" ? "items-end text-right" : "items-center text-center")
     : (isCenterLayout ? "items-center text-center" : isLeftColumnLayout ? "items-start text-left" : "items-start text-left");
 
+  const renderEditControls = () => isEditModeActive ? (
+    <>
+      <button
+        type="button"
+        title="배너 이동 (상하좌우 드래그)"
+        style={{ touchAction: "none" }}
+        onMouseDown={(e) => handleResizeStart(e, block, "block-position")}
+        className="absolute top-3 right-3 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-3 py-2 rounded-md text-[10px] font-bold shadow-lg flex items-center gap-1.5 cursor-move z-40 transition"
+      >
+        <Move className="w-3 h-3" aria-hidden="true" />
+        <span>이동</span>
+      </button>
+      <span className="absolute top-3 right-24 bg-slate-950 border border-white/15 text-slate-200 px-2.5 py-2 rounded-md text-[10px] font-bold pointer-events-none shadow-xs z-40">
+        텍스트 편집 · 순서 변경
+      </span>
+    </>
+  ) : null;
+
+  const renderStoryItems = (storyBlock: CMSBlock) => {
+    if (!storyBlock.items?.length && !isEditModeActive) return null;
+
+    return (
+      <div className="mt-4 grid w-full gap-3 sm:grid-cols-2">
+        {(storyBlock.items || []).map((item, itemIndex) => (
+          <div key={`${item.title}-${itemIndex}`} className="flex items-start gap-3 border-t border-slate-300 pt-3 text-left">
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              {isEditModeActive ? (
+                <>
+                  <input
+                    type="text"
+                    value={item.title || ""}
+                    onChange={(e) => {
+                      const nextItems = [...(storyBlock.items || [])];
+                      nextItems[itemIndex] = { ...nextItems[itemIndex], title: e.target.value };
+                      handleUpdateBlockData(page, storyBlock.id, { items: nextItems });
+                    }}
+                    className="w-full rounded-md border border-dashed border-blue-300 bg-white px-2 py-1 text-sm font-bold text-slate-900"
+                  />
+                  <textarea
+                    value={item.desc || ""}
+                    onChange={(e) => {
+                      const nextItems = [...(storyBlock.items || [])];
+                      nextItems[itemIndex] = { ...nextItems[itemIndex], desc: e.target.value };
+                      handleUpdateBlockData(page, storyBlock.id, { items: nextItems });
+                    }}
+                    rows={2}
+                    className="mt-1 w-full resize-none rounded-md border border-dashed border-blue-200 bg-white px-2 py-1 text-xs leading-5 text-slate-600"
+                  />
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-bold text-slate-900">{item.title}</p>
+                  {item.desc && <p className="mt-1 text-xs leading-5 text-slate-600">{item.desc}</p>}
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+        {isEditModeActive && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleUpdateBlockData(page, storyBlock.id, {
+                items: [...(storyBlock.items || []), { title: "새 항목", desc: "설명을 입력하세요." }],
+              });
+            }}
+            className="min-h-12 rounded-md border border-dashed border-blue-400 px-3 text-xs font-bold text-blue-700 hover:bg-blue-50"
+          >
+            항목 추가
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  if (isHomeHero) {
+    const heroBlock: CMSBlock = {
+      ...block,
+      align: "left",
+      titleAlign: block.titleAlign || "left",
+      subtitleAlign: block.subtitleAlign || "left",
+      badgeAlign: block.badgeAlign || "left",
+      buttonsAlign: block.buttonsAlign || "left",
+      layoutStyle: "column_left",
+      buttonRoundness: block.buttonRoundness === "rounded-full" ? "rounded-lg" : block.buttonRoundness,
+    };
+    const heroImageUrl = effectiveImageUrl
+      ?.replace(/w=\d+/, "w=1800")
+      .replace(/q=\d+/, "q=85");
+
+    return (
+      <section
+        onClick={(e) => {
+          if (isEditModeActive) {
+            e.stopPropagation();
+            setActiveEditTarget({ type: "hero", pageId: page.id, page, blockId: block.id, block, selectedElement: "block" });
+          }
+        }}
+        className={`site-home-hero relative flex w-full overflow-hidden bg-[#0b1830] text-white ${isEditModeActive ? "cursor-pointer" : ""}`}
+      >
+        {heroImageUrl && (
+          <img
+            src={heroImageUrl}
+            alt="탑정보통신 결제기기 서비스 현장"
+            referrerPolicy="no-referrer"
+            loading="eager"
+            fetchPriority="high"
+            className="absolute inset-0 h-full w-full object-cover object-center"
+          />
+        )}
+        <div className="absolute inset-0 bg-[#071427]/80" aria-hidden="true" />
+        <div className="relative z-10 mx-auto flex w-full max-w-[1200px] items-center px-5 py-12 md:px-8 md:py-20">
+          <div
+            className="flex w-full max-w-[760px] flex-col items-start gap-3 text-left"
+            onClick={(e) => isEditModeActive && e.stopPropagation()}
+          >
+            {renderBannerSubElements(heroBlock, blockIdx)}
+          </div>
+        </div>
+        <div className="absolute bottom-0 left-0 z-20 h-1 w-28 bg-[#22a68a]" aria-hidden="true" />
+        {renderEditControls()}
+      </section>
+    );
+  }
+
+  if (isPackage || isFeatureStory) {
+    const storyBlock: CMSBlock = {
+      ...block,
+      align: "left",
+      titleAlign: block.titleAlign || "left",
+      subtitleAlign: block.subtitleAlign || "left",
+      badgeAlign: block.badgeAlign || "left",
+      buttonsAlign: block.buttonsAlign || "left",
+      layoutStyle: "column_left",
+      titleColor: block.titleColor || "text-slate-950",
+      subtitleColor: block.subtitleColor || "text-slate-600",
+      buttonBgColor: block.buttonBgColor || "bg-blue-600",
+      buttonTextColor: block.buttonTextColor || "text-white",
+      buttonRoundness: block.buttonRoundness || "rounded-lg",
+      button2BgColor: block.button2BgColor || "bg-white",
+      button2TextColor: block.button2TextColor || "text-slate-900",
+      button2Roundness: block.button2Roundness || "rounded-lg",
+    };
+    const imageOnLeft = block.bannerImagePosition === "left";
+    const storyImageUrl = effectiveImageUrl
+      ?.replace(/w=\d+/, "w=1400")
+      .replace(/q=\d+/, "q=85");
+
+    return (
+      <section
+        onClick={(e) => {
+          if (isEditModeActive) {
+            e.stopPropagation();
+            setActiveEditTarget({ type: "banner", pageId: page.id, page, blockId: block.id, block, selectedElement: "block" });
+          }
+        }}
+        className={`relative w-full overflow-hidden border-y border-slate-200 ${
+          isPackage ? "bg-[#edf4fb]" : blockIdx % 2 === 0 ? "bg-white" : "bg-[#f7f9fc]"
+        } ${isEditModeActive ? "cursor-pointer" : ""}`}
+      >
+        <div className="mx-auto grid w-full max-w-[1200px] grid-cols-1 items-center gap-10 px-5 py-16 md:px-8 md:py-24 lg:grid-cols-2 lg:gap-16">
+          <div
+            className={`flex w-full flex-col items-start gap-2 text-left ${imageOnLeft ? "lg:order-2" : "lg:order-1"}`}
+            onClick={(e) => isEditModeActive && e.stopPropagation()}
+          >
+            {renderBannerSubElements(storyBlock, blockIdx)}
+            {renderStoryItems(storyBlock)}
+          </div>
+          <div className={`${imageOnLeft ? "lg:order-1" : "lg:order-2"}`}>
+            {storyImageUrl ? (
+              <img
+                src={storyImageUrl}
+                alt={block.title ? `${block.title.replace(/\n/g, " ")} 안내 이미지` : "탑정보통신 서비스 안내 이미지"}
+                referrerPolicy="no-referrer"
+                loading="lazy"
+                className="aspect-[4/3] w-full rounded-lg border border-slate-200 bg-white object-cover"
+              />
+            ) : (
+              <div className="flex aspect-[4/3] w-full items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-sm font-bold text-slate-400">
+                이미지 영역
+              </div>
+            )}
+          </div>
+        </div>
+        {renderEditControls()}
+      </section>
+    );
+  }
+
+  if (isHomeCta) {
+    const ctaBlock: CMSBlock = {
+      ...block,
+      align: "left",
+      titleAlign: block.titleAlign || "left",
+      subtitleAlign: block.subtitleAlign || "left",
+      badgeAlign: block.badgeAlign || "left",
+      buttonsAlign: block.buttonsAlign || "left",
+      layoutStyle: "column_left",
+      titleColor: block.titleColor || "text-slate-950",
+      subtitleColor: block.subtitleColor || "text-slate-600",
+      buttonBgColor: block.buttonBgColor === "bg-white" ? "bg-blue-600" : block.buttonBgColor,
+      buttonTextColor: block.buttonTextColor || "text-white",
+      buttonRoundness: block.buttonRoundness || "rounded-lg",
+    };
+
+    return (
+      <section
+        onClick={(e) => {
+          if (isEditModeActive) {
+            e.stopPropagation();
+            setActiveEditTarget({ type: "banner", pageId: page.id, page, blockId: block.id, block, selectedElement: "block" });
+          }
+        }}
+        className={`relative w-full overflow-hidden border-y border-[#cbd9e8] bg-[#e8f0f8] ${isEditModeActive ? "cursor-pointer" : ""}`}
+      >
+        <div className="mx-auto flex w-full max-w-[1200px] flex-col items-start px-5 py-14 md:px-8 md:py-20">
+          <div className="flex w-full max-w-[820px] flex-col items-start gap-2 text-left" onClick={(e) => isEditModeActive && e.stopPropagation()}>
+            {renderBannerSubElements(ctaBlock, blockIdx)}
+          </div>
+        </div>
+        {renderEditControls()}
+      </section>
+    );
+  }
+
   return (
     <section
       onClick={(e) => {
@@ -518,17 +765,17 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
         }
       }}
       style={bannerStyle}
-      className={`text-white rounded-3xl p-8 md:p-12 shadow-lg shadow-slate-955/20 transition-all ${bannerBg} flex relative w-full overflow-hidden ${
+      className={`text-white rounded-lg border border-white/10 p-7 md:p-11 shadow-sm transition-all ${bannerBg} flex relative w-full overflow-hidden ${
         isEditModeActive ? "cursor-pointer" : ""
       } ${bannerAlignClass}`}
     >
       {/* Visual Watermark background effect */}
       {hasWatermark && (
         <img
-          src={block.imageUrl}
-          alt="watermark illustration"
+          src={effectiveImageUrl}
+          alt=""
           referrerPolicy="no-referrer"
-          className="absolute right-[-4%] bottom-[-5%] w-[180px] h-[180px] object-contain opacity-10 pointer-events-none select-none animate-pulse"
+          className="absolute right-[-4%] bottom-[-5%] w-[180px] h-[180px] object-contain opacity-10 pointer-events-none select-none"
           style={customImageStyle}
         />
       )}
@@ -539,8 +786,8 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
           {block.bannerImagePosition === "left" && (
             <div className="w-full flex justify-center">
               <img
-                src={block.imageUrl}
-                alt="banner illustration"
+                src={effectiveImageUrl}
+                alt={block.title ? `${block.title.replace(/\n/g, " ")} 관련 이미지` : "탑정보통신 서비스 이미지"}
                 referrerPolicy="no-referrer"
                 className="rounded-2xl transition duration-150 hover:scale-[1.01]"
                 style={{
@@ -558,8 +805,8 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
           {block.bannerImagePosition !== "left" && (
             <div className="w-full flex justify-center">
               <img
-                src={block.imageUrl}
-                alt="banner illustration"
+                src={effectiveImageUrl}
+                alt={block.title ? `${block.title.replace(/\n/g, " ")} 관련 이미지` : "탑정보통신 서비스 이미지"}
                 referrerPolicy="no-referrer"
                 className="rounded-2xl transition duration-150 hover:scale-[1.01]"
                 style={{
@@ -574,13 +821,13 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
         <div className={`flex-1 space-y-4 w-full flex flex-col ${bannerTextAlignClass}`} onClick={(e) => isEditModeActive && e.stopPropagation()}>
 
           {/* Inline Image on TOP */}
-          {block.bannerLayout === "inline" && block.imageUrl && block.bannerImagePosition === "top" && (
+          {block.bannerLayout === "inline" && effectiveImageUrl && block.bannerImagePosition === "top" && (
             <div className={`w-full flex ${
               block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center"
             } mb-2`}>
               <img
-                src={block.imageUrl}
-                alt="inline banner illustration"
+                src={effectiveImageUrl}
+                alt={block.title ? `${block.title.replace(/\n/g, " ")} 관련 이미지` : "탑정보통신 서비스 이미지"}
                 referrerPolicy="no-referrer"
                 className="rounded-2xl transition hover:scale-[1.02]"
                 style={{
@@ -594,13 +841,13 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
           {renderBannerSubElements(block, blockIdx)}
 
           {/* Inline Image on BOTTOM */}
-          {block.bannerLayout === "inline" && block.imageUrl && block.bannerImagePosition !== "top" && (
+          {block.bannerLayout === "inline" && effectiveImageUrl && block.bannerImagePosition !== "top" && (
             <div className={`w-full flex ${
               block.align === "left" ? "justify-start" : block.align === "right" ? "justify-end" : "justify-center"
             } mt-2`}>
               <img
-                src={block.imageUrl}
-                alt="inline banner illustration"
+                src={effectiveImageUrl}
+                alt={block.title ? `${block.title.replace(/\n/g, " ")} 관련 이미지` : "탑정보통신 서비스 이미지"}
                 referrerPolicy="no-referrer"
                 className="rounded-2xl transition hover:scale-[1.02]"
                 style={{
@@ -656,23 +903,7 @@ export const BannerBlock: React.FC<BannerBlockProps> = ({
         </div>
       )}
 
-      {isEditModeActive && (
-        <>
-          <button
-            type="button"
-            title="배너 이동 (상하좌우 드래그)"
-            style={{ touchAction: "none" }}
-            onMouseDown={(e) => handleResizeStart(e, block, "block-position")}
-            className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-3 py-1.5 rounded-full text-[10px] font-bold shadow-lg flex items-center gap-1.5 cursor-move z-40 transition"
-          >
-            <Move className="w-3 h-3" />
-            <span>이동</span>
-          </button>
-          <span className="absolute top-2 right-20 bg-slate-900 border border-white/15 text-slate-300 px-2.5 py-1.5 rounded-full text-[10px] font-bold pointer-events-none shadow-xs font-sans">
-            텍스트 편집 & 드래그 순서 변경 가능
-          </span>
-        </>
-      )}
+      {renderEditControls()}
     </section>
   );
 };

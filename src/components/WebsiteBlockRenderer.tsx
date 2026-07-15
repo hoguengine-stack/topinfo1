@@ -1,41 +1,69 @@
 import React from "react";
-import { ChevronUp, ChevronDown, Trash2, Settings, Move, Smartphone, Check, Plus } from "lucide-react";
-import { doc, deleteDoc, setDoc } from "firebase/firestore";
-import { CMSPage, CMSBlock } from "../types";
-
-import { mergeBlockFields } from "../utils/cmsSettings";
-
-// Import modular block renderers
-import { FeaturesBlock } from "./block_renderers/FeaturesBlock";
-import { TextBlock } from "./block_renderers/TextBlock";
-import { BannerBlock } from "./block_renderers/BannerBlock";
-import { DividerBlock } from "./block_renderers/DividerBlock";
-import { ImageBlock } from "./block_renderers/ImageBlock";
-
-// Import custom page board/form components
-import { ConsultationForm, PaperRollRequestForm } from "./WebForms";
+import { AnimatePresence, motion, useInView, useReducedMotion } from "motion/react";
 import {
-  SuggestionBoard,
-  ResourceBoard,
-  SuggestionBoardProvider,
-  SuggestionBoardHeader,
-  SuggestionBoardSearch,
-  SuggestionBoardBody,
-  ResourceBoardProvider,
-  ResourceBoardHeader,
-  ResourceBoardSearch,
-  ResourceBoardBody,
-} from "./WebBoards";
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  BarChart3,
+  Barcode,
+  BellRing,
+  CalendarCheck2,
+  Check,
+  ChevronRight,
+  CircleDollarSign,
+  CloudUpload,
+  Coffee,
+  Cpu,
+  CreditCard,
+  FileText,
+  HeartHandshake,
+  LayoutGrid,
+  Layers3,
+  Monitor,
+  PackageCheck,
+  PhoneCall,
+  Plus,
+  ReceiptText,
+  ScanLine,
+  Search,
+  ShieldCheck,
+  ShoppingBag,
+  Scissors,
+  Smartphone,
+  Sparkles,
+  TabletSmartphone,
+  TicketPercent,
+  Trash2,
+  Truck,
+  UtensilsCrossed,
+  UserRound,
+  Wifi,
+  Wine,
+  Wrench,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { CMSBlock, CMSPage, CMSSectorFeature, Product } from "../types";
+import { FooterInfo } from "../utils/footerSettings";
+import { getPublicBlockSubtitle, HOME_HERO_ITEMS } from "../utils/cmsSettings";
+import { PUBLIC_MEDIA, isDeprecatedPublicMedia } from "../utils/publicMedia";
+import { createVerifiedPublicProducts } from "../utils/publicProducts";
+import { getSectorDetailGroups, getSectorKind } from "../utils/sectorContent";
+import { PublicConsultationForm, PublicPaperRequestForm } from "./public-v3/PublicForms";
+import { PublicResourceBoard, PublicSuggestionBoard } from "./public-v3/PublicBoards";
+import { PublicHomeExperience } from "./public-v3/PublicHomeExperience";
+import { ApexaXVisual } from "./public-v3/ApexaXVisual";
+import { UplusAiAppSection, UplusAiPhoneHero } from "./public-v3/UplusAiPhonePage";
 
 interface WebsiteBlockRendererProps {
   page: CMSPage;
   pages: CMSPage[];
-  setPages: (pages: CMSPage[]) => void;
+  setPages: React.Dispatch<React.SetStateAction<CMSPage[]>>;
   isEditModeActive: boolean;
   activeEditTarget: any;
   setActiveEditTarget: (target: any) => void;
   showAddBlockMenuAtIndex: { pageId: string; index: number } | null;
-  setShowAddBlockMenuAtIndex: (val: any) => void;
+  setShowAddBlockMenuAtIndex: (value: { pageId: string; index: number } | null) => void;
   handleMoveBlockUp: (page: CMSPage, index: number) => void;
   handleMoveBlockDown: (page: CMSPage, index: number) => void;
   handleDeleteBlock: (page: CMSPage, index: number) => void;
@@ -43,19 +71,1097 @@ interface WebsiteBlockRendererProps {
   handleLinkClick: (slug: string) => void;
   handleUpdateBlockData: (page: CMSPage, blockId: string, updatedData: Partial<CMSBlock>) => Promise<void>;
   db: any;
+  products: Product[];
+  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  productFilter: string;
+  setProductFilter: (value: string) => void;
+  scheduleProductWrite: (productId: string, fields: Partial<Product>) => void;
+  footerInfo: FooterInfo;
+}
 
-  // Added products catalog props
-  products?: any[];
-  setProducts?: React.Dispatch<React.SetStateAction<any[]>>;
-  productFilter?: string;
-  setProductFilter?: (val: string) => void;
-  scheduleProductWrite?: (productId: string, fields: any) => void;
+const iconMap: Record<string, LucideIcon> = {
+  phone: PhoneCall,
+  zap: Sparkles,
+  shield: ShieldCheck,
+  monitor: Monitor,
+  chart: BarChart3,
+  "credit-card": CreditCard,
+  scrolltext: ReceiptText,
+  layers: Layers3,
+  heart: HeartHandshake,
+  smartphone: Smartphone,
+  cpu: Cpu,
+  wifi: Wifi,
+  package: PackageCheck,
+  file: FileText,
+  wrench: Wrench,
+  coffee: Coffee,
+  utensils: UtensilsCrossed,
+  shop: ShoppingBag,
+  bar: Wine,
+  beauty: Scissors,
+  delivery: Truck,
+  coupon: TicketPercent,
+  customer: UserRound,
+  receipt: ReceiptText,
+  layout: LayoutGrid,
+  tablet: TabletSmartphone,
+  upload: CloudUpload,
+  barcode: Barcode,
+  search: Search,
+  calendar: CalendarCheck2,
+  bell: BellRing,
+  scan: ScanLine,
+  check: Check,
+};
+
+type CMSBlockItem = NonNullable<CMSBlock["items"]>[number];
+
+const standardItemImageCorrections: Record<string, Record<number, { legacy: string; current: string }>> = {
+  "toss-hero": {
+    1: { legacy: "/assets/product/toss-mobile-order.webp", current: "/assets/product/toss-delivery-sales.webp" },
+  },
+};
+
+function resolveStandardItemImage(block: CMSBlock, item: CMSBlockItem | undefined, index: number) {
+  const configuredImage = item?.imageUrl;
+  const correction = standardItemImageCorrections[block.id]?.[index];
+
+  // Migrate only untouched legacy defaults. Images selected in the CMS always take priority.
+  if (correction && (!configuredImage || configuredImage === correction.legacy)) return correction.current;
+  return configuredImage || block.imageUrl;
+}
+
+function isAiPhoneItem(item?: CMSBlockItem) {
+  return Boolean(item?.title && /AI\s*전화/i.test(item.title));
+}
+
+type GeneratedServiceKind = "ai" | "toss" | "internet" | "cctv" | "phone";
+
+function getGeneratedServiceKind(item?: CMSBlockItem): GeneratedServiceKind | null {
+  const title = item?.title || "";
+  if (isAiPhoneItem(item)) return "ai";
+  if (/토스포스|토스프론트/.test(title)) return "toss";
+  if (/CCTV/i.test(title)) return "cctv";
+  if (/인터넷전화/.test(title)) return "phone";
+  if (/인터넷/.test(title)) return "internet";
+  return null;
+}
+
+function shouldUseGeneratedServiceGraphic(item?: CMSBlockItem) {
+  return Boolean(getGeneratedServiceKind(item)) && (!item?.imageUrl || isDeprecatedPublicMedia(item.imageUrl));
+}
+
+function mediaPresentationClass(imageUrl?: string) {
+  if (!imageUrl) return "";
+  if (imageUrl.includes("uplus-internet-")) return "is-uplus-internet";
+  if (imageUrl.includes("uplus-ai-phone-")) return "is-uplus-ai-phone";
+  if (imageUrl.includes("uplus-cctv-")) return "is-uplus-cctv";
+  if (imageUrl.includes("uplus-phone-")) return "is-uplus-phone";
+  return "";
+}
+
+function UplusProductMedia({ imageUrl, alt }: { imageUrl?: string; alt: string }) {
+  if (!imageUrl) return null;
+  const mediaClass = mediaPresentationClass(imageUrl);
+  const cameraOptions = mediaClass === "is-uplus-cctv"
+    ? [
+        { src: PUBLIC_MEDIA.homeTelecom.cctvOutdoor, alt: "LG U+ 실외형 CCTV 카메라" },
+        { src: PUBLIC_MEDIA.homeTelecom.cctvPtz, alt: "LG U+ PTZ CCTV 카메라" },
+      ]
+    : [];
+
+  return (
+    <div className={`public-uplus-product-media ${mediaClass}`}>
+      <img className="is-primary" src={imageUrl} alt={alt} loading="lazy" decoding="async" />
+      {cameraOptions.map((camera) => <img className="is-camera-option" src={camera.src} alt={camera.alt} key={camera.src} loading="lazy" decoding="async" />)}
+    </div>
+  );
+}
+
+const systemVisualSpecs: Record<GeneratedServiceKind, {
+  icon: LucideIcon;
+  title: string;
+  metric: string;
+  nodes: [LucideIcon, LucideIcon, LucideIcon];
+}> = {
+  ai: {
+    icon: PhoneCall,
+    title: "AI전화 자동 응대와 문의 분석",
+    metric: "24h",
+    nodes: [BellRing, BarChart3, Smartphone],
+  },
+  toss: {
+    icon: Monitor,
+    title: "토스포스 주문·결제·매출 연결",
+    metric: "POS",
+    nodes: [CreditCard, ReceiptText, BarChart3],
+  },
+  internet: {
+    icon: Wifi,
+    title: "인터넷과 매장 기기 연결",
+    metric: "500M",
+    nodes: [Monitor, CreditCard, Smartphone],
+  },
+  cctv: {
+    icon: ShieldCheck,
+    title: "지능형 CCTV 모니터링",
+    metric: "FHD",
+    nodes: [Monitor, Smartphone, BellRing],
+  },
+  phone: {
+    icon: PhoneCall,
+    title: "유·무선 인터넷전화 연결",
+    metric: "TEL",
+    nodes: [Smartphone, Wifi, BellRing],
+  },
+};
+
+function IconFlowVisual({
+  kind,
+  mainIcon: MainIcon,
+  nodes,
+  metric,
+  label,
+  compact = false,
+}: {
+  kind: string;
+  mainIcon: LucideIcon;
+  nodes: [LucideIcon, LucideIcon, LucideIcon];
+  metric?: string;
+  label: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`public-icon-flow-visual is-${kind} ${compact ? "is-compact" : ""}`} role="img" aria-label={label}>
+      <i className="public-icon-flow-visual__ring" aria-hidden="true" />
+      <span className="public-icon-flow-visual__main"><MainIcon aria-hidden="true" /></span>
+      <span className="public-icon-flow-visual__nodes" aria-hidden="true">
+        {nodes.map((NodeIcon, index) => <i key={index}><NodeIcon /></i>)}
+      </span>
+      {metric && <b>{metric}</b>}
+    </div>
+  );
+}
+
+function SystemServiceVisual({ kind, compact = false }: { kind: GeneratedServiceKind; compact?: boolean }) {
+  const spec = systemVisualSpecs[kind];
+  return (
+    <IconFlowVisual kind={kind} mainIcon={spec.icon} nodes={spec.nodes} metric={spec.metric} label={spec.title} compact={compact} />
+  );
+}
+
+function ServiceIllustration({ item, compact = false }: { item: CMSBlockItem; compact?: boolean }) {
+  const generatedKind = getGeneratedServiceKind(item);
+  if (generatedKind) return <SystemServiceVisual kind={generatedKind} compact={compact} />;
+
+  const MainIcon = iconMap[item.icon || "wrench"] || Wrench;
+  const isMembership = item.icon === "file";
+  return (
+    <IconFlowVisual
+      kind={isMembership ? "membership" : "support"}
+      mainIcon={MainIcon}
+      nodes={isMembership ? [FileText, ShieldCheck, CreditCard] : [Search, Wrench, Check]}
+      metric={isMembership ? "VAN" : "A/S"}
+      label={`${item.title} 지원 흐름`}
+      compact={compact}
+    />
+  );
+}
+
+const fallbackProducts = createVerifiedPublicProducts("");
+
+function colorStyle(value?: string) {
+  return value && /^#[0-9a-f]{6}$/i.test(value) ? value : undefined;
+}
+
+function backgroundStyle(block: CMSBlock): React.CSSProperties | undefined {
+  const backgroundColor = colorStyle(block.bgColor);
+  return backgroundColor ? { backgroundColor } : undefined;
+}
+
+function Icon({ name, className = "" }: { name?: string; className?: string }) {
+  const Component = iconMap[(name || "").toLowerCase()] || Check;
+  return <Component className={className} aria-hidden="true" />;
+}
+
+function LinkButton({
+  text,
+  target,
+  secondary = false,
+  onNavigate,
+}: {
+  text?: string;
+  target?: string;
+  secondary?: boolean;
+  onNavigate: (target: string) => void;
+}) {
+  if (!text || !target) return null;
+  return (
+    <button type="button" className={`public-button ${secondary ? "public-button--secondary" : "public-button--primary"}`} onClick={() => onNavigate(target)}>
+      {text} <ArrowRight aria-hidden="true" />
+    </button>
+  );
+}
+
+function SectionHeading({ block, dark = false }: { block: CMSBlock; dark?: boolean }) {
+  const subtitle = getPublicBlockSubtitle(block);
+  return (
+    <header className={`public-section-heading ${dark ? "is-dark" : ""}`} style={{ textAlign: block.titleAlign || block.align || "left" }}>
+      {block.badge && <p className="public-kicker">{block.badge}</p>}
+      {block.title && <h2 style={{ color: colorStyle(block.titleColor) }}>{block.title}</h2>}
+      {subtitle && <p style={{ color: colorStyle(block.subtitleColor) }}>{subtitle}</p>}
+    </header>
+  );
+}
+
+function HeroSection({ block, onNavigate }: { block: CMSBlock; onNavigate: (target: string) => void }) {
+  const items = block.items ?? HOME_HERO_ITEMS;
+  const subtitle = getPublicBlockSubtitle(block);
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const activeItem = items[activeIndex] || items[0];
+  const usesGeneratedVisual = block.id === "home-hero" && Boolean(activeItem) && (
+    shouldUseGeneratedServiceGraphic(activeItem)
+    || (!activeItem?.imageUrl && (activeItem?.icon === "file" || activeItem?.icon === "wrench"))
+  );
+  const activeImageUrl = usesGeneratedVisual ? undefined : resolveStandardItemImage(block, activeItem, activeIndex);
+  const mediaClass = mediaPresentationClass(activeImageUrl);
+  const shouldReduceMotion = useReducedMotion();
+
+  React.useEffect(() => {
+    if (activeIndex >= items.length) setActiveIndex(0);
+  }, [activeIndex, items.length]);
+
+  React.useEffect(() => {
+    if (items.length < 2 || shouldReduceMotion) return;
+    const timer = window.setInterval(() => setActiveIndex((current) => (current + 1) % items.length), 4200);
+    return () => window.clearInterval(timer);
+  }, [items.length, shouldReduceMotion]);
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLElement>) => {
+    if (window.matchMedia("(pointer: coarse)").matches) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width - 0.5;
+    const y = (event.clientY - rect.top) / rect.height - 0.5;
+    event.currentTarget.style.setProperty("--hero-rotate-x", `${y * -4}deg`);
+    event.currentTarget.style.setProperty("--hero-rotate-y", `${x * 6}deg`);
+    event.currentTarget.style.setProperty("--hero-shift-x", `${x * 16}px`);
+    event.currentTarget.style.setProperty("--hero-shift-y", `${y * 12}px`);
+  };
+
+  const resetPointer = (event: React.PointerEvent<HTMLElement>) => {
+    event.currentTarget.style.setProperty("--hero-rotate-x", "0deg");
+    event.currentTarget.style.setProperty("--hero-rotate-y", "0deg");
+    event.currentTarget.style.setProperty("--hero-shift-x", "0px");
+    event.currentTarget.style.setProperty("--hero-shift-y", "0px");
+  };
+
+  return (
+    <section className="public-clean-hero" style={backgroundStyle(block)} onPointerMove={handlePointerMove} onPointerLeave={resetPointer}>
+      <div className="public-container public-clean-hero__layout">
+        <motion.div className="public-clean-hero__copy" initial={shouldReduceMotion ? false : { opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}>
+          {block.badge && <p className="public-clean-hero__badge">{block.badge}</p>}
+          <h1 style={{ color: colorStyle(block.titleColor) }}>
+            {(block.title || "").split("\n").map((line, index) => <React.Fragment key={`${line}-${index}`}>{index > 0 && <br />}{index === 1 ? <span>{line}</span> : line}</React.Fragment>)}
+          </h1>
+          {subtitle && <p className="public-clean-hero__lead" style={{ color: colorStyle(block.subtitleColor) }}>{subtitle}</p>}
+          <div className="public-clean-hero__actions">
+            <LinkButton text={block.buttonText} target={block.buttonLink} onNavigate={onNavigate} />
+            <LinkButton text={block.button2Text} target={block.button2Link} secondary onNavigate={onNavigate} />
+          </div>
+        </motion.div>
+
+        <motion.figure className={`public-clean-hero__visual ${mediaClass} ${usesGeneratedVisual ? "has-generated-service" : ""}`} initial={shouldReduceMotion ? false : { opacity: 0, y: 32, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.72, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}>
+          <AnimatePresence mode="wait">
+            {usesGeneratedVisual && activeItem ? (
+              <motion.div className="public-clean-hero__generated" key={`${activeItem.title}-${activeIndex}`} initial={shouldReduceMotion ? false : { opacity: 0, y: 12, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8, scale: 1.01 }} transition={{ duration: 0.36 }}>
+                <ServiceIllustration item={activeItem} />
+              </motion.div>
+            ) : activeImageUrl === PUBLIC_MEDIA.homeHero.tossPos ? (
+              <motion.div
+                className="public-clean-hero__apexa"
+                key={`${activeImageUrl}-${activeIndex}`}
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 12, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8, scale: 1.01 }}
+                transition={{ duration: 0.36 }}
+              >
+                <ApexaXVisual src={activeImageUrl} alt={`${activeItem?.title || "토스포스"} 추천 구성`} variant="product" />
+              </motion.div>
+            ) : activeImageUrl ? (
+              <motion.img
+                key={`${activeImageUrl}-${activeIndex}`}
+                src={activeImageUrl}
+                alt={`${activeItem?.title || "토스포스"} 추천 구성`}
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 12, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8, scale: 1.01 }}
+                transition={{ duration: 0.36 }}
+              />
+            ) : null}
+          </AnimatePresence>
+          <AnimatePresence mode="wait">
+            {activeItem && <motion.figcaption key={`${activeItem.title}-${activeIndex}`} initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }} transition={{ duration: 0.22 }}>
+              <span><Icon name={activeItem.icon} /></span>
+              <div><strong>{activeItem.title}</strong></div>
+            </motion.figcaption>}
+          </AnimatePresence>
+          <nav aria-label="매장 오픈 지원 범위">{items.map((item, index) => <button type="button" key={`${item.title}-${index}`} className={activeIndex === index ? "is-active" : ""} aria-label={item.title} aria-pressed={activeIndex === index} onClick={() => setActiveIndex(index)} />)}</nav>
+        </motion.figure>
+      </div>
+    </section>
+  );
+}
+
+function OfferSection({ block, onNavigate }: { block: CMSBlock; onNavigate: (target: string) => void }) {
+  const items = block.items || [];
+  const subtitle = getPublicBlockSubtitle(block);
+  const visualItems = items.filter((item) => item.imageUrl || shouldUseGeneratedServiceGraphic(item)).slice(0, 4);
+
+  return (
+    <section className="public-offer-section" style={backgroundStyle(block)}>
+      <div className="public-container public-offer">
+        <div className="public-offer__copy">
+          {block.badge && <p className="public-kicker">{block.badge}</p>}
+          <h2>{block.title}</h2>
+          {subtitle && <p>{subtitle}</p>}
+          <div className="public-offer__price">
+            <span>{block.priceLabel || "인터넷 결합 패키지"}</span>
+            <strong>{block.priceValue || "0"}<small>{block.priceUnit || "원"}</small></strong>
+            {block.priceDetails && <p>{block.priceDetails}</p>}
+          </div>
+          <div className="public-offer__included">
+            <p>{block.listLabel || "패키지 포함 항목"}</p>
+            <ul>{items.slice(0, 6).map((item, index) => <li key={`${item.title}-${index}`}><Check aria-hidden="true" /><strong>{item.title}</strong></li>)}</ul>
+          </div>
+          <LinkButton text={block.buttonText || "구성 상담받기"} target={block.buttonLink || "request_consult"} onNavigate={onNavigate} />
+        </div>
+        <div className="public-offer__visual">
+          <div className="public-offer__device-grid">
+            {visualItems.map((item, index) => (
+              <article key={`${item.title}-${index}`}>
+                <figure className={shouldUseGeneratedServiceGraphic(item) ? "is-generated-service-visual" : mediaPresentationClass(item.imageUrl)}>
+                  {shouldUseGeneratedServiceGraphic(item)
+                    ? <ServiceIllustration item={item} compact />
+                    : item.imageUrl && <img src={item.imageUrl} alt={`${item.title} 실제 제품 및 서비스 화면`} />}
+                </figure>
+                <div><Icon name={item.icon} /><strong>{item.title}</strong></div>
+              </article>
+            ))}
+          </div>
+          <figure className="public-offer__product-stage">{block.imageUrl && <img src={block.imageUrl} alt="토스포스와 결제단말기 제품 구성" />}</figure>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TelecomShowcaseSection({ block, onNavigate }: { block: CMSBlock; onNavigate: (target: string) => void }) {
+  const items = block.items || [];
+
+  return (
+    <section className="public-telecom-showcase-section" style={backgroundStyle(block)}>
+      <div className="public-container">
+        <div className="public-telecom-showcase__brand"><img src="/assets/uplus/uplus-logo.png" alt="LG U+" /><span>소상공인 매장 통신</span></div>
+        <SectionHeading block={block} />
+        <div className="public-telecom-showcase">
+          {items.map((item, index) => (
+            <article className={index === 0 ? "is-wide" : ""} key={`${item.title}-${index}`}>
+              <div className="public-telecom-showcase__copy">
+                <span><Icon name={item.icon} />{item.badge}</span>
+                <h3>{item.title}</h3>
+                <p>{item.desc}</p>
+              </div>
+              <figure className={shouldUseGeneratedServiceGraphic(item) ? "is-generated-service-visual" : mediaPresentationClass(item.imageUrl)}>
+                {shouldUseGeneratedServiceGraphic(item)
+                  ? <ServiceIllustration item={item} />
+                  : <UplusProductMedia imageUrl={item.imageUrl} alt={`${item.title} LG U+ 공식 제품 및 서비스 이미지`} />}
+                {!shouldUseGeneratedServiceGraphic(item) && item.staticImageUrl && <img className="public-telecom-showcase__secondary-media" src={item.staticImageUrl} alt={`${item.title} 설치 및 이용 구성`} loading="lazy" decoding="async" />}
+              </figure>
+            </article>
+          ))}
+        </div>
+        <div className="public-telecom-showcase__action"><LinkButton text={block.buttonText || "매장 통신 상담"} target={block.buttonLink || "request_consult"} onNavigate={onNavigate} /></div>
+      </div>
+    </section>
+  );
+}
+
+function SectorFeatureMedia({
+  feature,
+  icon: FeatureIcon,
+}: {
+  feature: CMSSectorFeature;
+  icon: LucideIcon;
+}) {
+  const hasMotionFallback = Boolean(feature.imageUrl && feature.staticImageUrl);
+  const imageUrl = feature.imageUrl;
+
+  return (
+    <figure
+      className={imageUrl ? "has-image" : "has-generated-visual"}
+      data-motion-media={hasMotionFallback ? "true" : undefined}
+    >
+      {imageUrl ? (
+        <img src={imageUrl} alt={`${feature.title} 화면 예시`} loading="lazy" decoding="async" />
+      ) : (
+        <div className="public-sector-feature-card__mock" aria-hidden="true">
+          <FeatureIcon />
+        </div>
+      )}
+    </figure>
+  );
+}
+
+function SectorFeatureShowcase({ item, index }: { item: NonNullable<CMSBlock["items"]>[number] | undefined; index: number }) {
+  const kind = getSectorKind(item, index);
+  const groups = getSectorDetailGroups(item, index);
+  const shouldReduceMotion = useReducedMotion();
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        className={`public-sector-details public-sector-details--${kind}`}
+        key={kind}
+        initial={shouldReduceMotion ? false : { opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={shouldReduceMotion ? undefined : { opacity: 0, y: -10 }}
+        transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+      >
+        {groups.map((group, groupIndex) => {
+          const isPrimaryGroup = groupIndex === 0;
+          const featureContent = (
+            <div className={`public-sector-feature-grid ${isPrimaryGroup ? "is-primary-sequence" : "is-secondary-list"}`}>
+              {group.features.map((feature, featureIndex) => {
+                const FeatureIcon = iconMap[feature.icon || "check"] || Check;
+                const isCoreScene = isPrimaryGroup && featureIndex < 3;
+                return (
+                  <article
+                    className={`public-sector-feature-card ${isCoreScene ? "is-core-scene" : "is-detail-scene"} ${feature.size === "wide" ? "is-wide" : ""}`}
+                    key={feature.id}
+                    data-feature-id={feature.id}
+                    data-feature-index={featureIndex + 1}
+                  >
+                    <div className="public-sector-feature-card__copy">
+                      {feature.eyebrow && (
+                        <span>
+                          {isPrimaryGroup && <b>{String(featureIndex + 1).padStart(2, "0")}</b>}
+                          {feature.eyebrow}
+                        </span>
+                      )}
+                      <h4>{feature.title}</h4>
+                      {feature.description && <p>{feature.description}</p>}
+                    </div>
+                    <SectorFeatureMedia
+                      feature={feature}
+                      icon={FeatureIcon}
+                    />
+                  </article>
+                );
+              })}
+            </div>
+          );
+
+          if (isPrimaryGroup) {
+            return (
+              <section className="public-sector-detail-group is-primary-group" key={group.id}>
+                <header>
+                  <span>{item?.title || "업종별 토스포스"}</span>
+                  <h3>{group.title}</h3>
+                  {group.subtitle && <p>{group.subtitle}</p>}
+                </header>
+                {featureContent}
+              </section>
+            );
+          }
+
+          return (
+            <section className="public-sector-detail-group is-secondary-group" key={group.id}>
+              <details>
+                <summary>
+                  <span>더 살펴보기</span>
+                  <div>
+                    <strong>{group.title}</strong>
+                    <small>{group.features.length}개 기능 · {group.subtitle || "결제 이후의 고객 관리를 이어갑니다."}</small>
+                  </div>
+                  <ChevronRight aria-hidden="true" />
+                </summary>
+                {featureContent}
+              </details>
+            </section>
+          );
+        })}
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+function StoreConfiguratorSection({ block, onNavigate, footerInfo }: { block: CMSBlock; onNavigate: (target: string) => void; footerInfo: FooterInfo }) {
+  const items = block.items || [];
+  const getRequestedSectorIndex = React.useCallback(() => {
+    if (typeof window === "undefined") return -1;
+    const requestedSector = new URLSearchParams(window.location.search).get("sector");
+    return items.findIndex((item, itemIndex) => getSectorKind(item, itemIndex) === requestedSector);
+  }, [items]);
+  const [activeIndex, setActiveIndex] = React.useState(() => {
+    if (typeof window === "undefined") return 0;
+    const requestedSector = new URLSearchParams(window.location.search).get("sector");
+    const requestedIndex = items.findIndex((item, itemIndex) => getSectorKind(item, itemIndex) === requestedSector);
+    return requestedIndex >= 0 ? requestedIndex : 0;
+  });
+  const sectorListRef = React.useRef<HTMLDivElement | null>(null);
+  const sectorButtonRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
+  const detailsAnchorRef = React.useRef<HTMLDivElement | null>(null);
+  const activeItem = items[activeIndex] || items[0];
+  const included = (activeItem?.desc || "").split("|").map((item) => item.trim()).filter(Boolean);
+  const shouldReduceMotion = useReducedMotion();
+  const activeVisualUrl = activeItem?.imageUrl || block.imageUrl;
+
+  React.useEffect(() => {
+    if (activeIndex >= items.length) setActiveIndex(0);
+  }, [activeIndex, items.length]);
+
+  React.useEffect(() => {
+    const syncSectorFromHistory = () => {
+      const requestedIndex = getRequestedSectorIndex();
+      setActiveIndex(requestedIndex >= 0 ? requestedIndex : 0);
+    };
+    window.addEventListener("popstate", syncSectorFromHistory);
+    return () => window.removeEventListener("popstate", syncSectorFromHistory);
+  }, [getRequestedSectorIndex]);
+
+  React.useEffect(() => {
+    const list = sectorListRef.current;
+    const button = sectorButtonRefs.current[activeIndex];
+    if (!list || !button || list.scrollWidth <= list.clientWidth) return;
+    const left = button.offsetLeft - (list.clientWidth - button.offsetWidth) / 2;
+    list.scrollTo({ left, behavior: shouldReduceMotion ? "auto" : "smooth" });
+  }, [activeIndex, shouldReduceMotion]);
+
+  const handleSectorSelect = (index: number, moveToDetails = false) => {
+    setActiveIndex(index);
+    if (typeof window !== "undefined") {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set("page", "toss_pos");
+      const nextSector = getSectorKind(items[index], index);
+      nextUrl.searchParams.set("sector", nextSector);
+      if (new URLSearchParams(window.location.search).get("sector") !== nextSector) {
+        window.history.pushState({ page: "toss_pos", sector: nextSector }, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+      }
+    }
+    if (!moveToDetails) return;
+    window.requestAnimationFrame(() => {
+      detailsAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  return (
+    <section className="public-store-configurator-section" style={backgroundStyle(block)}>
+      <div className="public-container">
+        <SectionHeading block={block} />
+        <nav className="public-sector-switcher" aria-label="상세 기능 업종 선택">
+          <span>업종</span>
+          <div ref={sectorListRef}>
+            {items.map((item, index) => (
+              <button
+                type="button"
+                ref={(element) => { sectorButtonRefs.current[index] = element; }}
+                key={`detail-${item.title}-${index}`}
+                className={activeIndex === index ? "is-active" : ""}
+                aria-pressed={activeIndex === index}
+                onClick={() => handleSectorSelect(index, true)}
+              >
+                <Icon name={item.icon} />
+                <span>{item.title}</span>
+              </button>
+            ))}
+          </div>
+        </nav>
+        <div className="public-store-configurator public-store-configurator--focused">
+          <div className="public-store-configurator__stage">
+            <AnimatePresence mode="wait">
+              {activeVisualUrl && (
+                <motion.div
+                  className="public-store-configurator__visual"
+                  key={`${activeVisualUrl}-${activeIndex}`}
+                  initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 1.01 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="public-store-configurator__media">
+                    <img
+                      src={activeVisualUrl}
+                      alt={`${activeItem?.title || "매장"} 토스포스 추천 구성`}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <aside className="public-store-configurator__summary">
+            <div className="public-store-configurator__summary-title">
+              <span>선택한 업종</span>
+              <strong>{activeItem?.title || "업종을 선택하세요"}</strong>
+            </div>
+            <ul>{included.map((item) => <li key={item}><Check />{item}</li>)}</ul>
+            <LinkButton text={block.buttonText || "이 구성으로 상담"} target={block.buttonLink || "request_consult"} onNavigate={onNavigate} />
+          </aside>
+        </div>
+        <div className="public-sector-details-anchor" ref={detailsAnchorRef}>
+          <SectorFeatureShowcase item={activeItem} index={activeIndex} />
+        </div>
+        <aside className="public-sector-support-strip">
+          <div>
+            <span>{footerInfo.companyName} 현장 지원</span>
+            <strong>안산·경기권 설치부터 교육·AS까지</strong>
+            <p>매장 조건을 확인한 뒤 필요한 장비만 구성하고 운영 이후 요청까지 한 창구에서 이어갑니다.</p>
+          </div>
+          <a href={`tel:${footerInfo.phone.replace(/[^\d+]/g, "")}`}><PhoneCall aria-hidden="true" />{footerInfo.phone}</a>
+          <LinkButton text={block.buttonText || "업종별 구성 상담"} target={block.buttonLink || "request_consult"} onNavigate={onNavigate} />
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function EditorialBanner({ block, onNavigate }: { block: CMSBlock; onNavigate: (target: string) => void }) {
+  const imageOnLeft = block.bannerImagePosition === "left";
+  const subtitle = getPublicBlockSubtitle(block);
+  return (
+    <section className={`public-editorial ${imageOnLeft ? "is-image-left" : ""}`} style={backgroundStyle(block)}>
+      <div className="public-container public-editorial__inner">
+        <div className="public-editorial__copy">
+          {block.badge && <p className="public-kicker">{block.badge}</p>}
+          <h2 style={{ color: colorStyle(block.titleColor) }}>{block.title}</h2>
+          {subtitle && <p style={{ color: colorStyle(block.subtitleColor) }}>{subtitle}</p>}
+          {(block.items || []).length > 0 && <ul>{block.items?.map((item, index) => <li key={`${item.title}-${index}`}><Check /><span>{item.title}</span></li>)}</ul>}
+          <div className="public-editorial__actions"><LinkButton text={block.buttonText} target={block.buttonLink} onNavigate={onNavigate} /><LinkButton text={block.button2Text} target={block.button2Link} secondary onNavigate={onNavigate} /></div>
+        </div>
+        <figure className="public-editorial__media">{block.imageUrl ? <img src={block.imageUrl} alt={`${block.title || "서비스"} 제품 안내`} /> : <div className="public-editorial__placeholder"><Monitor /></div>}</figure>
+      </div>
+    </section>
+  );
+}
+
+function CalloutBanner({ block, onNavigate, isPageIntro }: { block: CMSBlock; onNavigate: (target: string) => void; isPageIntro: boolean }) {
+  const subtitle = getPublicBlockSubtitle(block);
+  return (
+    <section className={isPageIntro ? "public-page-intro" : "public-callout"} style={backgroundStyle(block)}>
+      <div className="public-container">
+        {block.badge && <p className="public-kicker">{block.badge}</p>}
+        {isPageIntro ? <h1 style={{ color: colorStyle(block.titleColor) }}>{block.title}</h1> : <h2 style={{ color: colorStyle(block.titleColor) }}>{block.title}</h2>}
+        {subtitle && <p style={{ color: colorStyle(block.subtitleColor) }}>{subtitle}</p>}
+        <div className="public-callout__actions"><LinkButton text={block.buttonText} target={block.buttonLink} onNavigate={onNavigate} /><LinkButton text={block.button2Text} target={block.button2Link} secondary onNavigate={onNavigate} /></div>
+      </div>
+    </section>
+  );
+}
+
+function ProcessSection({ block }: { block: CMSBlock }) {
+  return (
+    <section className="public-opening-process-section" style={backgroundStyle(block)}>
+      <div className="public-container public-opening-process-layout">
+        <div className="public-opening-process-intro">
+          <SectionHeading block={block} />
+        </div>
+        <ol className="public-opening-process">
+          {(block.items || []).map((item, index) => (
+            <li key={`${item.title}-${index}`}>
+              <span className="public-opening-process__number">{String(index + 1).padStart(2, "0")}</span>
+              <span className="public-opening-process__icon"><Icon name={item.icon} /></span>
+              <span className="public-opening-process__copy"><h3>{item.title}</h3></span>
+              <ArrowRight aria-hidden="true" />
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function ActionSection({ block, onNavigate }: { block: CMSBlock; onNavigate: (target: string) => void }) {
+  return (
+    <section className="public-action-section" style={backgroundStyle(block)}>
+      <div className="public-container">
+        <SectionHeading block={block} />
+        <div className="public-action-list">
+          {(block.items || []).map((item, index) => (
+            <button type="button" key={`${item.title}-${index}`} onClick={() => item.buttonLink && onNavigate(item.buttonLink)}>
+              <span className="public-action-list__icon"><Icon name={item.icon} /></span>
+              <span className="public-action-list__copy"><strong>{item.title}</strong></span>
+              <span className="public-action-list__label">{item.buttonText || "바로가기"}<ChevronRight /></span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FaqSection({ block }: { block: CMSBlock }) {
+  const [openIndex, setOpenIndex] = React.useState<number | null>(0);
+
+  return (
+    <section className="public-faq-section" style={backgroundStyle(block)}>
+      <div className="public-container public-faq-layout">
+        <SectionHeading block={block} />
+        <div className="public-faq-list">
+          {(block.items || []).map((item, index) => (
+            <details key={`${item.title}-${index}`} open={openIndex === index}>
+              <summary
+                aria-expanded={openIndex === index}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setOpenIndex((current) => current === index ? null : index);
+                }}
+              >
+                <span>{item.title}</span><Plus aria-hidden="true" />
+              </summary>
+              <p>{item.desc}</p>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function OpeningConsoleSection({ block }: { block: CMSBlock }) {
+  return (
+    <section className="public-opening-console-section" style={backgroundStyle(block)}>
+      <div className="public-container public-opening-console-layout">
+        <SectionHeading block={block} />
+        <div className="public-opening-console" aria-label="탑정보통신 매장 오픈 지원 범위">
+          <div className="public-opening-console__flow">
+          {(block.items || []).map((item, index) => (
+            <article key={`${item.title}-${index}`}>
+                <span className="public-opening-console__icon"><Icon name={item.icon} /></span>
+                <span className="public-opening-console__copy"><strong>{item.title}</strong></span>
+                <Check aria-hidden="true" />
+            </article>
+          ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ServiceStoriesSection({ block }: { block: CMSBlock }) {
+  const items = block.items || [];
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const activeItem = items[activeIndex] || items[0];
+  const usesGeneratedVisual = block.id === "home-services" && Boolean(activeItem) && (
+    shouldUseGeneratedServiceGraphic(activeItem)
+    || (!activeItem?.imageUrl && (activeItem?.icon === "file" || activeItem?.icon === "wrench"))
+  );
+  const activeImageUrl = usesGeneratedVisual ? undefined : resolveStandardItemImage(block, activeItem, activeIndex);
+  const mediaClass = mediaPresentationClass(activeImageUrl);
+  const shouldReduceMotion = useReducedMotion();
+
+  React.useEffect(() => {
+    if (activeIndex >= items.length) setActiveIndex(0);
+  }, [activeIndex, items.length]);
+
+  return (
+    <section className="public-service-story-section" style={backgroundStyle(block)}>
+      <div className="public-container">
+        <SectionHeading block={block} />
+        <div className="public-service-story">
+          <nav aria-label="제공 서비스 선택">
+            {items.map((item, index) => (
+              <button type="button" key={`${item.title}-${index}`} className={activeIndex === index ? "is-active" : ""} aria-pressed={activeIndex === index} onClick={() => setActiveIndex(index)}>
+                <span><Icon name={item.icon} /></span>
+                <strong>{item.title}</strong>
+                <ArrowRight aria-hidden="true" />
+              </button>
+            ))}
+          </nav>
+          <figure className={`is-service-${activeIndex} ${mediaClass} ${usesGeneratedVisual ? "has-generated-service" : ""}`}>
+            <AnimatePresence mode="wait">
+              {usesGeneratedVisual && activeItem ? (
+                <motion.div className="public-service-story__generated" key={`${activeItem.title}-${activeIndex}`} initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.985 }} animate={{ opacity: 1, scale: 1 }} exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 1.01 }} transition={{ duration: 0.3 }}>
+                  <ServiceIllustration item={activeItem} />
+                </motion.div>
+              ) : activeImageUrl ? (
+                <motion.img
+                  key={`${activeImageUrl}-${activeIndex}`}
+                  src={activeImageUrl}
+                  alt={`${activeItem?.title || "토스포스"} 제품 구성`}
+                  loading="lazy"
+                  initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.985 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 1.01 }}
+                  transition={{ duration: 0.3 }}
+                />
+              ) : null}
+            </AnimatePresence>
+            <AnimatePresence mode="wait">
+              <motion.figcaption key={`${activeItem?.title}-${activeIndex}`} initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={shouldReduceMotion ? undefined : { opacity: 0, y: -10 }} transition={{ duration: 0.24 }}>
+                <p>{activeItem?.desc}</p>
+              </motion.figcaption>
+            </AnimatePresence>
+          </figure>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PlatformStageSection({ block }: { block: CMSBlock }) {
+  return (
+    <section className="public-platform-stage-section" style={backgroundStyle(block)}>
+      <div className="public-container public-platform-stage-layout">
+        <figure className="public-platform-stage__media">
+          {block.imageUrl && <img src={block.imageUrl} alt="다양한 기기에서 사용하는 토스포스" loading="lazy" />}
+          {(block.note || block.content) && <figcaption>{block.note && <span>{block.note}</span>}{block.content && <strong>{block.content}</strong>}</figcaption>}
+        </figure>
+        <div className="public-platform-stage__content">
+          <SectionHeading block={block} />
+          <div className="public-platform-stage__list">
+            {(block.items || []).map((item, index) => (
+              <article key={`${item.title}-${index}`}>
+                <span><Icon name={item.icon} /></span>
+                <div><strong>{item.title}</strong><small>{item.desc}</small></div>
+                <Check aria-hidden="true" />
+              </article>
+            ))}
+          </div>
+          {block.imageCaption && <p className="public-platform-stage__note">{block.imageCaption}</p>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CustomerLoopSection({ block }: { block: CMSBlock }) {
+  const imageUrl = block.id === "toss-customer" && (!block.imageUrl || block.imageUrl === "/assets/product/toss-coupon.webp")
+    ? "/assets/product/toss-customer-coupon.webp"
+    : block.imageUrl;
+
+  return (
+    <section className="public-customer-loop-section" style={backgroundStyle(block)}>
+      <div className="public-container">
+        <SectionHeading block={block} />
+        <div className="public-customer-loop">
+          <figure>
+            {imageUrl && <img src={imageUrl} alt="토스포스 고객관리 기능" loading="lazy" />}
+            {(block.note || block.content) && <figcaption>{block.note && <span>{block.note}</span>}{block.content && <strong>{block.content}</strong>}</figcaption>}
+          </figure>
+          <ol>
+            {(block.items || []).map((item, index) => (
+              <li key={`${item.title}-${index}`}>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <div><Icon name={item.icon} /><strong>{item.title}</strong><p>{item.desc}</p></div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function OperationsConsoleSection({ block }: { block: CMSBlock }) {
+  const items = block.items || [];
+  const [activeIndex, setActiveIndex] = React.useState(0);
+  const activeItem = items[activeIndex] || items[0];
+  const shouldReduceMotion = useReducedMotion();
+  const fallbackImages = [
+    "/assets/operations/inventory.webp",
+    "/assets/operations/bulk-register.webp",
+    "/assets/operations/sales-calendar.webp",
+    "/assets/operations/order-status.webp",
+    "/assets/operations/auto-discount.webp",
+    "/assets/operations/receipt-settings.webp",
+  ];
+  const configuredImageUrl = activeItem?.imageUrl;
+  const fallbackImageUrl = fallbackImages[activeIndex];
+  const activeImageUrl = block.id === "toss-operation" && fallbackImageUrl
+    && (!configuredImageUrl || configuredImageUrl === block.imageUrl || configuredImageUrl === "/assets/product/toss-sales.webp")
+    ? fallbackImageUrl
+    : configuredImageUrl || fallbackImageUrl || block.imageUrl;
+
+  React.useEffect(() => {
+    if (activeIndex >= items.length) setActiveIndex(0);
+  }, [activeIndex, items.length]);
+
+  return (
+    <section className="public-ops-console-section" style={backgroundStyle(block)}>
+      <div className="public-container">
+        <SectionHeading block={block} />
+        <div className="public-ops-console">
+          <div className="public-ops-console__body">
+            <nav aria-label="토스포스 운영 기능 선택">
+              {items.map((item, index) => (
+                <button type="button" key={`${item.title}-${index}`} className={activeIndex === index ? "is-active" : ""} aria-pressed={activeIndex === index} onClick={() => setActiveIndex(index)}>
+                  <Icon name={block.id === "toss-operation" && index === 1 && item.icon === "credit-card" ? "barcode" : item.icon} /><span>{item.title}</span>
+                </button>
+              ))}
+            </nav>
+            <figure className={`is-tool-${activeIndex}`}>
+              <AnimatePresence mode="wait">
+                {activeImageUrl && (
+                  <motion.img
+                    key={`${activeImageUrl}-${activeIndex}`}
+                    src={activeImageUrl}
+                    alt={`${activeItem?.title || "토스포스 운영관리"} 화면`}
+                    loading="lazy"
+                    decoding="async"
+                    initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.985 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 1.01 }}
+                    transition={{ duration: 0.28 }}
+                  />
+                )}
+              </AnimatePresence>
+              <AnimatePresence mode="wait">
+                <motion.div className="public-ops-console__metric" key={`${activeItem?.title}-${activeIndex}`} initial={shouldReduceMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={shouldReduceMotion ? undefined : { opacity: 0, y: -10 }} transition={{ duration: 0.24 }}><span>선택 기능</span><strong>{activeItem?.title}</strong><p>{activeItem?.desc}</p></motion.div>
+              </AnimatePresence>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeatureSection({ block }: { block: CMSBlock }) {
+  return (
+    <section className="public-feature-list-section" style={backgroundStyle(block)}>
+      <div className="public-container public-feature-list-layout">
+        <SectionHeading block={block} />
+        <div className="public-feature-list">
+          {(block.items || []).map((item, index) => (
+            <article key={`${item.title}-${index}`}>
+              <span><Icon name={item.icon} /></span>
+              <div><h3>{item.title}</h3><p>{item.desc}</p></div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TextSection({ block }: { block: CMSBlock }) {
+  return <section className="public-text-section" style={backgroundStyle(block)}><div className="public-container"><SectionHeading block={block} /><div className="public-text-section__content" style={{ color: colorStyle(block.contentColor) }}>{block.content}</div></div></section>;
+}
+
+function ImageSection({ block }: { block: CMSBlock }) {
+  return <section className="public-image-section" style={backgroundStyle(block)}><div className="public-container">{block.title && <SectionHeading block={block} />}{block.imageUrl && <img src={block.imageUrl} alt={block.title || "탑정보통신 서비스 이미지"} />}</div></section>;
+}
+
+function ProductCatalog({
+  products,
+  filter,
+  setFilter,
+  onNavigate,
+  isEditModeActive,
+  setActiveEditTarget,
+  page,
+}: {
+  products: Product[];
+  filter: string;
+  setFilter: (value: string) => void;
+  onNavigate: (target: string) => void;
+  isEditModeActive: boolean;
+  setActiveEditTarget: (target: any) => void;
+  page: CMSPage;
+}) {
+  const source = products.length > 0 ? products : fallbackProducts;
+  const categories = ["전체", ...Array.from(new Set(source.map((item) => item.category)))];
+  const visible = filter === "전체" ? source : source.filter((item) => item.category === filter);
+
+  return (
+    <section className="public-product-catalog">
+      <div className="public-container">
+        <header className="public-product-catalog__head is-filter-only"><div className="public-segmented-control" role="tablist" aria-label="제품 분류">{categories.map((category) => <button type="button" role="tab" aria-selected={filter === category} className={filter === category ? "is-active" : ""} onClick={() => setFilter(category)} key={category}>{category}</button>)}</div></header>
+        <div className="public-product-grid">
+          {visible.map((product) => (
+            <article key={product.id} className={isEditModeActive ? "is-editable" : ""} onClick={() => isEditModeActive && products.length > 0 && setActiveEditTarget({ type: "product", pageId: page.id, page, productId: product.id, product })}>
+              <figure className={product.imageUrl.startsWith("/assets/product/") ? "is-product-cutout" : ""}>
+                {product.imageUrl === PUBLIC_MEDIA.homeHero.tossPos
+                  ? <ApexaXVisual className="public-product-grid__apexa" src={product.imageUrl} alt={`${product.name} 제품 이미지`} variant="product" />
+                  : <img src={product.imageUrl} alt={`${product.name} 제품 이미지`} loading="lazy" decoding="async" />}
+                <span>{product.category}</span>
+              </figure>
+              <div><h3>{product.name}</h3><p>{product.description}</p><ul>{product.features?.slice(0, 3).map((feature) => <li key={feature}><Check />{feature}</li>)}</ul><footer><strong>{product.price || "상담 문의"}</strong><button type="button" disabled={isEditModeActive} onClick={(event) => { event.stopPropagation(); onNavigate("request_consult"); }}>구성 상담 <ArrowRight /></button></footer></div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EditorBar({
+  page,
+  block,
+  index,
+  selected,
+  onSelect,
+  onMoveUp,
+  onMoveDown,
+  onDelete,
+}: {
+  page: CMSPage;
+  block: CMSBlock;
+  index: number;
+  selected: boolean;
+  onSelect: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className={`public-editor-bar ${selected ? "is-selected" : ""}`}>
+      <button type="button" onClick={onSelect}><Sparkles /> {page.title} · {block.type}</button>
+      <div>
+        <button type="button" onClick={onMoveUp} disabled={index === 0} title="위로 이동" aria-label="위로 이동"><ArrowUp /></button>
+        <button type="button" onClick={onMoveDown} disabled={index === page.blocks.length - 1} title="아래로 이동" aria-label="아래로 이동"><ArrowDown /></button>
+        <button type="button" onClick={onDelete} title="섹션 삭제" aria-label="섹션 삭제"><Trash2 /></button>
+      </div>
+    </div>
+  );
+}
+
+function InsertBlockControl({
+  page,
+  index,
+  isOpen,
+  setOpen,
+  insert,
+}: {
+  page: CMSPage;
+  index: number;
+  isOpen: boolean;
+  setOpen: (open: boolean) => void;
+  insert: (type: "hero" | "features" | "text" | "banner" | "image" | "divider") => void;
+}) {
+  const options: { type: "hero" | "features" | "text" | "banner" | "image" | "divider"; label: string }[] = [
+    { type: "hero", label: "히어로" },
+    { type: "features", label: "기능 목록" },
+    { type: "banner", label: "이미지 섹션" },
+    { type: "text", label: "텍스트" },
+    { type: "image", label: "이미지" },
+    { type: "divider", label: "구분선" },
+  ];
+  return (
+    <div className="public-insert-control">
+      <button type="button" onClick={() => setOpen(!isOpen)} aria-label="아래에 섹션 추가"><Plus /></button>
+      {isOpen && <div><header><span>새 섹션</span><button type="button" onClick={() => setOpen(false)}><X /></button></header>{options.map((option) => <button type="button" key={option.type} onClick={() => insert(option.type)}>{option.label}<ChevronRight /></button>)}</div>}
+    </div>
+  );
 }
 
 export const WebsiteBlockRenderer: React.FC<WebsiteBlockRendererProps> = ({
   page,
   pages,
-  setPages,
   isEditModeActive,
   activeEditTarget,
   setActiveEditTarget,
@@ -66,1212 +1172,129 @@ export const WebsiteBlockRenderer: React.FC<WebsiteBlockRendererProps> = ({
   handleDeleteBlock,
   handleInsertBlock,
   handleLinkClick,
-  handleUpdateBlockData,
-  db,
-  products = [],
-  setProducts = () => {},
-  productFilter = "전체",
-  setProductFilter = () => {},
-  scheduleProductWrite = () => {},
+  products,
+  productFilter,
+  setProductFilter,
+  footerInfo,
 }) => {
-  const [confirmDeleteId, setConfirmDeleteId] = React.useState<string | null>(null);
-  // Page-level Context Menu states
-  const [contextMenu, setContextMenu] = React.useState<{
-    x: number;
-    y: number;
-    blockIndex: number;
-    pageId: string;
-  } | null>(null);
+  const shouldReduceMotion = useReducedMotion();
+  const visibleBlocks = page.blocks.filter((block) => block.type !== "custom_board");
+  const isFunctionalPage = ["request_consult", "request_paper", "board_suggestions", "board_resources", "products"].includes(page.slug);
 
-  const [isDraggingBlockId, setIsDraggingBlockId] = React.useState<string | null>(null);
-  const [snapLines, setSnapLines] = React.useState<{ type: 'v' | 'h'; coordinate: number }[]>([]);
-
-  React.useEffect(() => {
-    const handleClose = () => setContextMenu(null);
-    window.addEventListener("click", handleClose);
-    return () => window.removeEventListener("click", handleClose);
-  }, []);
-
-  const handleResizeStart = (e: React.MouseEvent, block: CMSBlock, elementKey: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const startX = e.clientX;
-    const startY = e.clientY;
-    let latestBlocks = page.blocks;
-
-    if (elementKey === "block-position") {
-      const startPosX = block.posX || 0;
-      const startPosY = block.posY || 0;
-      setIsDraggingBlockId(block.id);
-
-      const containerEl = document.getElementById("block-renderer-container");
-      if (!containerEl) return;
-      const containerRect = containerEl.getBoundingClientRect();
-
-      const draggedEl = document.getElementById(`block-wrapper-${block.id}`);
-      if (!draggedEl) return;
-      const draggedRect = draggedEl.getBoundingClientRect();
-      const draggedStartLocalRect = {
-        left: draggedRect.left - containerRect.left,
-        right: draggedRect.right - containerRect.left,
-        top: draggedRect.top - containerRect.top,
-        bottom: draggedRect.bottom - containerRect.top,
-        width: draggedRect.width,
-        height: draggedRect.height,
-        centerX: draggedRect.left - containerRect.left + draggedRect.width / 2,
-        centerY: draggedRect.top - containerRect.top + draggedRect.height / 2
-      };
-
-      const otherBlocks = page.blocks.filter(b => b.id !== block.id);
-      const otherLocalRects = otherBlocks.map(otherBlock => {
-        const el = document.getElementById(`block-wrapper-${otherBlock.id}`);
-        if (!el) return null;
-        const rect = el.getBoundingClientRect();
-        return {
-          id: otherBlock.id,
-          left: rect.left - containerRect.left,
-          right: rect.right - containerRect.left,
-          top: rect.top - containerRect.top,
-          bottom: rect.bottom - containerRect.top,
-          width: rect.width,
-          height: rect.height,
-          centerX: rect.left - containerRect.left + rect.width / 2,
-          centerY: rect.top - containerRect.top + rect.height / 2
-        };
-      }).filter(Boolean) as any[];
-
-      const onMouseMove = (moveEvent: MouseEvent) => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-
-        const rawNewPosX = startPosX + dx;
-        const rawNewPosY = startPosY + dy;
-
-        const proposedLocalLeft = draggedStartLocalRect.left + dx;
-        const proposedLocalTop = draggedStartLocalRect.top + dy;
-        const proposedLocalRight = proposedLocalLeft + draggedStartLocalRect.width;
-        const proposedLocalBottom = proposedLocalTop + draggedStartLocalRect.height;
-        const proposedLocalCenterX = proposedLocalLeft + draggedStartLocalRect.width / 2;
-        const proposedLocalCenterY = proposedLocalTop + draggedStartLocalRect.height / 2;
-
-        const SNAP_THRESHOLD = 25;
-        let finalPosX = rawNewPosX;
-        let finalPosY = rawNewPosY;
-        const newSnapLines: { type: 'v' | 'h'; coordinate: number }[] = [];
-
-        // Horizontal snap (X-axis alignment, draws vertical guide line)
-        let bestDiffX = SNAP_THRESHOLD;
-        let snapX = null;
-
-        // Grid snap back to center/original position checks first
-        if (Math.abs(rawNewPosX) < bestDiffX) {
-          bestDiffX = Math.abs(rawNewPosX);
-          snapX = {
-            posX: 0,
-            lineCoord: draggedStartLocalRect.centerX - startPosX
-          };
-        }
-
-        for (const other of otherLocalRects) {
-          const checks = [
-            { target: other.left, current: proposedLocalLeft, snapPos: other.left },
-            { target: other.right, current: proposedLocalLeft, snapPos: other.right },
-            { target: other.centerX, current: proposedLocalCenterX, snapPos: other.centerX - draggedStartLocalRect.width / 2 },
-            { target: other.left, current: proposedLocalRight, snapPos: other.left - draggedStartLocalRect.width },
-            { target: other.right, current: proposedLocalRight, snapPos: other.right - draggedStartLocalRect.width },
-          ];
-          for (const check of checks) {
-            const diff = Math.abs(check.current - check.target);
-            if (diff < bestDiffX) {
-              bestDiffX = diff;
-              snapX = {
-                posX: startPosX + (check.snapPos - draggedStartLocalRect.left),
-                lineCoord: check.target
-              };
-            }
-          }
-        }
-        if (snapX !== null) {
-          finalPosX = snapX.posX;
-          newSnapLines.push({ type: 'v', coordinate: snapX.lineCoord });
-        }
-
-        // Vertical snap (Y-axis alignment, draws horizontal guide line)
-        let bestDiffY = SNAP_THRESHOLD;
-        let snapY = null;
-
-        // Grid snap back to center/original position checks first
-        if (Math.abs(rawNewPosY) < bestDiffY) {
-          bestDiffY = Math.abs(rawNewPosY);
-          snapY = {
-            posY: 0,
-            lineCoord: draggedStartLocalRect.centerY - startPosY
-          };
-        }
-
-        for (const other of otherLocalRects) {
-          const checks = [
-            { target: other.top, current: proposedLocalTop, snapPos: other.top },
-            { target: other.bottom, current: proposedLocalTop, snapPos: other.bottom },
-            { target: other.centerY, current: proposedLocalCenterY, snapPos: other.centerY - draggedStartLocalRect.height / 2 },
-            { target: other.top, current: proposedLocalBottom, snapPos: other.top - draggedStartLocalRect.height },
-            { target: other.bottom, current: proposedLocalBottom, snapPos: other.bottom - draggedStartLocalRect.height },
-          ];
-          for (const check of checks) {
-            const diff = Math.abs(check.current - check.target);
-            if (diff < bestDiffY) {
-              bestDiffY = diff;
-              snapY = {
-                posY: startPosY + (check.snapPos - draggedStartLocalRect.top),
-                lineCoord: check.target
-              };
-            }
-          }
-        }
-        if (snapY !== null) {
-          finalPosY = snapY.posY;
-          newSnapLines.push({ type: 'h', coordinate: snapY.lineCoord });
-        }
-
-        // Apply final boundary safety constraints so blocks don't disappear under header or off screen
-        finalPosX = Math.max(-600, Math.min(600, finalPosX));
-        finalPosY = Math.max(-150, finalPosY);
-
-        setSnapLines(newSnapLines);
-
-        const updatedBlocks = mergeBlockFields(page.blocks, block.id, {
-          posX: finalPosX,
-          posY: finalPosY,
-        });
-        latestBlocks = updatedBlocks;
-        setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-      };
-
-      const onMouseUp = async () => {
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
-        setIsDraggingBlockId(null);
-        setSnapLines([]);
-
-        const finalBlock = latestBlocks.find(b => b.id === block.id);
-        if (finalBlock) {
-          handleUpdateBlockData(page, block.id, {
-            posX: finalBlock.posX || 0,
-            posY: finalBlock.posY || 0,
-          });
-        }
-      };
-
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-      return;
+  const renderBlock = (block: CMSBlock, index: number) => {
+    if (page.slug === "uplus_ai_phone" && block.id === "uplus-ai-hero") return <UplusAiPhoneHero block={block} onNavigate={handleLinkClick} />;
+    if (block.type === "hero") return <HeroSection block={block} onNavigate={handleLinkClick} />;
+    if (block.id === "home-internet" || block.itemLayout === "telecom-showcase") return <TelecomShowcaseSection block={block} onNavigate={handleLinkClick} />;
+    if (block.type === "banner") {
+      if (block.bannerLayout === "offer" || block.id === "home-package") return <OfferSection block={block} onNavigate={handleLinkClick} />;
+      if (block.bannerLayout === "side-image" || block.imageUrl) return <EditorialBanner block={block} onNavigate={handleLinkClick} />;
+      return <CalloutBanner block={block} onNavigate={handleLinkClick} isPageIntro={isFunctionalPage && index === 0} />;
     }
-
-    if (elementKey === "button1" || elementKey === "button2") {
-      const isB1 = elementKey === "button1";
-      const currentWidthStr = isB1 ? (block.buttonWidth || "180px") : (block.button2Width || "180px");
-      const currentHeightStr = isB1 ? (block.buttonHeight || "56px") : (block.button2Height || "56px");
-      const currentWidth = parseInt(currentWidthStr) || 180;
-      const currentHeight = parseInt(currentHeightStr) || 56;
-
-      const onMouseMove = (moveEvent: MouseEvent) => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-
-        const newWidth = Math.max(50, currentWidth + dx);
-        const newHeight = Math.max(20, currentHeight + dy);
-
-        const updatedBlocks = mergeBlockFields(page.blocks, block.id, {
-          [isB1 ? "buttonWidth" : "button2Width"]: `${newWidth}px`,
-          [isB1 ? "buttonHeight" : "button2Height"]: `${newHeight}px`,
-        } as Partial<CMSBlock>);
-        latestBlocks = updatedBlocks;
-        setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-      };
-
-      const onMouseUp = async () => {
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
-        handleUpdateBlockData(page, block.id, {});
-      };
-
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-      return;
+    if (block.type === "features") {
+      if (block.itemLayout === "process") return <ProcessSection block={block} />;
+      if (block.itemLayout === "action-grid") return <ActionSection block={block} onNavigate={handleLinkClick} />;
+      if (block.itemLayout === "faq") return <FaqSection block={block} />;
+      if (block.itemLayout === "opening-console") return <OpeningConsoleSection block={block} />;
+      if (block.itemLayout === "service-stories") return <ServiceStoriesSection block={block} />;
+      if (block.itemLayout === "platform-stage") return <PlatformStageSection block={block} />;
+      if (block.itemLayout === "customer-loop") return <CustomerLoopSection block={block} />;
+      if (block.itemLayout === "operations-console") return <OperationsConsoleSection block={block} />;
+      if (block.itemLayout === "store-configurator") return <StoreConfiguratorSection block={block} onNavigate={handleLinkClick} footerInfo={footerInfo} />;
+      if (block.itemLayout === "uplus-ai-app") return <UplusAiAppSection block={block} />;
+      return <FeatureSection block={block} />;
     }
-
-    if (elementKey === "iconImageUrl") {
-      const currentWidthStr = block.iconWidth || "120px";
-      const currentHeightStr = block.iconHeight || "120px";
-      const currentWidth = parseInt(currentWidthStr) || 120;
-      const currentHeight = parseInt(currentHeightStr) || 120;
-
-      const onMouseMove = (moveEvent: MouseEvent) => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-
-        const newWidth = Math.max(30, currentWidth + dx);
-        const newHeight = Math.max(30, currentHeight + dy);
-
-        const updatedBlocks = mergeBlockFields(page.blocks, block.id, {
-          iconWidth: `${newWidth}px`,
-          iconHeight: `${newHeight}px`,
-        });
-        latestBlocks = updatedBlocks;
-        setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-      };
-
-      const onMouseUp = async () => {
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
-        handleUpdateBlockData(page, block.id, {});
-      };
-
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-      return;
-    }
-
-    if (block.type === "image" && elementKey === "image") {
-      const currentWidthStr = block.imageWidth || "600px";
-      const currentHeightStr = block.imageHeight || "400px";
-      const currentWidth = parseInt(currentWidthStr) || 600;
-      const currentHeight = parseInt(currentHeightStr) || 400;
-
-      const onMouseMove = (moveEvent: MouseEvent) => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-
-        const newWidth = Math.max(40, currentWidth + dx);
-        const newHeight = Math.max(40, currentHeight + dy);
-
-        const updatedBlocks = mergeBlockFields(page.blocks, block.id, {
-          imageWidth: `${newWidth}px`,
-          imageHeight: `${newHeight}px`,
-        });
-        latestBlocks = updatedBlocks;
-        setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-      };
-
-      const onMouseUp = async () => {
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
-        handleUpdateBlockData(page, block.id, {});
-      };
-
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-      return;
-    }
-
-    if (block.type === "divider" && elementKey === "divider") {
-      const currentHeightStr = block.imageHeight || "2px";
-      const currentHeight = parseInt(currentHeightStr) || 2;
-      const currentMarginTop = parseInt(block.imageMarginTop || "24") || 24;
-
-      const onMouseMove = (moveEvent: MouseEvent) => {
-        const dx = moveEvent.clientX - startX;
-        const dy = moveEvent.clientY - startY;
-
-        const newHeight = Math.max(1, Math.min(20, currentHeight + Math.floor(dy / 5)));
-        const newMargin = Math.max(4, Math.min(120, currentMarginTop + Math.floor(dx / 4)));
-
-        const updatedBlocks = mergeBlockFields(page.blocks, block.id, {
-          imageHeight: `${newHeight}px`,
-          imageMarginTop: `${newMargin}`,
-          imageMarginBottom: `${newMargin}`,
-        });
-        latestBlocks = updatedBlocks;
-        setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-      };
-
-      const onMouseUp = async () => {
-        window.removeEventListener("mousemove", onMouseMove);
-        window.removeEventListener("mouseup", onMouseUp);
-        handleUpdateBlockData(page, block.id, {});
-      };
-
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-      return;
-    }
-
-    const currentSizes = block.elementSizes || {};
-    const elSize = currentSizes[elementKey] || {};
-
-    let currentWidth = 100;
-    if (elSize.width && elSize.width.endsWith("%")) {
-      currentWidth = parseInt(elSize.width) || 100;
-    }
-
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      const dx = moveEvent.clientX - startX;
-
-      const newWidth = Math.min(100, Math.max(20, currentWidth + Math.floor(dx / 5)));
-      const { fontSize: _removedFontSize, ...elementSizeWithoutFontSize } = elSize;
-
-      const newElementSizes = {
-        ...currentSizes,
-        [elementKey]: {
-          ...elementSizeWithoutFontSize,
-          width: elementKey === "buttons" ? undefined : `${newWidth}%`,
-        }
-      };
-
-      const updatedBlocks = mergeBlockFields(page.blocks, block.id, { elementSizes: newElementSizes });
-      latestBlocks = updatedBlocks;
-      setPages(pages.map(p => p.id === page.id ? { ...p, blocks: updatedBlocks } : p));
-    };
-
-    const onMouseUp = async () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-      handleUpdateBlockData(page, block.id, {});
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    if (block.type === "text") return <TextSection block={block} />;
+    if (block.type === "image") return <ImageSection block={block} />;
+    if (block.type === "divider") return <div className="public-container"><hr className="public-divider" /></div>;
+    return null;
   };
 
-  const handleDeleteSubElement = async (blockId: string, el: string) => {
-    let fields: Partial<CMSBlock> = {};
-    if (el === "badge") {
-      fields = { badge: "" };
-    } else if (el === "subtitle") {
-      fields = { subtitle: "" };
-    } else if (el === "buttons") {
-      fields = { buttonText: "", button2Text: "" };
-    } else if (el === "iconImageUrl") {
-      fields = { iconImageUrl: "" };
-    } else if (el === "title") {
-      fields = { title: "" };
-    }
-
-    if (activeEditTarget && activeEditTarget.blockId === blockId) {
-      setActiveEditTarget(null);
-    }
-
-    try {
-      await handleUpdateBlockData(page, blockId, fields);
-    } catch (err) {
-      console.error("Sub-element deletion failed", err);
-    }
+  const renderFunction = () => {
+    if (page.slug === "request_consult") return <PublicConsultationForm />;
+    if (page.slug === "request_paper") return <PublicPaperRequestForm />;
+    if (page.slug === "board_suggestions") return <PublicSuggestionBoard />;
+    if (page.slug === "board_resources") return <PublicResourceBoard />;
+    if (page.slug === "products") return <ProductCatalog products={products} filter={productFilter} setFilter={setProductFilter} onNavigate={handleLinkClick} isEditModeActive={isEditModeActive} setActiveEditTarget={setActiveEditTarget} page={page} />;
+    return null;
   };
 
-  const renderContent = (
-    <div
-      id="block-renderer-container"
-      onContextMenu={(e) => {
-        if (isEditModeActive && e.target === e.currentTarget) {
-          e.preventDefault();
-          setContextMenu({
-            x: e.pageX,
-            y: e.pageY,
-            blockIndex: page.blocks.length - 1,
-            pageId: page.id
-          });
-        }
-      }}
-      className="space-y-20 w-full flex flex-col items-center px-6 min-h-[500px] relative"
-    >
-      {page.blocks.map((block, blockIndex) => {
-        const renderBlockContent = () => {
-          if (block.type === "hero") {
-            const migratedBlock = { ...block, type: "banner" as const, layoutStyle: block.layoutStyle || "column_center" };
-            return (
-              <BannerBlock
-                page={page}
-                pages={pages}
-                setPages={setPages}
-                block={migratedBlock}
-                blockIdx={blockIndex}
-                isEditModeActive={isEditModeActive}
-                activeEditTarget={activeEditTarget}
-                setActiveEditTarget={setActiveEditTarget}
-                handleDeleteSubElement={handleDeleteSubElement}
-                handleResizeStart={handleResizeStart}
-                handleLinkClick={handleLinkClick}
-                handleUpdateBlockData={handleUpdateBlockData}
-                db={db}
-              />
-            );
-          }
-
-          if (block.type === "features") {
-            return (
-              <FeaturesBlock
-                handleUpdateBlockData={handleUpdateBlockData}
-                page={page}
-                pages={pages}
-                setPages={setPages}
-                block={block}
-                isEditModeActive={isEditModeActive}
-                activeEditTarget={activeEditTarget}
-                setActiveEditTarget={setActiveEditTarget}
-                handleLinkClick={handleLinkClick}
-                db={db}
-              />
-            );
-          }
-
-          if (block.type === "text") {
-            return (
-              <TextBlock
-                handleUpdateBlockData={handleUpdateBlockData}
-                page={page}
-                pages={pages}
-                setPages={setPages}
-                block={block}
-                isEditModeActive={isEditModeActive}
-                activeEditTarget={activeEditTarget}
-                setActiveEditTarget={setActiveEditTarget}
-                db={db}
-              />
-            );
-          }
-
-          if (block.type === "banner") {
-            return (
-              <BannerBlock
-                page={page}
-                pages={pages}
-                setPages={setPages}
-                block={block}
-                blockIdx={blockIndex}
-                isEditModeActive={isEditModeActive}
-                activeEditTarget={activeEditTarget}
-                setActiveEditTarget={setActiveEditTarget}
-                handleDeleteSubElement={handleDeleteSubElement}
-                handleResizeStart={handleResizeStart}
-                handleLinkClick={handleLinkClick}
-                handleUpdateBlockData={handleUpdateBlockData}
-                db={db}
-              />
-            );
-          }
-
-          if (block.type === "divider") {
-            return (
-              <DividerBlock
-                page={page}
-                block={block}
-                isEditModeActive={isEditModeActive}
-                setActiveEditTarget={setActiveEditTarget}
-                handleResizeStart={handleResizeStart}
-              />
-            );
-          }
-
-          if (block.type === "image") {
-            return (
-              <ImageBlock
-                handleUpdateBlockData={handleUpdateBlockData}
-                page={page}
-                pages={pages}
-                setPages={setPages}
-                block={block}
-                isEditModeActive={isEditModeActive}
-                activeEditTarget={activeEditTarget}
-                setActiveEditTarget={setActiveEditTarget}
-                handleResizeStart={handleResizeStart}
-                handleLinkClick={handleLinkClick}
-                db={db}
-              />
-            );
-          }
-
-          if (block.type === "custom_board") {
-            if (page.slug === "request_consult") {
-              return <ConsultationForm />;
-            }
-            if (page.slug === "request_paper") {
-              return <PaperRollRequestForm />;
-            }
-            if (page.slug === "board_suggestions") {
-              if (block.boardPart === "header") return <SuggestionBoardHeader />;
-              if (block.boardPart === "search") return <SuggestionBoardSearch />;
-              if (block.boardPart === "body") return <SuggestionBoardBody />;
-              return <SuggestionBoard />;
-            }
-            if (page.slug === "board_resources") {
-              if (block.boardPart === "header") return <ResourceBoardHeader />;
-              if (block.boardPart === "search") return <ResourceBoardSearch />;
-              if (block.boardPart === "body") return <ResourceBoardBody />;
-              return <ResourceBoard />;
-            }
-            if (page.slug === "products") {
-              return (
-                <div className="space-y-10 w-full mt-4">
-                  {/* Product categories tab trigger */}
-                  <div className="flex justify-center gap-2">
-                    {["전체", "포스", "단말기", "키오스크"].map((cat) => (
-                      <button
-                        key={cat}
-                        onClick={() => setProductFilter(cat)}
-                        className={`px-5 py-2 rounded-full text-xs font-bold transition-all duration-300 ${
-                          productFilter === cat
-                            ? "bg-slate-900 text-white shadow"
-                            : "bg-white border border-slate-200 text-slate-500 hover:border-slate-300"
-                        }`}
-                      >
-                        {cat === "전체" ? "전체 기종" : cat === "포스" ? "통합 슬림 POS" : cat === "단말기" ? "스마트 단말기" : "무인 키오스크"}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* List products */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-left mt-8 w-full">
-                    {products
-                      .filter(p => productFilter === "전체" || p.category === productFilter)
-                      .map((p) => {
-                        const isConfirmingDelete = confirmDeleteId === p.id;
-                        return (
-                          <div key={p.id} className="bg-white border border-slate-100 rounded-3xl overflow-hidden hover:shadow-2xl hover:border-slate-300/80 hover:-translate-y-1 transform duration-300 transition-all flex flex-col justify-between relative group/prod">
-
-                            {/* Interactive Non-blocking Delete Overlay */}
-                            {isConfirmingDelete && (
-                              <div className="absolute inset-0 bg-slate-900/95 z-40 flex flex-col items-center justify-center p-6 text-center text-white">
-                                <Trash2 className="w-8 h-8 text-rose-500 mb-2 animate-bounce" />
-                                <h4 className="font-extrabold text-sm mb-1 text-rose-300">"{p.name}" 삭제</h4>
-                                <p className="text-[11px] text-slate-300 mb-4 leading-relaxed">
-                                  이 결제 기기를 제품 목록과 가이드 카탈로그에서 정말 완전히 삭제 처리하시겠습니까? (복구 불가)
-                                </p>
-                                <div className="flex gap-2 w-full max-w-[200px]">
-                                  <button
-                                    type="button"
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      try {
-                                        await deleteDoc(doc(db, "products", p.id));
-                                      } catch (err) {
-                                        console.error("Failed to delete product: ", err);
-                                      }
-                                      setConfirmDeleteId(null);
-                                    }}
-                                    className="flex-1 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white py-2 rounded-xl text-xs font-bold transition shadow-md"
-                                  >
-                                    네, 삭제
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setConfirmDeleteId(null);
-                                    }}
-                                    className="flex-1 bg-slate-800 hover:bg-slate-700 border border-white/10 text-white py-2 rounded-xl text-xs font-bold transition"
-                                  >
-                                    취소
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Regular Trash Icon Trigger Button */}
-                            {isEditModeActive && !isConfirmingDelete && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmDeleteId(p.id);
-                                }}
-                                className="absolute top-3 right-3 z-30 bg-rose-500 hover:bg-rose-600 text-white p-2 rounded-xl transition shadow active:scale-95 duration-150 animate-in fade-in"
-                                title="기기 삭제"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-
-                            <div>
-                              <div className="h-44 bg-white border-b border-slate-100 relative flex items-center justify-center overflow-hidden">
-                                {p.imageUrl ? (
-                                  <img src={p.imageUrl} alt={p.name} className="w-full h-full object-contain p-4 group-hover/prod:scale-105 transition-transform duration-500" />
-                                ) : (
-                                  <Smartphone className="w-12 h-12 text-slate-300" />
-                                )}
-                                <span className="absolute top-4 left-4 bg-blue-50 text-blue-600 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-widest border border-blue-100 z-10">
-                                  {p.category}
-                                </span>
-                              </div>
-
-                              <div className="p-6 space-y-3">
-                                {isEditModeActive ? (
-                                  <div className="space-y-3 w-full text-left">
-                                    <div>
-                                      <label className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">제품명</label>
-                                      <input
-                                        type="text"
-                                        value={p.name}
-                                        onChange={(e) => {
-                                          const updated = products.map(item => item.id === p.id ? { ...item, name: e.target.value } : item);
-                                          setProducts(updated);
-                                          scheduleProductWrite(p.id, { name: e.target.value });
-                                        }}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-800"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">설명</label>
-                                      <textarea
-                                        rows={2}
-                                        value={p.description || ""}
-                                        onChange={(e) => {
-                                          const updated = products.map(item => item.id === p.id ? { ...item, description: e.target.value } : item);
-                                          setProducts(updated);
-                                          scheduleProductWrite(p.id, { description: e.target.value });
-                                        }}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-650 leading-snug"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">분류</label>
-                                      <select
-                                        value={p.category}
-                                        onChange={(e) => {
-                                          const val = e.target.value as any;
-                                          const updated = products.map(item => item.id === p.id ? { ...item, category: val } : item);
-                                          setProducts(updated);
-                                          scheduleProductWrite(p.id, { category: val });
-                                        }}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700 font-bold"
-                                      >
-                                        <option value="포스">포스</option>
-                                        <option value="단말기">단말기</option>
-                                        <option value="키오스크">키오스크</option>
-                                      </select>
-                                    </div>
-                                    <div>
-                                      <label className="text-[9px] uppercase font-bold text-slate-400 block mb-0.5">사진 URL</label>
-                                      <input
-                                        type="text"
-                                        value={p.imageUrl || ""}
-                                        onChange={(e) => {
-                                          const updated = products.map(item => item.id === p.id ? { ...item, imageUrl: e.target.value } : item);
-                                          setProducts(updated);
-                                          scheduleProductWrite(p.id, { imageUrl: e.target.value });
-                                        }}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px]"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="text-[9px] uppercase font-bold text-slate-400 block mb-1">핵심 특장점 (최대 3개)</label>
-                                      <div className="space-y-1.5">
-                                        {[0, 1, 2].map((idx) => {
-                                          const currentFeatures = p.features && Array.isArray(p.features) ? [...p.features] : [];
-                                          while (currentFeatures.length <= idx) {
-                                            currentFeatures.push("");
-                                          }
-                                          return (
-                                            <div key={idx} className="flex items-center gap-1.5">
-                                              <Check className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                                              <input
-                                                type="text"
-                                                placeholder={`특장점 ${idx + 1} (예: ${idx === 0 ? "직관적 UI로 누구나 간편 주문" : idx === 1 ? "스탠드/벽걸이 모드 전면 커스텀 조립" : "식음료 전용 결제 앱 기본 내장"})`}
-                                                value={currentFeatures[idx] || ""}
-                                                onChange={(e) => {
-                                                  const nextFeatures = [...currentFeatures];
-                                                  nextFeatures[idx] = e.target.value;
-                                                  const updated = products.map(item => item.id === p.id ? { ...item, features: nextFeatures } : item);
-                                                  setProducts(updated);
-                                                  scheduleProductWrite(p.id, { features: nextFeatures });
-                                                }}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700 font-sans"
-                                              />
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <h4 className="text-lg font-black text-slate-800">{p.name}</h4>
-                                    <p className="text-slate-555 text-xs leading-relaxed line-clamp-2 h-8">{p.description}</p>
-
-                                    <div className="space-y-1">
-                                      {(p.features || []).map((f, i) => (
-                                        <div key={i} className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold">
-                                          <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" /> {f}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                              <span className="text-xs font-bold text-slate-400">보급요건:</span>
-                              {isEditModeActive ? (
-                                <input
-                                  type="text"
-                                  value={p.price || "무상제공 상담대상"}
-                                  onChange={(e) => {
-                                    const updated = products.map(item => item.id === p.id ? { ...item, price: e.target.value } : item);
-                                    setProducts(updated);
-                                    scheduleProductWrite(p.id, { price: e.target.value });
-                                  }}
-                                  className="bg-white border border-slate-200 rounded px-2 py-0.5 text-xs font-bold w-40 text-right text-blue-600 font-sans"
-                                />
-                              ) : (
-                                <span className="text-blue-600 text-sm font-extrabold">{p.price || "무상제공 상담대상"}</span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                    {isEditModeActive && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const newId = "product-" + Date.now();
-                          const newProduct = {
-                            id: newId,
-                            name: "새로운 무상 단말기 모델",
-                            category: productFilter === "전체" ? "단말기" : productFilter,
-                            description: "탑정보통신에서 특별 가맹 공급해 드리는 검증된 프리미엄 스마트 결제 모듈입니다.",
-                            features: ["초고속 NFC 결제 연동", "비즈니스 평생 수리 보증"],
-                            price: "무상제공 상담대상",
-                            imageUrl: "https://images.unsplash.com/photo-1563013544-824ae1d704d3?auto=format&fit=crop&w=400&q=80",
-                            createdAt: new Date().toISOString()
-                          };
-                          await setDoc(doc(db, "products", newId), newProduct);
-                        }}
-                        className="border-2 border-dashed border-blue-200 hover:border-blue-400 bg-white hover:bg-blue-50/5 text-blue-600 rounded-3xl p-8 flex flex-col items-center justify-center gap-3 transition min-h-[380px] shadow-sm active:scale-95 duration-150"
-                      >
-                        <Plus className="w-8 h-8 text-blue-500 animate-pulse" />
-                        <span className="font-extrabold text-sm">새로운 결제 장비/기기 추가</span>
-                        <span className="text-[11px] text-slate-400 font-medium">실시간으로 카탈로그에 가입 노출됩니다</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            }
-          }
-
-          return null;
-        };
-
-        const selectedSubElement = activeEditTarget?.blockId === block.id ? activeEditTarget?.selectedElement : undefined;
-        const isTextSubElementSelected =
-          (block.type === "hero" || block.type === "banner") &&
-          ["badge", "title", "subtitle"].includes(selectedSubElement);
-        const showBlockFrame = isEditModeActive && block.type !== "text" && !isTextSubElementSelected;
-        const showBlockToolbar = isEditModeActive && !isTextSubElementSelected;
-        const widthVal = block.type === "text" ? "max-w-none" : (block.blockWidth || "max-w-5xl");
-        return (
-          <div
-            key={block.id}
-            id={`block-wrapper-${block.id}`}
-            onContextMenu={(e) => {
-              if (isEditModeActive) {
-                e.preventDefault();
-                e.stopPropagation();
-                setContextMenu({
-                  x: e.pageX,
-                  y: e.pageY,
-                  blockIndex: blockIndex,
-                  pageId: page.id
-                });
-              }
-            }}
-            style={{
-              transform: block.posX || block.posY ? `translate(${block.posX || 0}px, ${block.posY || 0}px)` : undefined,
-              zIndex: isDraggingBlockId === block.id ? 50 : undefined,
-            }}
-            className={`relative w-full ${widthVal} mx-auto ${
-              isDraggingBlockId === block.id ? "" : "transition-all duration-300"
-            } ${showBlockFrame ? "group/block" : ""}`}
-          >
-            {/* Absolute dashed outline overlay to prevent padding/size discrepancy */}
-            {showBlockFrame && (
-              <div className="absolute -inset-4 border-2 border-dashed border-blue-400/30 rounded-3xl pointer-events-none group-hover/block:border-blue-500/80 transition-all duration-200" />
-            )}
-
-            {/* Block toolbar controls overlay (repositioned outside the block bounds) */}
-            {showBlockToolbar && (
-              <div className="absolute -top-14 right-0 max-w-[min(92vw,760px)] flex flex-wrap items-center justify-end gap-1.5 bg-slate-900/90 text-white rounded-xl p-1.5 z-40 opacity-85 hover:opacity-100 group-hover/block:opacity-100 transition-opacity border border-white/10 shadow-lg" style={{ backdropFilter: "blur(4px)" }}>
-                <span className="hidden sm:inline-flex text-[10px] font-bold text-slate-300 px-1.5 capitalize whitespace-nowrap">
-                  {block.type === "hero"
-                    ? "히어로 배너"
-                    : block.type === "features"
-                    ? "기능 카드"
-                    : block.type === "text"
-                    ? "줄글 섹션"
-                    : block.type === "custom_board"
-                    ? block.boardPart === "header"
-                      ? "보드 타이틀 헤더"
-                      : block.boardPart === "search"
-                      ? "보드 검색창"
-                      : block.boardPart === "body"
-                      ? "보드 목록 본문"
-                      : "본문 기능 보드"
-                    : "홍보 띠배너"}
-                </span>
-                {block.type !== "custom_board" && (
-                  <>
-                    <div className="w-px h-3 bg-white/20" />
-                    <button
-                      type="button"
-                      title="블록 상세 설정 (배경, 정렬, 버튼, 레이아웃)"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        setActiveEditTarget({ type: block.type as any, pageId: page.id, page, blockId: block.id, block });
-                      }}
-                      className="p-1.5 hover:bg-white/10 rounded text-blue-400 hover:text-blue-300 transition"
-                    >
-                      <Settings className="w-3.5 h-3.5" />
-                    </button>
-                  </>
-                )}
-                <div className="w-px h-3 bg-white/20" />
-                <button
-                  type="button"
-                  title="블록 이동 (상하좌우 드래그)"
-                  style={{ touchAction: "none" }}
-                  onMouseDown={(e) => handleResizeStart(e, block, "block-position")}
-                  className="p-1.5 hover:bg-white/10 rounded text-blue-400 hover:text-blue-300 transition cursor-move"
-                >
-                  <Move className="w-3.5 h-3.5" />
-                </button>
-                <div className="w-px h-3 bg-white/20" />
-                <button
-                  type="button"
-                  title="위로 이동"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    handleMoveBlockUp(page, blockIndex);
-                  }}
-                  disabled={blockIndex === 0}
-                  className="p-1 hover:bg-white/10 rounded disabled:opacity-30 text-slate-300 transition"
-                >
-                  <ChevronUp className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="아래로 이동"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    handleMoveBlockDown(page, blockIndex);
-                  }}
-                  disabled={blockIndex === page.blocks.length - 1}
-                  className="p-1 hover:bg-white/10 rounded disabled:opacity-30 text-slate-300 transition"
-                >
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  title="블록 삭제"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    handleDeleteBlock(page, blockIndex);
-                  }}
-                  className="p-1.5 bg-red-650 hover:bg-red-700 text-white rounded-lg transition"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
-            {renderBlockContent()}
-
-            {/* Block Insertion control button displayed inline */}
-            {isEditModeActive && (
-              <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center z-40">
-                {showAddBlockMenuAtIndex?.index === blockIndex && showAddBlockMenuAtIndex?.pageId === page.id ? (
-                  <div className="bg-slate-900 border border-white/25 rounded-2xl p-2 md:p-2.5 shadow-2xl flex items-center gap-1.5 text-white animate-in zoom-in-95 duration-150">
-                    <span className="text-[10px] font-bold text-slate-400 px-1">추가할 유형:</span>
-                    <button
-                      type="button"
-                      onClick={() => handleInsertBlock(page, blockIndex, "hero")}
-                      className="text-[10px] bg-slate-800 hover:bg-blue-600 px-2 py-1 rounded-lg font-bold transition whitespace-nowrap"
-                    >
-                      히어로 배너
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleInsertBlock(page, blockIndex, "features")}
-                      className="text-[10px] bg-slate-800 hover:bg-blue-600 px-2 py-1 rounded-lg font-bold transition whitespace-nowrap"
-                    >
-                      피처 카드형
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleInsertBlock(page, blockIndex, "text")}
-                      className="text-[10px] bg-slate-800 hover:bg-blue-600 px-2 py-1 rounded-lg font-bold transition whitespace-nowrap"
-                    >
-                      줄글 섹션
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleInsertBlock(page, blockIndex, "banner")}
-                      className="text-[10px] bg-slate-800 hover:bg-blue-600 px-2 py-1 rounded-lg font-bold transition whitespace-nowrap"
-                    >
-                      홍보 띠배너
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleInsertBlock(page, blockIndex, "image")}
-                      className="text-[10px] bg-slate-800 hover:bg-blue-600 px-2 py-1 rounded-lg font-bold transition whitespace-nowrap"
-                    >
-                      배너 통이미지
-                    </button>
-                    <div className="w-px h-4 bg-white/20 mx-0.5" />
-                    <button
-                      type="button"
-                      onClick={() => setShowAddBlockMenuAtIndex(null)}
-                      className="text-[10px] text-slate-400 hover:text-white px-1.5 py-1 font-bold whitespace-nowrap"
-                    >
-                      닫기
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowAddBlockMenuAtIndex({ pageId: page.id, index: blockIndex })}
-                    className="flex items-center gap-1 bg-white border border-blue-400/60 text-blue-600 hover:bg-blue-50 hover:border-blue-550 rounded-full px-4 py-1.5 shadow-sm text-[10px] font-black transition-all hover:scale-105 active:scale-95 duration-150"
-                  >
-                    <span>➕ 이 뒤에 새 구역 삽입</span>
-                  </button>
-                )}
-              </div>
-            )}
+  if (page.slug === "home") {
+    const renderHomeScene = (block: CMSBlock, scene: React.ReactNode) => {
+      if (!isEditModeActive) return scene;
+      const originalIndex = page.blocks.findIndex((item) => item.id === block.id);
+      if (originalIndex < 0) return scene;
+      const selected = activeEditTarget?.blockId === block.id;
+      return (
+        <React.Fragment key={block.id}>
+          <div className={`public-edit-section ${selected ? "is-selected" : ""}`} onClick={(event) => {
+            event.stopPropagation();
+            setActiveEditTarget({ type: block.type, pageId: page.id, page, blockId: block.id, block });
+          }}>
+            <EditorBar page={page} block={block} index={originalIndex} selected={selected} onSelect={() => setActiveEditTarget({ type: block.type, pageId: page.id, page, blockId: block.id, block })} onMoveUp={() => handleMoveBlockUp(page, originalIndex)} onMoveDown={() => handleMoveBlockDown(page, originalIndex)} onDelete={() => handleDeleteBlock(page, originalIndex)} />
+            {scene}
           </div>
+          <InsertBlockControl
+            page={page}
+            index={originalIndex}
+            isOpen={showAddBlockMenuAtIndex?.pageId === page.id && showAddBlockMenuAtIndex.index === originalIndex}
+            setOpen={(open) => setShowAddBlockMenuAtIndex(open ? { pageId: page.id, index: originalIndex } : null)}
+            insert={(type) => handleInsertBlock(page, originalIndex, type)}
+          />
+        </React.Fragment>
+      );
+    };
+
+    return (
+      <div className="public-page public-page--home">
+        <PublicHomeExperience
+          page={page}
+          pages={pages}
+          onNavigate={handleLinkClick}
+          renderScene={renderHomeScene}
+          renderFallback={(block) => renderBlock(block, page.blocks.findIndex((item) => item.id === block.id))}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`public-page public-page--${page.slug}`}>
+      {visibleBlocks.map((block, index) => {
+        const originalIndex = page.blocks.findIndex((item) => item.id === block.id);
+        const selected = activeEditTarget?.blockId === block.id;
+        return (
+          <React.Fragment key={block.id}>
+            <section className={isEditModeActive ? `public-edit-section ${selected ? "is-selected" : ""}` : undefined} onClick={(event) => {
+              if (!isEditModeActive) return;
+              event.stopPropagation();
+              setActiveEditTarget({ type: block.type, pageId: page.id, page, blockId: block.id, block });
+            }}>
+              {isEditModeActive && <EditorBar page={page} block={block} index={originalIndex} selected={selected} onSelect={() => setActiveEditTarget({ type: block.type, pageId: page.id, page, blockId: block.id, block })} onMoveUp={() => handleMoveBlockUp(page, originalIndex)} onMoveDown={() => handleMoveBlockDown(page, originalIndex)} onDelete={() => handleDeleteBlock(page, originalIndex)} />}
+              {isEditModeActive || block.type === "hero" ? renderBlock(block, index) : (
+                <motion.div
+                  className="public-section-reveal"
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 38 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.12 }}
+                  transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  {renderBlock(block, index)}
+                </motion.div>
+              )}
+            </section>
+            {isEditModeActive && (
+              <InsertBlockControl
+                page={page}
+                index={originalIndex}
+                isOpen={showAddBlockMenuAtIndex?.pageId === page.id && showAddBlockMenuAtIndex.index === originalIndex}
+                setOpen={(open) => setShowAddBlockMenuAtIndex(open ? { pageId: page.id, index: originalIndex } : null)}
+                insert={(type) => handleInsertBlock(page, originalIndex, type)}
+              />
+            )}
+          </React.Fragment>
         );
       })}
-
-      {contextMenu && (() => {
-        const clickedBlock = page.blocks[contextMenu.blockIndex];
-        return (
-          <div
-            className="absolute bg-slate-900 border border-slate-700/80 rounded-2xl p-2.5 shadow-2xl text-white font-sans w-56 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-100"
-            style={{
-              left: `${contextMenu.x}px`,
-              top: `${contextMenu.y}px`,
-              position: "absolute"
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* If clicked inside a block, show dynamic sub-element/sub-card insertion */}
-            {clickedBlock && (
-              <>
-                <div className="text-[10px] uppercase font-black tracking-wider text-emerald-400 px-3.5 py-1.4 flex items-center gap-1.5 border-b border-white/5 pb-1.5 mb-1 select-none">
-                  <span>📥 이 섹션 내부에 추가 (Inside)</span>
-                </div>
-
-                {clickedBlock.type === "features" && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const currentItems = [...(clickedBlock.items || [])];
-                        currentItems.push({
-                          title: "새 우대 혜택카드 요소를 이곳에 추가합니다.",
-                          desc: "이 카드의 혜택 우대조건과 보조 설명 내용을 상세하게 직접 작성할 수 있습니다."
-                        });
-                        await handleUpdateBlockData(page, clickedBlock.id, { items: currentItems });
-                      } catch (err) {
-                        console.error("Failed to add internal card item", err);
-                      }
-                      setContextMenu(null);
-                    }}
-                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-300 hover:text-white hover:bg-emerald-600 rounded-xl transition text-left cursor-pointer border border-emerald-500/20 bg-emerald-500/5 mb-1"
-                  >
-                    <span>➕ 피처 카드 추가</span>
-                  </button>
-                )}
-
-                {(clickedBlock.type === "hero" || clickedBlock.type === "banner") && (
-                  <>
-                    {(!clickedBlock.buttonText || clickedBlock.buttonText === "") && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const order = clickedBlock.elementOrder ? (clickedBlock.elementOrder.includes("buttons") ? clickedBlock.elementOrder : [...clickedBlock.elementOrder, "buttons"]) : undefined;
-                            await handleUpdateBlockData(page, clickedBlock.id, {
-                              buttonText: "신청 등록 버튼",
-                              elementOrder: order
-                            });
-                          } catch (err) {
-                            console.error("Failed to add button inside block", err);
-                          }
-                          setContextMenu(null);
-                        }}
-                        className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-300 hover:text-white hover:bg-emerald-600 rounded-xl transition text-left cursor-pointer border border-emerald-500/20 bg-emerald-500/5 mb-1"
-                      >
-                        <span>🔘 콜투액션 버튼 추가</span>
-                      </button>
-                    )}
-
-                    {(!clickedBlock.subtitle || clickedBlock.subtitle === "") && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const order = clickedBlock.elementOrder ? (clickedBlock.elementOrder.includes("subtitle") ? clickedBlock.elementOrder : [...clickedBlock.elementOrder, "subtitle"]) : undefined;
-                            await handleUpdateBlockData(page, clickedBlock.id, {
-                              subtitle: "성공을 지원하는 상세 보조 설명을 직접 입력하세요.",
-                              elementOrder: order
-                            });
-                          } catch (err) {
-                            console.error("Failed to add subtitle", err);
-                          }
-                          setContextMenu(null);
-                        }}
-                        className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-300 hover:text-white hover:bg-emerald-600 rounded-xl transition text-left cursor-pointer border border-emerald-500/20 bg-emerald-500/5 mb-1"
-                      >
-                        <span>📝 보조 설명문 추가</span>
-                      </button>
-                    )}
-
-                    {(!clickedBlock.badge || clickedBlock.badge === "") && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const order = clickedBlock.elementOrder ? (clickedBlock.elementOrder.includes("badge") ? clickedBlock.elementOrder : ["badge", ...clickedBlock.elementOrder]) : undefined;
-                            await handleUpdateBlockData(page, clickedBlock.id, {
-                              badge: "신규 제휴 프로모션",
-                              elementOrder: order
-                            });
-                          } catch (err) {
-                            console.error("Failed to add badge", err);
-                          }
-                          setContextMenu(null);
-                        }}
-                        className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-300 hover:text-white hover:bg-emerald-600 rounded-xl transition text-left cursor-pointer border border-emerald-500/20 bg-emerald-500/5 mb-1"
-                      >
-                        <span>🏷️ 미니 뱃지 태그 추가</span>
-                      </button>
-                    )}
-                  </>
-                )}
-
-                {clickedBlock.type === "text" && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const newContent = (clickedBlock.content || "") + "\n새로운 추가 문단을 작성해 보세요.";
-                        await handleUpdateBlockData(page, clickedBlock.id, { content: newContent });
-                      } catch (err) {
-                        console.error("Failed to add paragraph description", err);
-                      }
-                      setContextMenu(null);
-                    }}
-                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-300 hover:text-white hover:bg-emerald-600 rounded-xl transition text-left cursor-pointer border border-emerald-500/20 bg-emerald-500/5 mb-1"
-                  >
-                    <span>➕ 텍스트 문단 추가</span>
-                  </button>
-                )}
-
-                <div className="h-px bg-white/5 my-1" />
-              </>
-            )}
-
-            <div className="text-[10px] uppercase font-black tracking-wider text-slate-400 px-3.5 py-1 flex items-center gap-1.5 border-b border-white/5 pb-1.5 mb-1 select-none">
-              <span>✨ 구역 추가 (Add Section)</span>
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
-                handleInsertBlock(page, contextMenu.blockIndex, "image");
-                setContextMenu(null);
-              }}
-              className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-200 hover:text-white hover:bg-blue-600 rounded-xl transition text-left cursor-pointer"
-            >
-              <span>🖼️</span>
-              <span>이미지 추가 (통배너)</span>
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                handleInsertBlock(page, contextMenu.blockIndex, "text");
-                setContextMenu(null);
-              }}
-              className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-200 hover:text-white hover:bg-blue-600 rounded-xl transition text-left cursor-pointer"
-            >
-              <span>📝</span>
-              <span>텍스트박스 추가</span>
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                handleInsertBlock(page, contextMenu.blockIndex, "divider");
-                setContextMenu(null);
-              }}
-              className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-200 hover:text-white hover:bg-blue-600 rounded-xl transition text-left cursor-pointer"
-            >
-              <span>➖</span>
-              <span>구분선 추가</span>
-            </button>
-            <div className="h-px bg-white/5 my-1" />
-            <button
-              type="button"
-              onClick={async () => {
-                handleInsertBlock(page, contextMenu.blockIndex, "banner");
-                setContextMenu(null);
-              }}
-              className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-200 hover:text-white hover:bg-blue-600 rounded-xl transition text-left cursor-pointer"
-            >
-              <span>⭐</span>
-              <span>대형 메인 배너 추가</span>
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                handleInsertBlock(page, contextMenu.blockIndex, "features");
-                setContextMenu(null);
-              }}
-              className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-200 hover:text-white hover:bg-blue-600 rounded-xl transition text-left cursor-pointer"
-            >
-              <span>⚡</span>
-              <span>피처 카드형</span>
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                handleInsertBlock(page, contextMenu.blockIndex, "banner");
-                setContextMenu(null);
-              }}
-              className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-slate-200 hover:text-white hover:bg-blue-600 rounded-xl transition text-left cursor-pointer"
-            >
-              <span>📢</span>
-              <span>스마트 띠배너</span>
-            </button>
-          </div>
-        );
-      })()}
-
-      {/* Snap Alignment Guides */}
-      {snapLines.map((line, idx) => (
-        <div
-          key={idx}
-          style={
-            line.type === "v"
-              ? { left: `${line.coordinate}px`, top: 0, bottom: 0, width: 0, position: "absolute" }
-              : { top: `${line.coordinate}px`, left: 0, right: 0, height: 0, position: "absolute" }
-          }
-          className={`z-55 pointer-events-none border-blue-500 border-dashed ${
-            line.type === "v" ? "border-l-2" : "border-t-2"
-          }`}
-        />
-      ))}
+      {renderFunction()}
     </div>
   );
-
-  if (page.slug === "board_resources") {
-    return <ResourceBoardProvider>{renderContent}</ResourceBoardProvider>;
-  }
-  if (page.slug === "board_suggestions") {
-    return <SuggestionBoardProvider>{renderContent}</SuggestionBoardProvider>;
-  }
-  return renderContent;
 };
