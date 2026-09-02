@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Task } from "../types";
 import { db, auth } from "../firebase";
-import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from "firebase/firestore";
+import { collection, doc, setDoc, onSnapshot, runTransaction } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 
@@ -117,9 +117,31 @@ export function useTasks() {
     const path = `tasks/${id}`;
     
     try {
-      await updateDoc(doc(db, "tasks", id), {
-        ...updates,
-        updatedAt: new Date().toISOString()
+      const taskRef = doc(db, "tasks", id);
+      await runTransaction(db, async (transaction) => {
+        const taskSnapshot = await transaction.get(taskRef);
+        if (!taskSnapshot.exists()) throw new Error("task-not-found");
+
+        const currentTask = { id: taskSnapshot.id, ...taskSnapshot.data() } as Task;
+        let sourceRef: ReturnType<typeof doc> | null = null;
+
+        if (updates.status && currentTask.sourceCollection && currentTask.sourceId) {
+          sourceRef = doc(db, currentTask.sourceCollection, currentTask.sourceId);
+          const sourceSnapshot = await transaction.get(sourceRef);
+          if (!sourceSnapshot.exists()) throw new Error("linked-source-not-found");
+          if (sourceSnapshot.data().linkedTaskId !== id) throw new Error("linked-source-mismatch");
+        }
+
+        transaction.update(taskRef, {
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        });
+
+        if (sourceRef && updates.status) {
+          transaction.update(sourceRef, {
+            status: updates.status === "완료" ? "완료" : "작업등록",
+          });
+        }
       });
       return true;
     } catch (error) {
@@ -134,11 +156,27 @@ export function useTasks() {
     const path = `tasks/${id}`;
     
     try {
-      await deleteDoc(doc(db, "tasks", id));
+      const taskRef = doc(db, "tasks", id);
+      await runTransaction(db, async (transaction) => {
+        const taskSnapshot = await transaction.get(taskRef);
+        if (!taskSnapshot.exists()) return;
+
+        const currentTask = taskSnapshot.data() as Task;
+        if (currentTask.sourceCollection || currentTask.sourceId) {
+          throw new Error("linked-task-delete-blocked");
+        }
+        transaction.delete(taskRef);
+      });
       return true;
     } catch (error) {
       getFirestoreErrorInfo(error, OperationType.DELETE, path);
-      showToast("작업 삭제에 실패했습니다.", "error");
+      const isLinkedTask = error instanceof Error && error.message === "linked-task-delete-blocked";
+      showToast(
+        isLinkedTask
+          ? "상담·배송 요청과 연결된 작업은 원본 이력을 보호하기 위해 삭제할 수 없습니다."
+          : "작업 삭제에 실패했습니다.",
+        "error",
+      );
       return false;
     }
   };

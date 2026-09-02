@@ -35,7 +35,7 @@ function TermsDocument({ company }: { company: FooterInfo }) {
 
       <Section title="제2조 계정과 이용자 책임">
         <p>이용자는 정확한 정보를 제공하고 자신의 로그인 수단을 안전하게 관리해야 합니다. 타인의 계정을 사용하거나 서비스의 보안·정상 운영을 방해해서는 안 됩니다.</p>
-        <p>임직원 기능은 회사가 승인한 Google 계정과 접속 코드 검증을 모두 통과한 경우에만 사용할 수 있습니다.</p>
+        <p>임직원 기능은 회사가 승인한 Google 계정의 Firebase UID가 관리자 또는 임직원 허용 목록에 등록된 경우에만 사용할 수 있습니다.</p>
       </Section>
 
       <Section title="제3조 신청과 게시물">
@@ -58,7 +58,7 @@ function TermsDocument({ company }: { company: FooterInfo }) {
       </Section>
 
       <Section title="제7조 약관 변경과 문의">
-        <p>약관이 변경되는 경우 시행일과 주요 변경 내용을 홈페이지에 알립니다. 문의는 {company.privacyContact || company.email} 또는 {company.phone}으로 접수할 수 있습니다.</p>
+        <p>약관이 변경되는 경우 시행일과 주요 변경 내용을 홈페이지에 알립니다. 문의는 <span className="public-data-token">{company.privacyContact || company.email}</span> 또는 <span className="public-data-token">{company.phone}</span>으로 접수할 수 있습니다.</p>
         <p className="font-semibold text-slate-700">시행일: {EFFECTIVE_DATE}</p>
       </Section>
     </div>
@@ -97,7 +97,7 @@ function PrivacyDocument({ company }: { company: FooterInfo }) {
               </tr>
               <tr>
                 <td className="border-b border-slate-100 px-4 py-3 font-semibold text-slate-800">회원·임직원 인증</td>
-                <td className="border-b border-slate-100 px-4 py-3">이메일, Firebase UID, 이름·닉네임, 프로필 이미지, 직책, 로그인 제공자와 접속 코드 검증 상태</td>
+                <td className="border-b border-slate-100 px-4 py-3">이메일, Firebase UID, 이름·닉네임, 프로필 이미지, 직책, 로그인 제공자와 임직원 권한 상태</td>
                 <td className="border-b border-slate-100 px-4 py-3">로그인, 권한 확인, 계정 관리. 계정 삭제 시까지</td>
               </tr>
               <tr>
@@ -145,7 +145,7 @@ function PrivacyDocument({ company }: { company: FooterInfo }) {
       <Section title="7. 개인정보 문의처">
         <p>
           담당: {company.privacyOfficer || "개인정보 보호업무 담당자"}<br />
-          연락처: {privacyContact} / {company.phone}
+          연락처: <span className="public-data-token">{privacyContact}</span> / <span className="public-data-token">{company.phone}</span>
         </p>
         <p>개인정보 침해에 관한 상담이 필요한 경우 개인정보침해 신고센터(118) 또는 개인정보분쟁조정위원회 등 관계 기관에 도움을 요청할 수 있습니다.</p>
       </Section>
@@ -160,14 +160,34 @@ function PrivacyDocument({ company }: { company: FooterInfo }) {
 
 export function LegalDocumentModal({ type, company, onClose }: LegalDocumentModalProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const isTerms = type === "terms";
   const title = isTerms ? "서비스 이용약관" : "개인정보처리방침";
   const Icon = isTerms ? ScrollText : ShieldCheck;
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+      ) || []);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
 
     document.body.style.overflow = "hidden";
@@ -177,6 +197,7 @@ export function LegalDocumentModal({ type, company, onClose }: LegalDocumentModa
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKeyDown);
+      previousFocus?.focus();
     };
   }, [onClose]);
 
@@ -190,7 +211,7 @@ export function LegalDocumentModal({ type, company, onClose }: LegalDocumentModa
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+      <div ref={dialogRef} className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
         <header className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-4 sm:px-7">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">

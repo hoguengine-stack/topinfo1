@@ -1,28 +1,29 @@
-# Generated home service graphics
+# Generated public graphics
 
-These local WebP files are reviewed product-service scenes for the public home stage. Current files combine verified product cutouts, deterministic UI composites, and non-product backgrounds; product models, logos, UI text, and quantities are not generated.
+Only non-product decorative material that is explicitly registered below may remain in this directory.
 
-| Asset | Scene |
-| --- | --- |
-| `system-pos-apexa-x-toss.webp` | POSBANK APEXA X-1500 runs the Toss POS order screen beside a separate Toss Front payment terminal |
-| `system-internet-apexa-x.webp` | A router connects the APEXA X running Toss POS, Toss Front, and receipt printer |
-| `system-pos-order-payment.webp` | Official Toss Front customer-payment scene, fitted to the 3:2 stage without cropping the terminal |
-| `system-internet-connect.webp` | Official U+ router connects verified APEXA X, IP-520GA, and U+ CCTV products |
-| `system-ai-phone.webp` | Official white U+ IP-520GA routes common inquiries through an AI assistant bubble |
-| `system-cctv.webp` | Four-feed mobile CCTV monitoring, intrusion detection, and field response support |
-| `system-internet-phone.webp` | Official white U+ IP-520GA internet-phone product scene |
+All former `system-*.webp` product/service composites were removed from `public/` on 2026-07-18 and archived under `.asset-research/rights-pending/public-blocked/generated/`. They failed the combined product-fidelity, composition, or publication-rights gate. The homepage now renders code-based service scenes from individually registered source assets instead of publishing those flattened composites.
 
-Build mode: `scripts/rebuild-core-pos-assets.py` composes the POS scenes from the official POSBANK APEXA X-1500 master, the verified Toss POS screen, the official Toss Front cutout, the reviewed AHAPOS CPP-3000 cutout, the reviewed white cash drawer, and the official U+ router cutout. AI generation is limited to product-free tabletop/background material; no generated product silhouette or generated Toss UI is accepted.
+`scripts/rebuild-core-pos-assets.py` writes any rebuilt system composite to `.asset-research/rights-pending/`; it must not write `system-*` files back into this public directory. `src/utils/publicMedia.ts` and `src/utils/cmsMediaAudit.test.ts` enforce the same rule at runtime and in tests.
 
-Hardware reference: https://www.posbank.com/trans_hardware/apexa-x-1500.php?trans=usa  
-Software reference: https://tossplace.com/product/pos
+Hardware and software references retained for future verified work:
 
-Project copies use exact 3:2 canvases so the responsive stage does not add blank bands or crop at runtime. Rebuilding is deterministic from the archived masters. The internet scene uses the official U+ representative router without asserting an unpublished model name or physical dimension.
+- POSBANK APEXA X-1500: https://www.posbank.com/trans_hardware/apexa-x-1500.php?trans=usa
+- Toss POS: https://tossplace.com/product/pos
+- U+ intelligent CCTV: https://www.lguplus.com/biz/all/telecom/internet-cctv/smart-cctv/B000000007
 
-The scene layout is illustrative, while the visible products and UI are source-based composites. APEXA X is 364 × 210 × 333 mm, Toss Front is 147.5 × 128 × 193.5 mm, and CPP-3000 is 130 × 178 × 140 mm; same-plane product heights use those ratios. Installation conditions and service scope remain subject to consultation.
+Reintroducing a composite requires exact model and UI evidence, measured physical scale, coherent lighting/perspective, partner redistribution rights, and rendered-page approval under `.agents/skills/topinfo-design-review/SKILL.md`.
 
-The AI-phone scene keeps the official white U+ IP-520GA as the physical device and places the robot only inside a speech bubble. The clock, location, and parking bubbles represent the common inquiries described by the official U+ AI-phone service.
+## Generated Asset Register
 
-The CCTV scene avoids generated hands and combines a four-feed mobile monitoring screen with official D-1200D, D-1200B, and D-3200PTZD product cutouts. Intrusion detection and mobile alerts are within the official U+ intelligent-CCTV service scope: https://www.lguplus.com/biz/all/telecom/internet-cctv/smart-cctv/B000000007
+The following files are internally generated visual material. They are not customer photos, installation evidence, official product media, or proof of a service feature. Their original generation prompts were not preserved in the earlier work history, so that fact is recorded rather than reconstructed.
 
-The revised files passed file-level 100%/400% checks for clipping, alpha edges, product identity, UI legibility, and duplicate content. They remain pending final user review in the actual desktop/mobile page; file-level checks are not recorded as final visual approval.
+| Asset | Public role | Generation/source record | Rights and evidence boundary | Active page |
+| --- | --- | --- | --- | --- |
+| `topinfo-package-owner-v2.webp` | Decorative store-owner background behind verified product cutouts | Internal legacy generation, 2026-07-15; original prompt unavailable | Project-controlled generated image. Must be captioned as an illustration and must not imply a real customer or installation case. | Home package campaign |
+| `.asset-research/generated-source/uplus-ai-robot-white.png` | Source master for the decorative robot inside the AI speech bubble | Internal legacy generation, 2026-07-15; original prompt unavailable | Stored outside `public/`. Decorative metaphor only; it must never replace official product or service evidence. | Research source only |
+| `uplus-ai-robot-white-384.webp` | Optimized derivative of the decorative robot | Deterministic resize of the source master to 384×576, WebP | Same restriction as the source master. | Home system stage, U+ AI전화 page |
+| `.asset-research/generated-source/cctv-store-grid-person-free.png` | Source master for an illustrative four-feed store monitor | Internal legacy generation, 2026-07-14; original prompt unavailable | Stored outside `public/`. Not a real store, customer, installation, or official U+ app screen. | Research source only |
+| `cctv-store-grid-person-free-480.webp` | Optimized derivative of the illustrative CCTV feeds | Deterministic resize of the source master to 480×960, WebP | Must be labeled as a monitoring example and paired with separately sourced product cutouts. | Home system stage |
+
+The deployed derivatives are 25,582 bytes and 75,526 bytes respectively. Source masters remain in `.asset-research/generated-source/` for traceability and are excluded from the public deployment tree.

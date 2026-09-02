@@ -9,6 +9,8 @@ import { WebsiteLoginModal } from "./WebsiteLoginModal";
 import { WebsiteBlockRenderer } from "./WebsiteBlockRenderer";
 import { FooterInfo } from "../utils/footerSettings";
 import { PublicActionDock, PublicScrollProgress } from "./public-v3/PublicExperience";
+import { ArrowRight, SearchX } from "lucide-react";
+import { PUBLIC_NOT_FOUND_SLUG } from "../utils/publicRoutes";
 
 const WebsiteHUDPanel = React.lazy(() => import("./WebsiteHUDPanel").then(m => ({ default: m.WebsiteHUDPanel })));
 const WebAdmin = React.lazy(() => import("./WebAdmin").then(m => ({ default: m.WebAdmin })));
@@ -42,11 +44,7 @@ export interface TopWebsiteViewProps {
   authError: string | null;
   authLoading: boolean;
   handleAuthSubmit: (e: React.FormEvent) => void;
-  showGoogleLogin: boolean;
-  setShowGoogleLogin: (val: boolean) => void;
   handleGoogleLogin: () => void;
-  googleClickTimes: number[];
-  setGoogleClickTimes: React.Dispatch<React.SetStateAction<number[]>>;
   mobileMenuOpen: boolean;
   setMobileMenuOpen: (val: boolean) => void;
   isSignUpMode: boolean;
@@ -107,11 +105,7 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
     authError,
     authLoading,
     handleAuthSubmit,
-    showGoogleLogin,
-    setShowGoogleLogin,
     handleGoogleLogin,
-    googleClickTimes,
-    setGoogleClickTimes,
     mobileMenuOpen,
     setMobileMenuOpen,
     isSignUpMode,
@@ -220,6 +214,36 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
             );
           })}
 
+          {currentUrl === PUBLIC_NOT_FOUND_SLUG && (
+            <motion.section
+              key={PUBLIC_NOT_FOUND_SLUG}
+              className="public-not-found"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              aria-labelledby="public-not-found-title"
+            >
+              <div className="public-container public-not-found__layout">
+                <div className="public-not-found__code" aria-hidden="true">404</div>
+                <div className="public-not-found__copy">
+                  <span className="public-not-found__icon"><SearchX aria-hidden="true" /></span>
+                  <p className="public-kicker">주소 확인</p>
+                  <h1 id="public-not-found-title">요청한 페이지를<br />찾을 수 없습니다</h1>
+                  <p>주소가 바뀌었거나 삭제된 페이지입니다. 홈에서 매장 구성과 고객지원 메뉴를 다시 확인해 주세요.</p>
+                  <div className="public-not-found__actions">
+                    <button type="button" className="public-button public-button--primary" onClick={() => handleLinkClick("home")}>
+                      홈으로 이동 <ArrowRight aria-hidden="true" />
+                    </button>
+                    <button type="button" className="public-button public-button--secondary" onClick={() => handleLinkClick("support")}>
+                      고객지원 보기
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.section>
+          )}
+
           {/* --- Custom Admin layout block --- */}
           {currentUrl === "admin" && isEmployee && (
             <motion.div
@@ -262,15 +286,12 @@ export const TopWebsiteView: React.FC<TopWebsiteViewProps> = (props) => {
       <WebsiteLoginModal
         showLoginModal={showLoginModal}
         setShowLoginModal={setShowLoginModal}
-        showGoogleLogin={showGoogleLogin}
-        setShowGoogleLogin={setShowGoogleLogin}
         authFormData={authFormData}
         setAuthFormData={setAuthFormData}
         authError={authError}
         authLoading={authLoading}
         handleAuthSubmit={handleAuthSubmit}
         handleGoogleLogin={handleGoogleLogin}
-        setGoogleClickTimes={setGoogleClickTimes}
         isSignUpMode={isSignUpMode}
         setIsSignUpMode={setIsSignUpMode}
       />

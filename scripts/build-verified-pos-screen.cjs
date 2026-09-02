@@ -12,8 +12,9 @@ const officialUiPath = path.join(
 );
 const outputScreenPath = path.join(
   projectRoot,
-  "public",
-  "assets",
+  ".asset-research",
+  "rights-pending",
+  "public-blocked",
   "product",
   "toss-pos-screen-verified.png",
 );
@@ -55,6 +56,7 @@ async function assertSource(filePath, rule, label) {
 }
 
 async function buildVerifiedScreen() {
+  await fs.mkdir(path.dirname(outputScreenPath), { recursive: true });
   await assertSource(officialUiPath, SOURCE_RULES.officialUi, "Official Toss POS source");
 
   const centralScreen = await sharp(officialUiPath)

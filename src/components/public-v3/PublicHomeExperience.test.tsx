@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createDefaultCMSPages } from "../../utils/cmsSettings";
 import { PublicHomeExperience } from "./PublicHomeExperience";
 
-test("public home renders the seven-chapter design without fake status UI", () => {
+test("public home renders the nine-section sales journey without fake status UI", () => {
   const pages = createDefaultCMSPages("fixed-date");
   const page = pages.find((item) => item.id === "home");
   assert.ok(page);
@@ -14,7 +14,7 @@ test("public home renders the seven-chapter design without fake status UI", () =
   [
     "top-home-hero",
     "top-home-responsibility",
-    "top-home-system__stage",
+    "top-home-system-v2__stage",
     "top-home-package__offer",
     "top-home-sector__story",
     "top-home-process",
@@ -22,19 +22,28 @@ test("public home renders the seven-chapter design without fake status UI", () =
     "top-home-faq",
     "top-home-cta",
   ].forEach((className) => assert.equal(html.includes(className), true, `missing ${className}`));
-  assert.equal((html.match(/<section/g) || []).length, 7);
-  assert.equal(html.includes("posbank-apexa-x-white-toss.png"), true);
-  assert.equal(html.includes("toss-front-customer-payment.png"), true);
+  assert.equal((html.match(/<section/g) || []).length, 9);
+  assert.equal(html.includes("posbank-apexa-x-white-official.png"), true);
+  assert.equal(html.includes("toss-front.webp"), true);
   assert.equal(html.includes("ahapos-white-printer.png"), true);
   assert.equal(html.includes("apexa-x-visual__screen"), true);
   assert.equal(html.includes("topinfo-package-owner-v2.webp"), true);
-  assert.equal(html.includes("일반 월 43,000원"), true);
+  assert.equal(html.includes("일반 월 43,000원"), false);
   assert.equal(html.includes("사용 교육"), true);
   assert.equal(html.includes("관련 기능 장면이 자동으로 이어집니다."), true);
-  assert.equal(html.includes("/assets/sector/sector-cafe.webp"), true);
-  assert.equal(html.includes("/assets/sector/sector-cafe-static.webp"), false);
+  assert.equal(html.includes("/assets/sector/sector-cafe.webp"), false);
+  assert.equal(html.includes("/assets/sector/sector-cafe-static.webp"), true);
   assert.equal(html.includes("top-home-package__included"), true);
-  assert.equal(html.includes("U+ 인터넷전화</strong>"), false);
+  assert.equal(html.includes("top-home-process__signal"), true);
+  assert.equal(html.includes("top-home-process__icon"), true);
+  assert.equal(html.includes("top-home-support__action"), true);
+  assert.equal(html.includes("top-home-faq__index"), true);
+  ["is-opening", "is-replace", "is-connect", "is-support"]
+    .forEach((kind) => assert.equal(html.includes(`top-home-responsibility__situation ${kind}`), true, `missing responsibility visual: ${kind}`));
+  assert.equal(html.includes("필요한 구성 확인"), true);
+  assert.equal(html.includes("최대 37만원"), false);
+  assert.equal(html.includes("무료 혜택"), false);
+  assert.equal(html.includes("U+ 인터넷전화</strong>"), true);
   assert.equal(html.includes("top-home-sector__media-nav"), true);
   assert.equal(html.includes("매장 운영 연결 완료"), false);
   assert.equal(html.includes("LIVE STORE PREVIEW"), false);
@@ -89,9 +98,10 @@ test("home CCTV scene has no generated human and renders a four-view phone with 
     ? { ...block, items: block.items?.filter((item) => item.mediaKind === "cctv") }
     : block);
   const html = renderToStaticMarkup(<PublicHomeExperience page={{ ...original, blocks }} pages={pages} onNavigate={() => {}} />);
-  assert.equal(html.includes("top-home-cctv-scene__phone"), true);
-  assert.equal(html.includes("cctv-store-grid-person-free.png"), true);
-  ["출입구", "카운터", "매장 안", "창고"].forEach((label) => assert.equal(html.includes(label), true));
+  assert.equal(html.includes("top-home-system-v2__monitor-phone"), true);
+  assert.equal(html.includes("cctv-store-grid-person-free-480.webp"), true);
+  ["모니터링 화면 예시", "실내형", "실외형", "PTZ", "매장 확인", "이상 알림", "지원 연결"]
+    .forEach((label) => assert.equal(html.includes(label), true));
   assert.equal(html.includes("system-cctv.webp"), false);
   assert.equal(html.includes("uplus-cctv-indoor.png"), true);
   assert.equal(html.includes("uplus-cctv-outdoor.png"), true);

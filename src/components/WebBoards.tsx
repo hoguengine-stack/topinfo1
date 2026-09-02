@@ -2,7 +2,7 @@ import React, { useState, useEffect, createContext, useContext } from "react";
 import { db } from "../firebase";
 import { collection, onSnapshot, addDoc, doc, updateDoc, deleteDoc, deleteField, getDocs, query, where } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
-import { ResourceItem } from "../types";
+import { ResourceItem, type Suggestion } from "../types";
 import {
   buildResourceRecord,
   buildStaticDownloadDraft,
@@ -151,18 +151,17 @@ export function SuggestionBoardProvider({ children }: { children: React.ReactNod
 
     try {
       const createdAt = new Date().toISOString();
-      const postData = {
+      const postData: Omit<Suggestion, "id"> = {
         title: newPost.title,
         content: newPost.content,
         authorName: newPost.authorName,
         isSecret: newPost.isSecret,
-        authorId: user?.sub || "anonymous",
-        replies: [],
         createdAt,
         privacyConsentAt: createdAt,
         overseasTransferConsentAt: createdAt,
         privacyPolicyVersion: PRIVACY_POLICY_VERSION,
       };
+      if (user?.sub) postData.authorId = user.sub;
       const createdPost = await addDoc(collection(db, "suggestions"), postData);
       if (!isAdmin) {
         setPosts((prev) => [{ id: createdPost.id, ...postData }, ...prev]);
@@ -268,7 +267,7 @@ export function SuggestionBoardHeader() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">건의 & 가맹점 의견제안</h2>
-          <p className="text-slate-500 mt-2">대표님들의 소소한 건의 및 조언을 귀담아 들어 최고의 서비스를 제공하겠습니다.</p>
+          <p className="text-slate-500 mt-2">매장 운영 중 불편했던 점과 개선 의견을 확인해 서비스에 반영하겠습니다.</p>
         </div>
         {!isCreating && (
           <button

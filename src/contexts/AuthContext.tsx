@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { auth, db, googleProvider } from "../firebase";
-import { signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, User as FirebaseUser } from "firebase/auth";
-import { deleteDoc, deleteField, doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
-import { getAccessCodeFailureMessage, isFirestoreQuotaError } from "../utils/firebaseErrors";
+import { signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, getIdTokenResult, User as FirebaseUser } from "firebase/auth";
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
 
 interface User {
   sub: string;
@@ -19,12 +18,6 @@ interface Profile {
   nickname: string;
   picture: string;
   jobTitle?: string;
-}
-
-export interface LockoutState {
-  failedAttempts: number;
-  lockoutTier: number;
-  lockoutUntil: number | null;
 }
 
 export interface NotificationSettings {
@@ -46,9 +39,6 @@ export const defaultNotificationSettings: NotificationSettings = {
 export interface VerifyResult {
   success: boolean;
   isAdmin?: boolean;
-  locked?: boolean;
-  lockoutUntil?: number | null;
-  attemptsLeft?: number;
   errorMessage?: string;
 }
 
@@ -57,10 +47,9 @@ interface AuthContextType {
   profile: Profile | null;
   isAdmin: boolean;
   isEmployee: boolean;
-  isAccessCodeVerified: boolean;
-  setIsAccessCodeVerified: (verified: boolean) => void;
+  hasStaffAccess: boolean;
+  isStaffAccessLoading: boolean;
   isLoading: boolean;
-  lockoutState: LockoutState;
   notificationSettings: NotificationSettings;
   taskTypes: string[];
   taskTypeColors: Record<string, string>;
@@ -68,14 +57,13 @@ interface AuthContextType {
   jobTitles: string[];
   login: () => Promise<void>;
   emailLogin: (email: string, pass: string) => Promise<void>;
-  emailSignUp: (email: string, pass: string, nickname: string, jobTitle: string, typedAccessCode: string) => Promise<void>;
+  emailSignUp: (email: string, pass: string, nickname: string) => Promise<void>;
   logout: () => Promise<void>;
-  verifyAccessCode: (code: string) => Promise<VerifyResult>;
+  refreshStaffAccess: () => Promise<VerifyResult>;
   saveProfile: (nickname: string, picture: string, jobTitle?: string) => void;
   updateProfilePicture: (picture: string) => void;
   updateJobTitle: (jobTitle: string) => void;
   updateNickname: (nickname: string) => void;
-  updateAccessCode: (newCode: string) => Promise<void>;
   updateTaskTypes: (types: string[]) => void;
   updateTaskTypeColors: (colors: Record<string, string>) => void;
   updatePriorities: (priorities: string[]) => void;
@@ -101,15 +89,6 @@ const redirectFallbackAuthCodes = new Set([
   "auth/web-storage-unsupported",
 ]);
 
-async function hashAccessCode(code: string) {
-  const normalizedCode = code.trim();
-  const bytes = new TextEncoder().encode(normalizedCode);
-  const digest = await window.crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 function getAuthErrorCode(error: unknown) {
   if (typeof error === "object" && error !== null && "code" in error) {
     return String((error as { code?: unknown }).code || "");
@@ -125,15 +104,31 @@ function isEmbeddedWindow() {
   }
 }
 
+function readUidList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+async function loadStaffAccess(uid: string) {
+  const securitySnapshot = await getDoc(doc(db, "settings", "security"));
+  if (!securitySnapshot.exists()) return { authorized: false, isAdmin: false };
+
+  const security = securitySnapshot.data();
+  const adminUids = readUidList(security.adminUids);
+  const employeeUids = readUidList(security.employeeUids);
+  const isAdmin = adminUids.includes(uid);
+  return {
+    authorized: isAdmin || employeeUids.includes(uid),
+    isAdmin,
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [isGoogleAdmin, setIsGoogleAdmin] = useState(false);
+  const [isGoogleSession, setIsGoogleSession] = useState(false);
   const [isAdminAccount, setIsAdminAccount] = useState(false);
-  const [isAccessCodeVerified, setIsAccessCodeVerified] = useState(() => {
-    return localStorage.getItem("isAccessCodeVerified") === "true";
-  });
-  const [lockoutState, setLockoutState] = useState<LockoutState>({ failedAttempts: 0, lockoutTier: 0, lockoutUntil: null });
+  const [hasStaffAccess, setHasStaffAccess] = useState(false);
+  const [isStaffAccessLoading, setIsStaffAccessLoading] = useState(true);
   const [taskTypes, setTaskTypes] = useState<string[]>(["용지", "설치", "점검", "수리", "휴대용단말기", "기타"]);
   const [taskTypeColors, setTaskTypeColors] = useState<Record<string, string>>(defaultTaskTypeColors);
   const [priorities, setPriorities] = useState<string[]>(["긴급", "높음", "보통", "낮음"]);
@@ -143,12 +138,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const initTimeRef = useRef(Date.now());
 
-  const isEmployee = isGoogleAdmin && isAccessCodeVerified;
+  const isEmployee = isGoogleSession && hasStaffAccess;
   const isAdmin = isEmployee && isAdminAccount;
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        setIsStaffAccessLoading(true);
         setUser({
           sub: firebaseUser.uid,
           name: firebaseUser.displayName || "",
@@ -157,15 +153,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email_verified: firebaseUser.emailVerified,
         });
 
-        const isGoogle = firebaseUser.providerData.some(p => p.providerId === "google.com");
-        setIsGoogleAdmin(isGoogle);
+        try {
+          const tokenResult = await getIdTokenResult(firebaseUser);
+          const isGoogle = tokenResult.signInProvider === "google.com";
+          setIsGoogleSession(isGoogle);
+          if (!isGoogle) setIsStaffAccessLoading(false);
+        } catch {
+          setIsGoogleSession(false);
+          setIsStaffAccessLoading(false);
+        }
       } else {
         setUser(null);
         setProfile(null);
-        setIsGoogleAdmin(false);
+        setIsGoogleSession(false);
         setIsAdminAccount(false);
-        setIsAccessCodeVerified(false);
-        localStorage.removeItem("isAccessCodeVerified");
+        setHasStaffAccess(false);
+        setIsStaffAccessLoading(false);
         setIsLoading(false);
       }
       setIsAuthReady(true);
@@ -176,24 +179,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    if (!user || !isEmployee) {
+    if (!user || !isGoogleSession) {
+      setHasStaffAccess(false);
       setIsAdminAccount(false);
       return;
     }
 
-    getDoc(doc(db, "settings", "security"))
-      .then((securitySnapshot) => {
-        if (!cancelled) setIsAdminAccount(securitySnapshot.exists());
+    setIsStaffAccessLoading(true);
+    loadStaffAccess(user.sub)
+      .then((access) => {
+        if (cancelled) return;
+        setHasStaffAccess(access.authorized);
+        setIsAdminAccount(access.isAdmin);
       })
       .catch(() => {
-        // Only the designated administrator can read the security document.
-        if (!cancelled) setIsAdminAccount(false);
+        if (cancelled) return;
+        setHasStaffAccess(false);
+        setIsAdminAccount(false);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setIsStaffAccessLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [user, isEmployee]);
+  }, [user, isGoogleSession]);
 
   useEffect(() => {
     if (!user || !isEmployee) return;
@@ -216,6 +228,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, isEmployee]);
 
   useEffect(() => {
+    if (!user || !profile || !isEmployee) return;
+    setDoc(doc(db, "staff_profiles", user.sub), {
+      uid: user.sub,
+      nickname: profile.nickname,
+      ...(profile.jobTitle ? { jobTitle: profile.jobTitle } : {}),
+      updatedAt: new Date().toISOString(),
+    }, { merge: true }).catch((error) => {
+      console.warn("Staff directory sync failed", error);
+    });
+  }, [isEmployee, profile?.jobTitle, profile?.nickname, user?.sub]);
+
+  useEffect(() => {
     if (!isAuthReady || !user) return;
 
     const userRef = doc(db, "users", user.sub);
@@ -230,13 +254,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data.priorities) setPriorities(data.priorities);
         if (data.jobTitles) setJobTitles(data.jobTitles);
         if (data.notificationSettings) setNotificationSettings({ ...defaultNotificationSettings, ...data.notificationSettings });
-        if (data.lockoutState) setLockoutState(data.lockoutState);
-        if (data.isAccessCodeVerified !== undefined) {
-          setIsAccessCodeVerified(data.isAccessCodeVerified);
-          localStorage.setItem("isAccessCodeVerified", String(data.isAccessCodeVerified));
-        } else {
-          setIsAccessCodeVerified(localStorage.getItem("isAccessCodeVerified") === "true");
-        }
       } else {
         // Initialize default user document
         const defaultData = {
@@ -246,13 +263,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           priorities: ["긴급", "높음", "보통", "낮음"],
           jobTitles: ["현장 관리자", "팀장", "엔지니어", "실장"],
           notificationSettings: defaultNotificationSettings,
-          isAccessCodeVerified: false,
-          lockoutState: { failedAttempts: 0, lockoutTier: 0, lockoutUntil: null }
         };
         await setDoc(userRef, defaultData);
         setProfile(defaultData.profile);
-        setIsAccessCodeVerified(false);
-        localStorage.setItem("isAccessCodeVerified", "false");
       }
       setIsLoading(false);
     }, (error) => {
@@ -262,17 +275,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => unsubscribe();
   }, [user, isAuthReady]);
-
-  const saveLockoutState = async (newState: LockoutState) => {
-    setLockoutState(newState);
-    if (user) {
-      try {
-        await updateDoc(doc(db, "users", user.sub), { lockoutState: newState });
-      } catch (err) {
-        console.warn("Lockout state sync failed:", err);
-      }
-    }
-  };
 
   const login = async () => {
     try {
@@ -306,7 +308,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const emailSignUp = async (email: string, pass: string, nickname: string, _jobTitle: string, _typedAccessCode: string) => {
+  const emailSignUp = async (email: string, pass: string, nickname: string) => {
     try {
       const res = await createUserWithEmailAndPassword(auth, email, pass);
       if (res.user) {
@@ -318,14 +320,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           priorities: ["긴급", "높음", "보통", "낮음"],
           jobTitles: ["현장 관리자", "팀장", "엔지니어", "실장"],
           notificationSettings: defaultNotificationSettings,
-          isAccessCodeVerified: false,
-          lockoutState: { failedAttempts: 0, lockoutTier: 0, lockoutUntil: null }
         };
         await setDoc(userRef, defaultData);
         // Explicitly set the profile in memory or let the snapshot hook update it.
         setProfile({ nickname, picture: "", jobTitle: "현장 관리자" });
-        setIsAccessCodeVerified(false);
-        localStorage.setItem("isAccessCodeVerified", "false");
       }
     } catch (error) {
       console.error("Email signUp failed:", error);
@@ -336,144 +334,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try {
       await signOut(auth);
-      setIsGoogleAdmin(false);
+      setIsGoogleSession(false);
       setIsAdminAccount(false);
-      localStorage.removeItem("isAccessCodeVerified");
+      setHasStaffAccess(false);
     } catch (error) {
       console.error("Logout failed:", error);
     }
   };
 
-  const verifyAccessCode = async (code: string): Promise<VerifyResult> => {
-    if (lockoutState.lockoutUntil && Date.now() < lockoutState.lockoutUntil) {
-      return { success: false, locked: true, lockoutUntil: lockoutState.lockoutUntil };
+  const refreshStaffAccess = async (): Promise<VerifyResult> => {
+    if (!user || !isGoogleSession) {
+      return { success: false, errorMessage: "Google Workspace 계정으로 로그인해야 합니다." };
     }
 
-    if (user) {
-      try {
-        const userRef = doc(db, "users", user.sub);
-        const verificationRef = doc(db, "access_verifications", user.sub);
-        const accessCodeHash = await hashAccessCode(code);
-
-        await setDoc(verificationRef, {
-          uid: user.sub,
-          accessCodeHash,
-          createdAt: Date.now(),
-        });
-        await updateDoc(userRef, {
-          isAccessCodeVerified: true,
-          accessCode: deleteField(),
-        });
-        await deleteDoc(verificationRef).catch((cleanupError) => {
-          console.warn("Access verification cleanup failed:", cleanupError);
-        });
-
-        const securityRef = doc(db, "settings", "security");
-        let adminConfirmed = false;
-
-        try {
-          const securitySnapshot = await getDoc(securityRef);
-          if (securitySnapshot.exists()) {
-            const securityData = securitySnapshot.data();
-            const adminUids = Array.isArray(securityData.adminUids) && securityData.adminUids.length > 0
-              ? securityData.adminUids
-              : [securityData.updatedBy || user.sub];
-
-            await setDoc(securityRef, {
-              accessCodeHash,
-              updatedAt: Date.now(),
-              updatedBy: user.sub,
-              adminUids,
-            }, { merge: true });
-            adminConfirmed = true;
-          }
-        } catch {
-          // A non-admin cannot read this document. A missing document is handled below.
-        }
-
-        if (!adminConfirmed) {
-          try {
-            await setDoc(securityRef, {
-              accessCodeHash,
-              updatedAt: Date.now(),
-              updatedBy: user.sub,
-              adminUids: [user.sub],
-            });
-            adminConfirmed = true;
-          } catch {
-            // Existing security settings reject writes from ordinary employees by design.
-          }
-        }
-
-        setIsAccessCodeVerified(true);
-        setIsAdminAccount(adminConfirmed);
-        localStorage.setItem("isAccessCodeVerified", "true");
-        await saveLockoutState({ failedAttempts: 0, lockoutTier: 0, lockoutUntil: null });
-        return { success: true, isAdmin: adminConfirmed };
-      } catch (err: any) {
-        console.warn("Verification write failed (likely invalid access code):", err);
-
-        if (isFirestoreQuotaError(err)) {
-          return {
-            success: false,
-            attemptsLeft: Math.max(0, 5 - lockoutState.failedAttempts),
-            errorMessage: getAccessCodeFailureMessage(err),
-          };
-        }
-
-        let newAttempts = lockoutState.failedAttempts + 1;
-        let newTier = lockoutState.lockoutTier;
-        let newUntil = lockoutState.lockoutUntil;
-
-        if (newAttempts >= 5) {
-          newTier += 1;
-          newAttempts = 0;
-          let lockoutDuration = 0;
-          if (newTier === 1) lockoutDuration = 5 * 60 * 1000; // 5 mins
-          else if (newTier === 2) lockoutDuration = 30 * 60 * 1000; // 30 mins
-          else if (newTier === 3) lockoutDuration = 60 * 60 * 1000; // 1 hour
-          else lockoutDuration = 24 * 60 * 60 * 1000; // 24 hours
-
-          newUntil = Date.now() + lockoutDuration;
-        }
-
-        const newState = { failedAttempts: newAttempts, lockoutTier: newTier, lockoutUntil: newUntil };
-        await saveLockoutState(newState);
-
-        return {
-          success: false,
-          locked: newAttempts === 0,
-          lockoutUntil: newUntil,
-          attemptsLeft: 5 - newAttempts
-        };
-      }
-    } else {
-      return { success: false, attemptsLeft: 5 };
-    }
-  };
-
-  const updateAccessCode = async (newCode: string) => {
-    if (user && isAdmin) {
-      try {
-        const accessCodeHash = await hashAccessCode(newCode);
-        const securityRef = doc(db, "settings", "security");
-        const securitySnapshot = await getDoc(securityRef);
-        const securityData = securitySnapshot.data();
-        const adminUids = Array.isArray(securityData?.adminUids) && securityData.adminUids.length > 0
-          ? securityData.adminUids
-          : [securityData?.updatedBy || user.sub];
-
-        await setDoc(securityRef, {
-          accessCodeHash,
-          updatedAt: Date.now(),
-          updatedBy: user.sub,
-          adminUids,
-        }, { merge: true });
-        console.log("[Security] Master access code hash updated in settings/security");
-      } catch (err) {
-        console.error("Failed to update master access code in settings/security:", err);
-        throw err;
-      }
+    try {
+      const access = await loadStaffAccess(user.sub);
+      setHasStaffAccess(access.authorized);
+      setIsAdminAccount(access.isAdmin);
+      return access.authorized
+        ? { success: true, isAdmin: access.isAdmin }
+        : { success: false, errorMessage: "이 Google 계정은 아직 임직원 허용 목록에 등록되지 않았습니다." };
+    } catch {
+      setHasStaffAccess(false);
+      setIsAdminAccount(false);
+      return { success: false, errorMessage: "임직원 권한을 확인하지 못했습니다. 관리자에게 Firebase UID 등록을 요청해 주세요." };
     }
   };
 
@@ -566,10 +450,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile,
         isAdmin,
         isEmployee,
-        isAccessCodeVerified,
-        setIsAccessCodeVerified,
+        hasStaffAccess,
+        isStaffAccessLoading,
         isLoading,
-        lockoutState,
         notificationSettings,
         taskTypes,
         taskTypeColors,
@@ -579,12 +462,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         emailLogin,
         emailSignUp,
         logout,
-        verifyAccessCode,
+        refreshStaffAccess,
         saveProfile,
         updateProfilePicture,
         updateJobTitle,
         updateNickname,
-        updateAccessCode,
         updateTaskTypes,
         updateTaskTypeColors,
         updatePriorities,

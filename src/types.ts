@@ -1,12 +1,14 @@
 export type Priority = "긴급" | "높음" | "보통" | "낮음";
 export type Status = "예정" | "진행 중" | "완료" | "대기 중";
 export type TaskType = "용지" | "설치" | "점검" | "수리" | "휴대용단말기" | "기타";
+export type PublicMediaRightsStatus = "verified" | "pending" | "internal_only";
 
 export interface Task {
   id: string;
   title: string;
   status: Status;
   assignee: string;
+  assigneeId?: string;
   dueDate: string; // YYYY-MM-DD
   visitTime?: string; // HH:mm
   priority: Priority;
@@ -23,14 +25,24 @@ export interface Task {
   sourceType?: "consultation" | "paper_request";
 }
 
+export interface StaffAssignee {
+  id?: string;
+  name: string;
+  jobTitle?: string;
+}
+
+export type ProductCategory = "포스" | "단말기" | "키오스크" | "주변기기" | "통신" | "보안" | "기타";
+
 export interface Product {
   id: string;
   name: string;
-  category: "포스" | "단말기" | "키오스크" | "기타";
+  category: ProductCategory;
   description: string;
   features: string[];
   specs: Record<string, string>;
   imageUrl: string;
+  imageSourceUrl?: string;
+  imageRightsStatus?: PublicMediaRightsStatus;
   price?: string;
   createdAt: string;
 }
@@ -41,9 +53,12 @@ export interface Consultation {
   contact: string;
   businessName?: string;
   businessType?: string;
+  projectType?: string;
+  installRegion?: string;
+  preferredTiming?: string;
   productOfInterest?: string;
   message: string;
-  status: "대기" | "완료";
+  status: "대기" | "작업등록" | "완료";
   createdAt: string;
   privacyConsentAt?: string;
   overseasTransferConsentAt?: string;
@@ -60,7 +75,7 @@ export interface PaperRequest {
   address: string;
   deviceModel?: string;
   quantity: string;
-  status: "대기" | "완료";
+  status: "대기" | "작업등록" | "완료";
   createdAt: string;
   privacyConsentAt?: string;
   overseasTransferConsentAt?: string;
@@ -111,6 +126,8 @@ export interface CMSSectorFeature {
   icon?: string;
   imageUrl?: string;
   staticImageUrl?: string;
+  imageSourceUrl?: string;
+  imageRightsStatus?: PublicMediaRightsStatus;
   tone?: "blue" | "mint" | "coral" | "violet" | "amber" | "neutral";
   size?: "standard" | "wide";
 }
@@ -125,6 +142,8 @@ export interface CMSSectorFeatureGroup {
 export interface CMSMediaPlaylistItem {
   imageUrl: string;
   staticImageUrl?: string;
+  imageSourceUrl?: string;
+  imageRightsStatus?: PublicMediaRightsStatus;
   imageAlt?: string;
   caption?: string;
   durationMs?: number;
@@ -145,6 +164,8 @@ export interface CMSBlock {
   listLabel?: string;
   imageCaption?: string;
   imageUrl?: string;
+  imageSourceUrl?: string;
+  imageRightsStatus?: PublicMediaRightsStatus;
   align?: "left" | "center" | "right";
   titleAlign?: "left" | "center" | "right";
   subtitleAlign?: "left" | "center" | "right";
@@ -234,6 +255,8 @@ export interface CMSBlock {
     imageUrl?: string;
     imageAlt?: string;
     staticImageUrl?: string;
+    imageSourceUrl?: string;
+    imageRightsStatus?: PublicMediaRightsStatus;
     mediaKind?: "pos" | "internet" | "ai" | "cctv" | "phone" | "other";
     mediaPlaylist?: CMSMediaPlaylistItem[];
     detailGroups?: CMSSectorFeatureGroup[];

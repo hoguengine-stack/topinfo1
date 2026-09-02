@@ -15,7 +15,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const {
-    user, profile, logout, updateProfilePicture, updateJobTitle, updateNickname, updateAccessCode, verifyAccessCode,
+    user, profile, logout, updateProfilePicture, updateJobTitle, updateNickname,
     taskTypes, taskTypeColors, priorities, jobTitles, notificationSettings, updateTaskTypes, updateTaskTypeColors, updatePriorities, updateJobTitles, updateNotificationSettings, forceRefreshAllPCs,
     isAdmin
   } = useAuth();
@@ -37,7 +37,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     }
   };
   const [tempNickname, setTempNickname] = React.useState(profile?.nickname || "");
-  const [tempAccessCode, setTempAccessCode] = React.useState("");
 
   const [editTaskTypes, setEditTaskTypes] = React.useState<{id: string, value: string, color: string}[]>([]);
   const [editPriorities, setEditPriorities] = React.useState<{id: string, value: string}[]>([]);
@@ -73,29 +72,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const handleSave = async () => {
     if (activeSubModal === "profile") {
       updateNickname(tempNickname);
-    } else if (activeSubModal === "privacy" && tempAccessCode) {
-      if (isAdmin) {
-        try {
-          await updateAccessCode(tempAccessCode);
-          setTempAccessCode("");
-          showToast("접속 코드가 성공적으로 변경되었습니다.", "success");
-        } catch {
-          showToast("접속 코드 변경에 실패했습니다. 관리자 권한을 확인해 주세요.", "error");
-          return;
-        }
-      } else {
-        const result = await verifyAccessCode(tempAccessCode);
-        setTempAccessCode("");
-        if (!result.success) {
-          showToast(result.errorMessage || "접속 코드를 확인하지 못했습니다.", "error");
-          return;
-        }
-        if (!result.isAdmin) {
-          showToast("접속 코드는 확인됐지만 이미 다른 최고관리자 계정이 등록되어 있습니다.", "warning");
-          return;
-        }
-        showToast("이 계정이 최고관리자로 등록되었습니다.", "success");
-      }
     } else if (activeSubModal === "categories") {
       updateTaskTypes(editTaskTypes.map(t => t.value));
       const newColors: Record<string, string> = {};
@@ -391,18 +367,25 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div className="p-4 bg-[#2d2d2d] rounded-2xl border border-white/5 space-y-4">
                   <div className="flex items-center gap-3">
                     <Lock className="w-5 h-5 text-orange-500" />
-                    <span className="text-sm text-white font-medium">{isAdmin ? "접속 코드 변경" : "최고관리자 권한 확인"}</span>
+                    <span className="text-sm text-white font-medium">{isAdmin ? "관리자 UID 권한" : "임직원 UID 권한"}</span>
                   </div>
-                  <input
-                    type="password"
-                    placeholder={isAdmin ? "새로운 접속 코드 입력" : "현재 접속 코드 입력"}
-                    value={tempAccessCode}
-                    onChange={(e) => setTempAccessCode(e.target.value)}
-                    className="w-full bg-[#1e1e1e] border border-white/5 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                  />
-                  {!isAdmin && (
-                    <p className="text-xs leading-5 text-gray-400">보안 설정이 아직 없는 초기 설치에서만 최초 최고관리자로 등록됩니다.</p>
-                  )}
+                  <code className="block break-all rounded-xl bg-[#1e1e1e] px-4 py-3 text-xs leading-5 text-gray-300">{user?.sub || "로그인 UID 없음"}</code>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!user?.sub) return;
+                      try {
+                        await navigator.clipboard.writeText(user.sub);
+                        showToast("Firebase UID를 복사했습니다.", "success");
+                      } catch {
+                        showToast("UID를 복사하지 못했습니다.", "error");
+                      }
+                    }}
+                    className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-gray-200 hover:bg-white/5"
+                  >
+                    UID 복사
+                  </button>
+                  <p className="text-xs leading-5 text-gray-400">접속 코드는 사용하지 않습니다. 관리자가 Firestore 보안 설정의 {isAdmin ? "adminUids" : "employeeUids"} 허용 목록으로 권한을 관리합니다.</p>
                 </div>
                 <button type="button" onClick={() => openLegalDocument("privacy")} className="w-full p-4 flex items-center justify-between text-sm text-gray-300 hover:bg-white/5 transition-colors bg-[#2d2d2d] rounded-2xl border border-white/5">
                   <div className="flex items-center gap-3">
@@ -427,7 +410,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               onClick={handleSave}
               className="w-full py-4 bg-emerald-500 text-white font-bold rounded-2xl active:scale-95 transition-transform shadow-lg shadow-emerald-500/20"
             >
-              저장 및 확인
+              {activeSubModal === "privacy" ? "닫기" : "저장 및 확인"}
             </button>
           </div>
         </div>

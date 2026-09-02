@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, addDoc, writeBatch } from "firebase/firestore";
 import { Trash, Edit, Plus, Check, FileCode, ShoppingBag, Eye, EyeOff, LayoutTemplate, Layers, ClipboardList, Info, HelpCircle } from "lucide-react";
 import { CMSPage, CMSBlock, Product, Consultation, PaperRequest } from "../types";
 import { useToast } from "../contexts/ToastContext";
 import { PUBLIC_DESIGN_VERSION } from "../utils/cmsSettings";
+import { auditProductMediaForPublication } from "../utils/cmsMediaAudit";
 
 interface WebAdminProps {
   onOpenTasks: () => void;
+}
+
+function saveAdminPageDraft(pageId: string, blocks: CMSPage["blocks"]) {
+  return setDoc(doc(db, "cms_page_drafts", pageId), {
+    blocks,
+    designVersion: PUBLIC_DESIGN_VERSION,
+    updatedAt: new Date().toISOString(),
+  }, { merge: true });
 }
 
 export function WebAdmin({ onOpenTasks }: WebAdminProps) {
@@ -43,19 +52,40 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
 
   useEffect(() => {
     // Subscriber CMS Pages
-    const unsubPages = onSnapshot(collection(db, "cms_pages"), (snap) => {
-      const items: CMSPage[] = [];
-      snap.forEach(d => {
-        const data = d.data() as CMSPage;
-        items.push({ id: d.id, ...data, blocks: data.draftBlocks || data.blocks } as CMSPage);
-      });
+    const publishedPages = new Map<string, CMSPage>();
+    const pageDrafts = new Map<string, CMSPage["blocks"]>();
+    const emitPages = () => {
+      const items = [...publishedPages.values()].map((page) => ({
+        ...page,
+        blocks: pageDrafts.get(page.id) || page.blocks,
+      }));
       setPages(items);
-      if (items.length > 0 && !selectedPage) {
-        setSelectedPage(items[0]);
-      }
+      setSelectedPage((current) => current
+        ? items.find((item) => item.id === current.id) || items[0] || null
+        : items[0] || null);
+    };
+    const unsubPages = onSnapshot(collection(db, "cms_pages"), (snap) => {
+      publishedPages.clear();
+      snap.forEach(d => {
+        const data = { ...(d.data() as CMSPage) };
+        delete data.draftBlocks;
+        publishedPages.set(d.id, { id: d.id, ...data } as CMSPage);
+      });
+      emitPages();
     }, (err) => {
       console.error("CMS pages listener failed:", err);
       setLoadError("홈페이지 페이지 정보를 불러오지 못했습니다.");
+    });
+    const unsubDrafts = onSnapshot(collection(db, "cms_page_drafts"), (snap) => {
+      pageDrafts.clear();
+      snap.forEach((draftDoc) => {
+        const blocks = draftDoc.data().blocks;
+        if (Array.isArray(blocks)) pageDrafts.set(draftDoc.id, blocks as CMSPage["blocks"]);
+      });
+      emitPages();
+    }, (err) => {
+      console.error("CMS draft listener failed:", err);
+      setLoadError("홈페이지 초안을 불러오지 못했습니다.");
     });
 
     // Subscriber Products
@@ -92,6 +122,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
 
     return () => {
       unsubPages();
+      unsubDrafts();
       unsubProducts();
       unsubConsults();
       unsubPapers();
@@ -133,13 +164,16 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
   };
 
   const handleDeletePage = async (pageId: string) => {
-    if (["home", "toss_pos", "products", "board_suggestions", "board_resources", "request_consult", "request_paper"].includes(pageId)) {
+    if (["home", "toss_pos", "uplus_ai_phone", "products", "industries", "promotion_pos", "used_pos", "support", "board_suggestions", "board_resources", "request_consult", "request_paper"].includes(pageId)) {
       showToast("기본 표준 시스템 페이지는 웹사이트 기둥이므로 삭제할 수 없습니다. 대신 상단 메뉴 라벨을 편집하시거나 비활성화해 사용하실 수 있습니다.", "warning");
       return;
     }
     if (!confirmDeleteAction(`page:${pageId}`)) return;
     try {
-      await deleteDoc(doc(db, "cms_pages", pageId));
+      const batch = writeBatch(db);
+      batch.delete(doc(db, "cms_pages", pageId));
+      batch.delete(doc(db, "cms_page_drafts", pageId));
+      await batch.commit();
       setSelectedPage(pages.find(p => p.id !== pageId) || null);
     } catch (err) {
       showToast("페이지 삭제에 실패했습니다.", "error");
@@ -174,7 +208,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
         id: "block-" + Math.random().toString(36).substring(2, 9),
         type: "banner",
         title: "지금 즉시 가입 상담 신청하기",
-        subtitle: "탑정보통신 특별 24시간 연동 지원",
+        subtitle: "상담 접수 후 담당자가 가능한 구성과 일정을 확인해 안내합니다.",
         buttonText: "전화 신청",
         buttonLink: "request_consult"
       };
@@ -189,7 +223,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
 
     const updatedBlocks = [...page.blocks, block];
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+      await saveAdminPageDraft(page.id, updatedBlocks);
       setSelectedPage({ ...page, blocks: updatedBlocks });
     } catch (err) {
       showToast("블록 추가에 실패했습니다.", "error");
@@ -199,7 +233,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
   const handleUpdateBlockField = async (page: CMSPage, blockId: string, updates: Partial<CMSBlock>) => {
     const updatedBlocks = page.blocks.map(b => b.id === blockId ? { ...b, ...updates } : b);
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+      await saveAdminPageDraft(page.id, updatedBlocks);
       setSelectedPage({ ...page, blocks: updatedBlocks });
     } catch (err) {
       showToast("블록 업데이트에 실패했습니다.", "error");
@@ -214,7 +248,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
     if (!confirmDeleteAction(`block:${page.id}:${blockId}`)) return;
     const updatedBlocks = page.blocks.filter(b => b.id !== blockId);
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+      await saveAdminPageDraft(page.id, updatedBlocks);
       setSelectedPage({ ...page, blocks: updatedBlocks });
     } catch (err) {
       showToast("블록 삭제에 실패했습니다.", "error");
@@ -227,16 +261,25 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
     if (!editingProduct?.name) return;
 
     const prodId = editingProduct.id || Math.random().toString(36).substring(2, 9);
-    const productData = {
+    const productData: Product = {
+      id: prodId,
       name: editingProduct.name,
       category: editingProduct.category || "포스",
       description: editingProduct.description || "",
       imageUrl: editingProduct.imageUrl || "",
       price: editingProduct.price || "",
-      features: editingProduct.features || ["삼성페이 지원", "애플페이 연동 100%"],
+      features: editingProduct.features || ["삼성페이 지원", "간편결제 지원 여부 확인"],
       specs: editingProduct.specs || { "인터페이스": "LAN, USB", "디스플레이": "정전식 멀티터치" },
       createdAt: editingProduct.createdAt || new Date().toISOString(),
+      ...(editingProduct.imageSourceUrl?.trim() ? { imageSourceUrl: editingProduct.imageSourceUrl.trim() } : {}),
+      ...(editingProduct.imageRightsStatus ? { imageRightsStatus: editingProduct.imageRightsStatus } : {}),
     };
+
+    const mediaIssues = auditProductMediaForPublication([productData]);
+    if (mediaIssues.length > 0) {
+      showToast(`제품 이미지 저장 차단: ${mediaIssues[0].reason}`, "error");
+      return;
+    }
 
     try {
       await setDoc(doc(db, "products", prodId), productData);
@@ -257,7 +300,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
   };
 
   // --- Resolve inquiries ---
-  const handleToggleConsultStatus = async (id: string, current: string) => {
+  const handleToggleConsultStatus = async (id: string, current: Consultation["status"]) => {
     try {
       await updateDoc(doc(db, "consultations", id), {
         status: current === "완료" ? "대기" : "완료",
@@ -267,7 +310,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
     }
   };
 
-  const handleTogglePaperStatus = async (id: string, current: string) => {
+  const handleTogglePaperStatus = async (id: string, current: PaperRequest["status"]) => {
     try {
       await updateDoc(doc(db, "paper_requests", id), {
         status: current === "완료" ? "대기" : "완료",
@@ -278,6 +321,12 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
   };
 
   const handleDeleteConsultation = async (id: string) => {
+    const consultation = consults.find((item) => item.id === id);
+    if (consultation?.linkedTaskId) {
+      setDeleteConfirmKey(null);
+      showToast("작업으로 등록된 상담 원본은 삭제할 수 없습니다.", "warning");
+      return;
+    }
     if (!confirmDeleteAction(`consult:${id}`)) return;
     try {
       await deleteDoc(doc(db, "consultations", id));
@@ -287,6 +336,12 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
   };
 
   const handleDeletePaperRequest = async (id: string) => {
+    const paperRequest = papers.find((item) => item.id === id);
+    if (paperRequest?.linkedTaskId) {
+      setDeleteConfirmKey(null);
+      showToast("작업으로 등록된 용지 요청 원본은 삭제할 수 없습니다.", "warning");
+      return;
+    }
     if (!confirmDeleteAction(`paper:${id}`)) return;
     try {
       await deleteDoc(doc(db, "paper_requests", id));
@@ -338,7 +393,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                 activeSubTab === "papers" ? "bg-blue-600 text-white" : "hover:bg-slate-800 hover:text-slate-100"
               }`}
             >
-              <FileCode className="w-4 h-4" /> 무상 용지 신청 ({papers.length})
+              <FileCode className="w-4 h-4" /> 용지 배송 신청 ({papers.length})
             </button>
           </nav>
         </div>
@@ -711,6 +766,9 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                       <option value="포스">슬림 통합 POS</option>
                       <option value="단말기">IC 유무선 단말기</option>
                       <option value="키오스크">무인 키오스크 패키지</option>
+                      <option value="주변기기">프린터·금전함·스캐너</option>
+                      <option value="통신">인터넷·전화</option>
+                      <option value="보안">CCTV·보안</option>
                       <option value="기타">기타 정산 기기</option>
                     </select>
                   </div>
@@ -721,14 +779,14 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                     <label className="block text-xs font-bold text-slate-500 mb-2">임대 및 보급가 요금제 조건</label>
                     <input
                       type="text"
-                      placeholder="무상 보급 또는 임대 조건 상담"
+                      placeholder="구성·임대 조건 상담"
                       value={editingProduct.price || ""}
                       onChange={(e) => setEditingProduct({ ...editingProduct, price: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/15 focus:bg-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-2">제품 외형 이미지 (등록/업로드)</label>
+                    <label className="block text-xs font-bold text-slate-500 mb-2">제품 외형 이미지 (공개 URL/임시 미리보기)</label>
                     <div className="border border-slate-200 bg-slate-50 rounded-xl p-3 space-y-3">
                       <div className="flex items-center gap-3">
                         {editingProduct.imageUrl ? (
@@ -750,7 +808,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                         )}
                         <input
                           type="text"
-                          placeholder="인터넷 이미지 주소(https://...)를 적거나 업로드 단추를 누르세요"
+                          placeholder="공개 가능한 /assets/... 또는 https://... 주소"
                           value={editingProduct.imageUrl || ""}
                           onChange={(e) => setEditingProduct({ ...editingProduct, imageUrl: e.target.value })}
                           className="flex-1 bg-white border border-slate-250 rounded-lg px-3 py-1.5 text-slate-950 text-xs focus:outline-none focus:ring-1 focus:ring-blue-600 font-mono truncate"
@@ -759,12 +817,14 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
 
                       <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
                         <span className="text-[10px] text-slate-400 font-medium">
-                          {editingProduct.imageUrl?.startsWith("data:image/") ? "✓ PC에서 직접 업로드되어 임베드됨" : "PNG / JPG를 업로드할 수 있습니다."}
+                          {editingProduct.imageUrl?.startsWith("data:image/")
+                            ? "로컬 미리보기 전용 · 공개 저장 전 URL과 권리 확인이 필요합니다."
+                            : "공개 경로에는 원본 출처와 사용권 상태가 필요합니다."}
                         </span>
                         
                         <label className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1 rounded-lg text-xs cursor-pointer transition flex items-center gap-1.5 shadow-sm active:scale-95 shrink-0">
                           <Plus className="w-3 h-3" />
-                          <span>PC에서 파일 찾기</span>
+                          <span>PC 미리보기 선택</span>
                           <input
                             type="file"
                             accept="image/*"
@@ -808,9 +868,19 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                                                             nameLower.endsWith(".svg");
                                                             
                                       const compressed = canvas.toDataURL(isTransparent ? "image/png" : "image/jpeg", 0.82);
-                                      setEditingProduct({ ...editingProduct, imageUrl: compressed });
+                                      setEditingProduct({
+                                        ...editingProduct,
+                                        imageUrl: compressed,
+                                        imageSourceUrl: `local-preview:${file.name}`,
+                                        imageRightsStatus: "internal_only",
+                                      });
                                     } else {
-                                      setEditingProduct({ ...editingProduct, imageUrl: re.target?.result as string });
+                                      setEditingProduct({
+                                        ...editingProduct,
+                                        imageUrl: re.target?.result as string,
+                                        imageSourceUrl: `local-preview:${file.name}`,
+                                        imageRightsStatus: "internal_only",
+                                      });
                                     }
                                   };
                                   img.src = re.target?.result as string;
@@ -822,6 +892,31 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                         </label>
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-2">이미지 원본 출처</label>
+                    <input
+                      type="text"
+                      placeholder="공식 URL 또는 파트너 원본 식별자"
+                      value={editingProduct.imageSourceUrl || ""}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, imageSourceUrl: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600/15 focus:bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-2">공개 사용권 상태</label>
+                    <select
+                      value={editingProduct.imageRightsStatus || "pending"}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, imageRightsStatus: e.target.value as Product["imageRightsStatus"] })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-sm focus:outline-none"
+                    >
+                      <option value="pending">확인 필요</option>
+                      <option value="verified">확인 완료</option>
+                      <option value="internal_only">내부 미리보기 전용</option>
+                    </select>
                   </div>
                 </div>
 
@@ -900,7 +995,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
         {activeSubTab === "consultations" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-              <h2 className="text-2xl font-black text-slate-800">무상 가맹 및 기량 공급 상담 신청서</h2>
+              <h2 className="text-2xl font-black text-slate-800">가맹 및 장비 공급 상담 신청서</h2>
               <p className="text-sm text-slate-500 mt-1">포스 및 지불 단말기 도입 희망 요망 가맹주 문의서 원본 명부입니다.</p>
             </div>
 
@@ -930,9 +1025,13 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                         <tr key={c.id} className="hover:bg-slate-50/50">
                           <td className="px-6 py-4 text-center">
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
-                              c.status === "완료" ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-600"
+                              c.status === "완료"
+                                ? "bg-slate-100 text-slate-600"
+                                : c.status === "작업등록"
+                                  ? "bg-blue-50 text-blue-700"
+                                  : "bg-emerald-50 text-emerald-600"
                             }`}>
-                              {c.status === "완료" ? "전화처리됨" : "엔지니어대기"}
+                              {c.status === "완료" ? "전화처리됨" : c.status === "작업등록" ? "작업진행중" : "엔지니어대기"}
                             </span>
                           </td>
                           <td className="px-6 py-4 font-bold text-slate-900">{c.customerName}</td>
@@ -944,22 +1043,29 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                           <td className="px-6 py-4 font-mono">{c.contact}</td>
                           <td className="px-6 py-4 text-slate-400 font-mono text-xs">{new Date(c.createdAt).toLocaleString()}</td>
                           <td className="px-6 py-4 text-center flex items-center justify-center gap-1.5 pt-5">
-                            <button
-                              onClick={() => handleToggleConsultStatus(c.id, c.status)}
-                              className="text-slate-600 hover:text-blue-600 hover:bg-slate-100 font-bold text-xs py-1.5 px-3 rounded-lg border shadow-xs"
-                            >
-                              {c.status === "완료" ? "대기로 변경" : "완료처리"}
-                            </button>
+                            {!c.linkedTaskId && (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleConsultStatus(c.id, c.status)}
+                                className="text-slate-600 hover:text-blue-600 hover:bg-slate-100 font-bold text-xs py-1.5 px-3 rounded-lg border shadow-xs"
+                              >
+                                {c.status === "완료" ? "대기로 변경" : "완료처리"}
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => handleDeleteConsultation(c.id)}
+                              disabled={Boolean(c.linkedTaskId)}
+                              title={c.linkedTaskId ? "작업으로 등록된 상담 원본은 삭제할 수 없습니다." : undefined}
                               className={`text-xs font-bold px-2 py-1 rounded-lg transition ${
-                                deleteConfirmKey === `consult:${c.id}`
-                                  ? "bg-red-600 text-white"
-                                  : "text-red-500 hover:text-red-700"
+                                c.linkedTaskId
+                                  ? "text-slate-400 cursor-not-allowed"
+                                  : deleteConfirmKey === `consult:${c.id}`
+                                    ? "bg-red-600 text-white"
+                                    : "text-red-500 hover:text-red-700"
                               }`}
                             >
-                              {deleteConfirmKey === `consult:${c.id}` ? "삭제 확정" : "삭제"}
+                              {c.linkedTaskId ? "작업 연결됨" : deleteConfirmKey === `consult:${c.id}` ? "삭제 확정" : "삭제"}
                             </button>
                           </td>
                         </tr>
@@ -976,8 +1082,8 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
         {activeSubTab === "papers" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-              <h2 className="text-2xl font-black text-slate-800">무상 영수증 인쇄 롤 배송대리 명부</h2>
-              <p className="text-sm text-slate-500 mt-1">기존 가맹점 제휴 조건으로 전액 무상 접수 신청된 감열 전산 인쇄 영수증 용지 대여 리스트입니다.</p>
+              <h2 className="text-2xl font-black text-slate-800">영수증 용지 배송 요청 명부</h2>
+              <p className="text-sm text-slate-500 mt-1">거래 여부와 용지 규격, 배송 조건을 확인해야 하는 요청 목록입니다.</p>
             </div>
 
             <div className="bg-white border rounded-3xl overflow-hidden shadow-sm">
@@ -998,7 +1104,7 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                     {papers.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="py-16 text-center text-slate-400 text-sm">
-                          무상 발송 필요 대상이 모두 출고 승인되었거나 자료가 없습니다.
+                          처리할 용지 배송 요청이 없거나 모든 요청이 출고 승인되었습니다.
                         </td>
                       </tr>
                     ) : (
@@ -1006,9 +1112,13 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                         <tr key={p.id} className="hover:bg-slate-50/50">
                           <td className="px-6 py-4 text-center">
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
-                              p.status === "완료" ? "bg-slate-100 text-slate-500" : "bg-blue-50 text-blue-600"
+                              p.status === "완료"
+                                ? "bg-slate-100 text-slate-500"
+                                : p.status === "작업등록"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-blue-50 text-blue-600"
                             }`}>
-                              {p.status === "완료" ? "출고배송완료" : "택배접수대기"}
+                              {p.status === "완료" ? "출고배송완료" : p.status === "작업등록" ? "배송작업진행" : "택배접수대기"}
                             </span>
                           </td>
                           <td className="px-6 py-4 font-bold text-slate-900">
@@ -1020,22 +1130,29 @@ export function WebAdmin({ onOpenTasks }: WebAdminProps) {
                           <td className="px-6 py-4 text-center font-bold text-blue-700">{p.quantity}</td>
                           <td className="px-6 py-4 text-slate-400 font-mono text-xs">{new Date(p.createdAt).toLocaleString()}</td>
                           <td className="px-6 py-4 text-center flex items-center justify-center gap-1.5 pt-5">
-                            <button
-                              onClick={() => handleTogglePaperStatus(p.id, p.status)}
-                              className="text-slate-600 hover:text-blue-600 hover:bg-slate-100 font-bold text-xs py-1.5 px-3 rounded-lg border shadow-xs"
-                            >
-                              {p.status === "완료" ? "접수 대기로" : "로젠출고완료"}
-                            </button>
+                            {!p.linkedTaskId && (
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePaperStatus(p.id, p.status)}
+                                className="text-slate-600 hover:text-blue-600 hover:bg-slate-100 font-bold text-xs py-1.5 px-3 rounded-lg border shadow-xs"
+                              >
+                                {p.status === "완료" ? "접수 대기로" : "출고 완료"}
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => handleDeletePaperRequest(p.id)}
+                              disabled={Boolean(p.linkedTaskId)}
+                              title={p.linkedTaskId ? "작업으로 등록된 용지 요청 원본은 삭제할 수 없습니다." : undefined}
                               className={`text-xs font-bold px-2 py-1 rounded-lg transition ${
-                                deleteConfirmKey === `paper:${p.id}`
-                                  ? "bg-red-600 text-white"
-                                  : "text-red-550 hover:text-red-700"
+                                p.linkedTaskId
+                                  ? "text-slate-400 cursor-not-allowed"
+                                  : deleteConfirmKey === `paper:${p.id}`
+                                    ? "bg-red-600 text-white"
+                                    : "text-red-550 hover:text-red-700"
                               }`}
                             >
-                              {deleteConfirmKey === `paper:${p.id}` ? "삭제 확정" : "삭제"}
+                              {p.linkedTaskId ? "작업 연결됨" : deleteConfirmKey === `paper:${p.id}` ? "삭제 확정" : "삭제"}
                             </button>
                           </td>
                         </tr>

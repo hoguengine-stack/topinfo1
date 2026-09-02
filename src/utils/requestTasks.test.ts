@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildConsultationTask, buildPaperRequestTask } from "./requestTasks";
+import { buildConsultationTask, buildPaperRequestTask, getRequestTaskValidationError } from "./requestTasks";
 import { Consultation, PaperRequest } from "../types";
 
 const baseOptions = {
   assignee: "김팀장",
+  assigneeId: "employee-1",
   dueDate: "2026-06-10",
   priority: "높음" as const,
   authorId: "admin-uid",
@@ -30,8 +31,9 @@ test("buildConsultationTask maps public consultation into a tracked internal tas
     memo: "",
   });
 
-  assert.equal(task.title, "[가맹상담] 탑카페 - 포스");
+  assert.equal(task.title, "[매장상담] 탑카페 - 포스");
   assert.equal(task.assignee, "김팀장");
+  assert.equal(task.assigneeId, "employee-1");
   assert.equal(task.taskType, "설치");
   assert.equal(task.sourceCollection, "consultations");
   assert.equal(task.sourceId, "consult-1");
@@ -57,10 +59,17 @@ test("buildPaperRequestTask maps public paper request into a delivery task", () 
 
   assert.equal(task.title, "[용지배송] 탑식당 김대표 - 2박스 (100롤)");
   assert.equal(task.taskType, "용지");
+  assert.equal(task.assigneeId, "employee-1");
   assert.equal(task.priority, "높음");
   assert.equal(task.sourceCollection, "paper_requests");
   assert.equal(task.sourceId, "paper-1");
   assert.match(task.description, /배송주소: 서울 구로구 1층/);
   assert.match(task.description, /사용기종: K-30/);
-  assert.equal(task.memo, "감열 용지 무상 지원 배송업무로 작업관리 연동됨.");
+  assert.equal(task.memo, "홈페이지 용지 배송 요청에서 작업관리로 연동 등록됨.");
+});
+
+test("request task validation blocks missing assignee, invalid date, and missing author", () => {
+  assert.equal(getRequestTaskValidationError({ ...baseOptions, assignee: " " }), "담당자를 선택해주세요.");
+  assert.equal(getRequestTaskValidationError({ ...baseOptions, dueDate: "2026-02-30" }), "처리 예정일을 선택해주세요.");
+  assert.equal(getRequestTaskValidationError({ ...baseOptions, authorId: "" }), "로그인 사용자 정보를 확인할 수 없습니다.");
 });

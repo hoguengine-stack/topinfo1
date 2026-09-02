@@ -33,8 +33,8 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
   const [legalDocument, setLegalDocument] = useState<LegalDocumentType | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const servicePages = getOrderedVisiblePages(pages, navigationSettings, ["toss_pos", "products", "board_resources"]);
-  const supportPages = getOrderedVisiblePages(pages, navigationSettings, ["board_suggestions", "request_paper"]);
+  const servicePages = getOrderedVisiblePages(pages, navigationSettings, ["products", "toss_pos", "industries", "promotion_pos", "used_pos"]);
+  const supportPages = getOrderedVisiblePages(pages, navigationSettings, ["support", "board_resources", "board_suggestions", "request_paper"]);
   const closeLegalDocument = useCallback(() => setLegalDocument(null), []);
 
   const update = (field: keyof FooterInfo, value: string) => {
@@ -64,15 +64,22 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
         </div>
         <nav className="public-footer__nav" aria-label="하단 메뉴">
           <div><strong>서비스</strong>{servicePages.map((page) => <button type="button" key={page.id} onClick={() => handleLinkClick(page.slug)}>{getNavigationLabel(page, navigationSettings)}</button>)}</div>
-          <div><strong>고객지원</strong>{supportPages.map((page) => <button type="button" key={page.id} onClick={() => handleLinkClick(page.slug)}>{getNavigationLabel(page, navigationSettings)}</button>)}<button type="button" onClick={() => handleLinkClick("request_consult")}>무료 상담</button></div>
+          <div><strong>고객지원</strong>{supportPages.map((page) => <button type="button" key={page.id} onClick={() => handleLinkClick(page.slug)}>{getNavigationLabel(page, navigationSettings)}</button>)}<button type="button" onClick={() => handleLinkClick("request_consult")}>상담 신청</button></div>
           <div><strong>정책</strong><button type="button" onClick={() => setLegalDocument("terms")}>이용약관</button><button type="button" onClick={() => setLegalDocument("privacy")}>개인정보처리방침</button>{isEmployee && <button type="button" onClick={() => setCurrentUrl("admin")}><Settings /> 임직원 제어포털</button>}</div>
         </nav>
       </div>
 
       <div className="public-container public-footer__company">
-        <p><MapPin /> {footerInfo.address}</p>
-        <p>{footerInfo.companyName} · 대표 {footerInfo.ceo} · 사업자등록번호 {footerInfo.businessRegistrationNumber}</p>
-        <p>개인정보 담당 {footerInfo.privacyOfficer} · {footerInfo.privacyContact || footerInfo.email}</p>
+        <p className="public-footer__address"><MapPin /><span>{footerInfo.address}</span></p>
+        <p>
+          <span className="public-footer__company-item">{footerInfo.companyName}</span>
+          <span className="public-footer__company-item">대표 {footerInfo.ceo}</span>
+          <span className="public-footer__company-item public-data-token">사업자등록번호 {footerInfo.businessRegistrationNumber}</span>
+        </p>
+        <p>
+          <span className="public-footer__company-item">개인정보 담당 {footerInfo.privacyOfficer}</span>
+          <span className="public-footer__company-item public-data-token">{footerInfo.privacyContact || footerInfo.email}</span>
+        </p>
       </div>
 
       {isEditModeActive && (

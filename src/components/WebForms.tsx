@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { db } from "../firebase";
 import { collection, addDoc } from "firebase/firestore";
 import {
@@ -6,6 +6,8 @@ import {
   buildPaperRequest,
   getConsultationValidationError,
   getPaperRequestValidationError,
+  PUBLIC_REQUEST_COLLECTIONS,
+  PUBLIC_REQUEST_LIMITS,
 } from "../utils/publicRequests";
 import { Phone, User, Landmark, HelpCircle, Check, Send, Sparkles } from "lucide-react";
 import { PrivacyConsentField } from "./PrivacyConsentField";
@@ -24,10 +26,21 @@ export function ConsultationForm() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const submitLockRef = useRef(false);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const successRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (errorMessage) errorRef.current?.focus();
+  }, [errorMessage]);
+
+  useEffect(() => {
+    if (success) successRef.current?.focus();
+  }, [success]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return;
+    if (submitLockRef.current) return;
 
     const validationError = getConsultationValidationError(formData);
     if (validationError) {
@@ -35,14 +48,19 @@ export function ConsultationForm() {
       return;
     }
 
+    submitLockRef.current = true;
     setErrorMessage("");
     setLoading(true);
     try {
-      await addDoc(collection(db, "consultations"), buildConsultationRequest(formData, new Date().toISOString()));
+      await addDoc(
+        collection(db, PUBLIC_REQUEST_COLLECTIONS.consultations),
+        buildConsultationRequest(formData, new Date().toISOString()),
+      );
       setSuccess(true);
     } catch (err) {
       console.error(err);
       setErrorMessage("신청서 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+      submitLockRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -50,7 +68,7 @@ export function ConsultationForm() {
 
   if (success) {
     return (
-      <div className="bg-slate-50 border border-slate-100 rounded-3xl p-10 text-center max-w-xl mx-auto shadow-sm">
+      <div ref={successRef} role="status" aria-live="polite" tabIndex={-1} className="bg-slate-50 border border-slate-100 rounded-3xl p-10 text-center max-w-xl mx-auto shadow-sm">
         <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-md shadow-blue-600/20">
           <Check className="w-8 h-8 text-white" />
         </div>
@@ -61,6 +79,7 @@ export function ConsultationForm() {
         </p>
         <button
           onClick={() => {
+            submitLockRef.current = false;
             setSuccess(false);
             setFormData({
               customerName: "",
@@ -86,28 +105,29 @@ export function ConsultationForm() {
     <div className="max-w-xl mx-auto bg-white border border-slate-100 p-8 md:p-10 rounded-3xl shadow-lg shadow-slate-100/50">
       <div className="mb-8">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-semibold mb-3">
-          <Sparkles className="w-3.5 h-3.5" /> 신규 가맹 & 제휴 혜택
+          <Sparkles className="w-3.5 h-3.5" /> 신규 매장 구성 상담
         </div>
-        <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">탑정보통신 무료 가맹 상담</h2>
+        <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">탑정보통신 매장 구성 상담</h2>
         <p className="text-slate-500 mt-2">카드 결제 단말기, 슬림 포스(POS), 세로형 키오스크까지 한번에 상담받으세요.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} noValidate aria-busy={loading} aria-describedby={errorMessage ? "legacy-consultation-error" : undefined} className="space-y-6">
         {errorMessage && (
-          <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          <div ref={errorRef} id="legacy-consultation-error" role="alert" tabIndex={-1} className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             {errorMessage}
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-2">담당자 성함 *</label>
+            <label htmlFor="legacy-consultation-name" className="block text-xs font-semibold text-slate-600 mb-2">담당자 성함 *</label>
             <div className="relative">
               <User className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
               <input
                 type="text"
+                id="legacy-consultation-name"
                 required
-                maxLength={100}
+                maxLength={PUBLIC_REQUEST_LIMITS.customerName}
                 disabled={loading}
                 placeholder="홍길동 대표님"
                 value={formData.customerName}
@@ -117,13 +137,14 @@ export function ConsultationForm() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-2">대표 연락처 *</label>
+            <label htmlFor="legacy-consultation-contact" className="block text-xs font-semibold text-slate-600 mb-2">대표 연락처 *</label>
             <div className="relative">
               <Phone className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
               <input
                 type="tel"
+                id="legacy-consultation-contact"
                 required
-                maxLength={50}
+                maxLength={PUBLIC_REQUEST_LIMITS.contact}
                 disabled={loading}
                 placeholder="010-1234-5678"
                 value={formData.contact}
@@ -136,12 +157,13 @@ export function ConsultationForm() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-2">상호명 (업체명)</label>
+            <label htmlFor="legacy-consultation-business" className="block text-xs font-semibold text-slate-600 mb-2">상호명 (업체명)</label>
             <div className="relative">
               <Landmark className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                maxLength={150}
+                id="legacy-consultation-business"
+                maxLength={PUBLIC_REQUEST_LIMITS.businessName}
                 disabled={loading}
                 placeholder="탑에스프레소 신도림점"
                 value={formData.businessName}
@@ -151,8 +173,9 @@ export function ConsultationForm() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-2">업종 카테고리</label>
+            <label htmlFor="legacy-consultation-business-type" className="block text-xs font-semibold text-slate-600 mb-2">업종 카테고리</label>
             <select
+              id="legacy-consultation-business-type"
               value={formData.businessType}
               onChange={(e) => setFormValue("businessType", e.target.value)}
               disabled={loading}
@@ -167,8 +190,8 @@ export function ConsultationForm() {
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-2">관심 제품군</label>
+        <fieldset disabled={loading} className="m-0 border-0 p-0">
+          <legend className="block text-xs font-semibold text-slate-600 mb-2">관심 제품군</legend>
           <div className="grid grid-cols-3 gap-3">
             {[
               { id: "포스", label: "프리미엄 POS" },
@@ -190,17 +213,18 @@ export function ConsultationForm() {
               </button>
             ))}
           </div>
-        </div>
+        </fieldset>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-2">상담 문의내용</label>
+          <label htmlFor="legacy-consultation-message" className="block text-xs font-semibold text-slate-600 mb-2">상담 문의내용</label>
           <div className="relative">
             <HelpCircle className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
             <textarea
+              id="legacy-consultation-message"
               rows={3}
-              maxLength={2000}
+              maxLength={PUBLIC_REQUEST_LIMITS.message}
               disabled={loading}
-              placeholder="지원 혜택 문의 또는 간편 기기 대여 방식이 궁금합니다."
+              placeholder="필요한 장비와 설치 일정, 기존 기기 교체 여부를 알려주세요."
               value={formData.message}
               onChange={(e) => setFormValue("message", e.target.value)}
               className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl pl-11 pr-4 py-3 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600 resize-none"
@@ -211,8 +235,14 @@ export function ConsultationForm() {
         <PrivacyConsentField
           privacyConsent={formData.privacyConsent}
           overseasTransferConsent={formData.overseasTransferConsent}
-          onPrivacyConsentChange={(checked) => setFormData((prev) => ({ ...prev, privacyConsent: checked }))}
-          onOverseasTransferConsentChange={(checked) => setFormData((prev) => ({ ...prev, overseasTransferConsent: checked }))}
+          onPrivacyConsentChange={(checked) => {
+            setErrorMessage("");
+            setFormData((prev) => ({ ...prev, privacyConsent: checked }));
+          }}
+          onOverseasTransferConsentChange={(checked) => {
+            setErrorMessage("");
+            setFormData((prev) => ({ ...prev, overseasTransferConsent: checked }));
+          }}
           disabled={loading}
         />
 
@@ -221,7 +251,7 @@ export function ConsultationForm() {
           disabled={loading}
           className="w-full bg-blue-600 disabled:opacity-55 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-600/20 active:scale-[0.98] transition flex items-center justify-center gap-2"
         >
-          {loading ? "신청서 전달 중..." : "무료 가맹 상담 신청하기"}
+          {loading ? "신청서 전달 중..." : "매장 구성 상담 신청하기"}
           <Send className="w-4 h-4" />
         </button>
       </form>
@@ -229,6 +259,7 @@ export function ConsultationForm() {
   );
 
   function setFormValue(key: string, val: string) {
+    if (errorMessage) setErrorMessage("");
     setFormData((prev) => ({ ...prev, [key]: val }));
   }
 }
@@ -246,10 +277,21 @@ export function PaperRollRequestForm() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const submitLockRef = useRef(false);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const successRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (errorMessage) errorRef.current?.focus();
+  }, [errorMessage]);
+
+  useEffect(() => {
+    if (success) successRef.current?.focus();
+  }, [success]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return;
+    if (submitLockRef.current) return;
 
     const validationError = getPaperRequestValidationError(formData);
     if (validationError) {
@@ -257,14 +299,19 @@ export function PaperRollRequestForm() {
       return;
     }
 
+    submitLockRef.current = true;
     setErrorMessage("");
     setLoading(true);
     try {
-      await addDoc(collection(db, "paper_requests"), buildPaperRequest(formData, new Date().toISOString()));
+      await addDoc(
+        collection(db, PUBLIC_REQUEST_COLLECTIONS.paperRequests),
+        buildPaperRequest(formData, new Date().toISOString()),
+      );
       setSuccess(true);
     } catch (err) {
       console.error(err);
       setErrorMessage("배송 요청 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
+      submitLockRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -272,18 +319,19 @@ export function PaperRollRequestForm() {
 
   if (success) {
     return (
-      <div className="bg-slate-50 border border-slate-100 rounded-3xl p-10 text-center max-w-xl mx-auto shadow-sm">
+      <div ref={successRef} role="status" aria-live="polite" tabIndex={-1} className="bg-slate-50 border border-slate-100 rounded-3xl p-10 text-center max-w-xl mx-auto shadow-sm">
         <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-md shadow-blue-600/20">
           <Check className="w-8 h-8 text-white" />
         </div>
-        <h3 className="text-2xl font-bold text-slate-900 mb-3">무상 용지 요청 접수 완료</h3>
+        <h3 className="text-2xl font-bold text-slate-900 mb-3">용지 배송 요청 접수 완료</h3>
         <p className="text-slate-500 leading-relaxed mb-6">
-          제휴 가맹점 무상 용지 요청이 정상적으로 처리되었습니다.<br />
+          가맹점 용지 배송 요청이 정상적으로 처리되었습니다.<br />
           담당자가 요청 내용을 확인한 후 배송을 진행합니다.<br />
           배송 관련 안내는 입력한 연락처로 전달됩니다.
         </p>
         <button
           onClick={() => {
+            submitLockRef.current = false;
             setSuccess(false);
             setFormData({
               customerName: "",
@@ -308,79 +356,84 @@ export function PaperRollRequestForm() {
     <div className="max-w-xl mx-auto bg-white border border-slate-100 p-8 md:p-10 rounded-3xl shadow-lg shadow-slate-100/50">
       <div className="mb-8">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-semibold mb-3">
-          ● 제휴 가맹점 특별 혜택
+          ● 거래 가맹점 배송 지원
         </div>
-        <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">인쇄 영수증 용지 무상 신청</h2>
-        <p className="text-slate-500 mt-2">탑정보통신 기기를 사용하시는 모든 가맹점 대표님께 감열 롤 용지를 전액 무료 배송해 드립니다.</p>
+        <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">인쇄 영수증 용지 배송 요청</h2>
+        <p className="text-slate-500 mt-2">대상 가맹점의 용지 배송 조건은 접수 내용을 확인한 뒤 안내합니다.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} noValidate aria-busy={loading} aria-describedby={errorMessage ? "legacy-paper-error" : undefined} className="space-y-6">
         {errorMessage && (
-          <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          <div ref={errorRef} id="legacy-paper-error" role="alert" tabIndex={-1} className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             {errorMessage}
           </div>
         )}
 
         <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-2">가맹점 상호 및 대표자 성함 *</label>
+          <label htmlFor="legacy-paper-name" className="block text-xs font-semibold text-slate-600 mb-2">가맹점 상호 및 대표자 성함 *</label>
           <input
             type="text"
+            id="legacy-paper-name"
             required
-            maxLength={100}
+            maxLength={PUBLIC_REQUEST_LIMITS.customerName}
             disabled={loading}
             placeholder="예시: 탑 에스프레소 (김대표)"
             value={formData.customerName}
-            onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+            onChange={(e) => setFormValue("customerName", e.target.value)}
             className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl px-4 py-3 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-2">수령 연락처 *</label>
+          <label htmlFor="legacy-paper-contact" className="block text-xs font-semibold text-slate-600 mb-2">수령 연락처 *</label>
           <input
             type="tel"
+            id="legacy-paper-contact"
             required
-            maxLength={50}
+            maxLength={PUBLIC_REQUEST_LIMITS.contact}
             disabled={loading}
             placeholder="010-1234-5678"
             value={formData.contact}
-            onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
+            onChange={(e) => setFormValue("contact", e.target.value)}
             className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl px-4 py-3 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-2">배송지 주소 *</label>
+          <label htmlFor="legacy-paper-address" className="block text-xs font-semibold text-slate-600 mb-2">배송지 주소 *</label>
           <input
             type="text"
+            id="legacy-paper-address"
             required
-            maxLength={500}
+            maxLength={PUBLIC_REQUEST_LIMITS.address}
             disabled={loading}
             placeholder="경기도 안산시 상록구 예시로 00, 2층"
             value={formData.address}
-            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+            onChange={(e) => setFormValue("address", e.target.value)}
             className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl px-4 py-3 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
           />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-2">단말기 모델명 (선택)</label>
+            <label htmlFor="legacy-paper-device" className="block text-xs font-semibold text-slate-600 mb-2">단말기 모델명 (선택)</label>
             <input
               type="text"
-              maxLength={120}
+              id="legacy-paper-device"
+              maxLength={PUBLIC_REQUEST_LIMITS.deviceModel}
               disabled={loading}
               placeholder="K-30 또는 T-8000"
               value={formData.deviceModel}
-              onChange={(e) => setFormData({ ...formData, deviceModel: e.target.value })}
+              onChange={(e) => setFormValue("deviceModel", e.target.value)}
               className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl px-4 py-3 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-2">신청 수량</label>
+            <label htmlFor="legacy-paper-quantity" className="block text-xs font-semibold text-slate-600 mb-2">신청 수량</label>
             <select
+              id="legacy-paper-quantity"
               value={formData.quantity}
-              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+              onChange={(e) => setFormValue("quantity", e.target.value)}
               disabled={loading}
               className="w-full bg-slate-50 border border-slate-200/80 rounded-2xl px-4 py-3 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600/10 focus:border-blue-600"
             >
@@ -394,8 +447,14 @@ export function PaperRollRequestForm() {
         <PrivacyConsentField
           privacyConsent={formData.privacyConsent}
           overseasTransferConsent={formData.overseasTransferConsent}
-          onPrivacyConsentChange={(checked) => setFormData((prev) => ({ ...prev, privacyConsent: checked }))}
-          onOverseasTransferConsentChange={(checked) => setFormData((prev) => ({ ...prev, overseasTransferConsent: checked }))}
+          onPrivacyConsentChange={(checked) => {
+            setErrorMessage("");
+            setFormData((prev) => ({ ...prev, privacyConsent: checked }));
+          }}
+          onOverseasTransferConsentChange={(checked) => {
+            setErrorMessage("");
+            setFormData((prev) => ({ ...prev, overseasTransferConsent: checked }));
+          }}
           disabled={loading}
         />
 
@@ -404,10 +463,15 @@ export function PaperRollRequestForm() {
           disabled={loading}
           className="w-full bg-blue-600 disabled:opacity-55 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-600/20 active:scale-[0.98] transition flex items-center justify-center gap-2"
         >
-          {loading ? "배송 요청 접수 중..." : "제휴 점주 무료 배송 신청하기"}
+          {loading ? "배송 요청 접수 중..." : "용지 배송 요청하기"}
           <Check className="w-4 h-4" />
         </button>
       </form>
     </div>
   );
+
+  function setFormValue(key: string, val: string) {
+    if (errorMessage) setErrorMessage("");
+    setFormData((prev) => ({ ...prev, [key]: val }));
+  }
 }

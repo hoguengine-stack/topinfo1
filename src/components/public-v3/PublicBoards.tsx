@@ -1,11 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   addDoc,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
   onSnapshot,
   query,
+  limit,
   updateDoc,
   where,
 } from "firebase/firestore";
@@ -22,12 +24,14 @@ import {
   Plus,
   Search,
   Send,
+  ShieldCheck,
   Trash2,
   X,
 } from "lucide-react";
 import { db } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext";
 import { Comment, ResourceItem, Suggestion } from "../../types";
+import { DEFAULT_FOOTER_INFO, type FooterInfo } from "../../utils/footerSettings";
 import { PRIVACY_POLICY_VERSION } from "../../utils/publicRequests";
 import {
   buildResourceRecord,
@@ -35,6 +39,9 @@ import {
   ResourceFormDraft,
   StaticDownloadManifestItem,
 } from "../../utils/resourceFiles";
+import { LegalDocumentModal } from "../LegalDocumentModal";
+
+const BOARD_LOAD_TIMEOUT_MS = 8000;
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -46,11 +53,57 @@ function sortByCreatedAt<T extends { createdAt: string }>(items: T[]) {
   return [...items].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
+function useDialogFocus(onClose: () => void, active = true) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!active) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    const selector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]';
+    const focusables = () => Array.from(dialog?.querySelectorAll<HTMLElement>(selector) || []);
+    focusables()[0]?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [active]);
+
+  return dialogRef;
+}
+
 function mapSuggestionSnapshot(snapshot: any): Suggestion[] {
   return snapshot.docs.map((item: any) => ({ id: item.id, ...item.data() } as Suggestion));
 }
 
-function SuggestionComposer({ onClose }: { onClose: () => void }) {
+function SuggestionComposer({ onClose, company }: { onClose: () => void; company: FooterInfo }) {
   const { user, profile } = useAuth();
   const [form, setForm] = useState({
     title: "",
@@ -62,9 +115,18 @@ function SuggestionComposer({ onClose }: { onClose: () => void }) {
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const submitLockRef = useRef(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const dialogRef = useDialogFocus(onClose, !showPrivacy);
+
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (submitLockRef.current) return;
     if (!form.title.trim() || !form.content.trim() || !form.authorName.trim()) {
       setError("작성자, 제목, 내용을 모두 입력해주세요.");
       return;
@@ -78,6 +140,7 @@ function SuggestionComposer({ onClose }: { onClose: () => void }) {
       return;
     }
 
+    submitLockRef.current = true;
     setSubmitting(true);
     setError("");
     const createdAt = new Date().toISOString();
@@ -98,14 +161,19 @@ function SuggestionComposer({ onClose }: { onClose: () => void }) {
     } catch (submitError) {
       console.error("Suggestion create failed:", submitError);
       setError("글을 저장하지 못했습니다. 잠시 후 다시 시도해주세요.");
+      submitLockRef.current = false;
     } finally {
       setSubmitting(false);
     }
   };
 
+  if (showPrivacy) {
+    return <LegalDocumentModal type="privacy" company={company} onClose={() => setShowPrivacy(false)} />;
+  }
+
   return (
     <div className="public-dialog-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="public-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestion-compose-title">
+      <section ref={dialogRef} className="public-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestion-compose-title" aria-describedby={error ? "suggestion-compose-error" : undefined}>
         <header>
           <div>
             <p className="public-kicker">건의제안</p>
@@ -113,17 +181,20 @@ function SuggestionComposer({ onClose }: { onClose: () => void }) {
           </div>
           <button type="button" className="public-icon-button" onClick={onClose} aria-label="닫기"><X /></button>
         </header>
-        <form className="public-form public-form--dialog" onSubmit={submit}>
-          <label><span>작성자 <b>*</b></span><input value={form.authorName} onChange={(e) => setForm({ ...form, authorName: e.target.value })} placeholder="이름 또는 상호" /></label>
+        <form className="public-form public-form--dialog" onSubmit={submit} noValidate aria-busy={submitting}>
+          <label><span>작성자 <b>*</b></span><input value={form.authorName} onChange={(e) => setForm({ ...form, authorName: e.target.value })} placeholder="이름 또는 상호" maxLength={100} /></label>
           <label><span>제목 <b>*</b></span><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="제목을 입력해주세요" maxLength={200} /></label>
           <label><span>내용 <b>*</b></span><textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} placeholder="불편했던 점이나 개선 의견을 구체적으로 알려주세요." rows={7} maxLength={5000} /></label>
           <label className={`public-choice-row ${!user ? "is-disabled" : ""}`}>
             <input type="checkbox" checked={form.isSecret} disabled={!user} onChange={(e) => setForm({ ...form, isSecret: e.target.checked })} />
             <LockKeyhole aria-hidden="true" /><span>작성자와 임직원만 보는 비공개 글</span>
           </label>
+          <button type="button" className="public-form__policy-link" onClick={() => setShowPrivacy(true)}>
+            <ShieldCheck aria-hidden="true" /> 개인정보처리방침 전문 보기
+          </button>
           <label className="public-choice-row"><input type="checkbox" checked={form.privacyConsent} onChange={(e) => setForm({ ...form, privacyConsent: e.target.checked })} /><Check aria-hidden="true" /><span>[필수] 개인정보 수집·이용 동의</span></label>
           <label className="public-choice-row"><input type="checkbox" checked={form.overseasTransferConsent} onChange={(e) => setForm({ ...form, overseasTransferConsent: e.target.checked })} /><Check aria-hidden="true" /><span>[필수] Firebase 국외 처리 안내 동의</span></label>
-          {error && <p className="public-form__error" role="alert">{error}</p>}
+          {error && <p ref={errorRef} id="suggestion-compose-error" className="public-form__error" role="alert" tabIndex={-1}>{error}</p>}
           <div className="public-dialog__actions">
             <button type="button" className="public-button public-button--secondary" onClick={onClose}>취소</button>
             <button type="submit" className="public-button public-button--primary" disabled={submitting}>
@@ -136,7 +207,7 @@ function SuggestionComposer({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function PublicSuggestionBoard() {
+export function PublicSuggestionBoard({ company = DEFAULT_FOOTER_INFO }: { company?: FooterInfo }) {
   const { user, profile, isEmployee } = useAuth();
   const [publicPosts, setPublicPosts] = useState<Suggestion[]>([]);
   const [privatePosts, setPrivatePosts] = useState<Suggestion[]>([]);
@@ -153,35 +224,54 @@ export function PublicSuggestionBoard() {
     setPublicPosts([]);
     setPrivatePosts([]);
 
+    let settled = false;
+    const settle = () => {
+      settled = true;
+      window.clearTimeout(timeoutId);
+      setLoading(false);
+    };
+    const timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      setError("게시글을 불러오는 데 시간이 걸리고 있습니다. 잠시 후 다시 시도해주세요.");
+      setLoading(false);
+    }, BOARD_LOAD_TIMEOUT_MS);
+
     if (isEmployee) {
-      return onSnapshot(collection(db, "suggestions"), (snapshot) => {
+      const unsubscribe = onSnapshot(query(collection(db, "suggestions"), limit(100)), (snapshot) => {
         setPublicPosts(mapSuggestionSnapshot(snapshot));
-        setLoading(false);
+        settle();
       }, (snapshotError) => {
         console.error("Suggestion listener failed:", snapshotError);
         setError("게시글을 불러오지 못했습니다.");
-        setLoading(false);
+        settle();
       });
+      return () => {
+        window.clearTimeout(timeoutId);
+        unsubscribe();
+      };
     }
 
     const unsubscribers = [
-      onSnapshot(query(collection(db, "suggestions"), where("isSecret", "==", false)), (snapshot) => {
+      onSnapshot(query(collection(db, "suggestions"), where("isSecret", "==", false), limit(100)), (snapshot) => {
         setPublicPosts(mapSuggestionSnapshot(snapshot));
-        setLoading(false);
+        settle();
       }, (snapshotError) => {
         console.error("Public suggestion listener failed:", snapshotError);
         setError("게시글을 불러오지 못했습니다.");
-        setLoading(false);
+        settle();
       }),
     ];
 
     if (user) {
-      unsubscribers.push(onSnapshot(query(collection(db, "suggestions"), where("authorId", "==", user.sub)), (snapshot) => {
+      unsubscribers.push(onSnapshot(query(collection(db, "suggestions"), where("authorId", "==", user.sub), limit(100)), (snapshot) => {
         setPrivatePosts(mapSuggestionSnapshot(snapshot).filter((post) => post.isSecret));
       }, (snapshotError) => console.warn("Private suggestion listener failed:", snapshotError)));
     }
 
-    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+    return () => {
+      window.clearTimeout(timeoutId);
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
   }, [isEmployee, user]);
 
   const posts = useMemo(() => {
@@ -214,7 +304,7 @@ export function PublicSuggestionBoard() {
       createdAt: new Date().toISOString(),
     };
     try {
-      await updateDoc(doc(db, "suggestions", selected.id), { replies: [...(selected.replies || []), nextReply] });
+      await updateDoc(doc(db, "suggestions", selected.id), { replies: arrayUnion(nextReply) });
       setReply("");
     } catch (replyError) {
       console.error("Suggestion reply failed:", replyError);
@@ -252,7 +342,13 @@ export function PublicSuggestionBoard() {
           )}
           {isEmployee && (
             <div className="public-board-reply-form">
-              <textarea value={reply} onChange={(event) => setReply(event.target.value)} placeholder="답변을 입력해주세요." rows={3} />
+              <textarea
+                value={reply}
+                onChange={(event) => setReply(event.target.value)}
+                placeholder="답변을 입력해주세요."
+                aria-label="건의사항 답변 내용"
+                rows={3}
+              />
               <button type="button" className="public-button public-button--primary" onClick={addReply} disabled={!reply.trim()}><Send /> 답변 등록</button>
             </div>
           )}
@@ -272,7 +368,7 @@ export function PublicSuggestionBoard() {
           ))}
         </div>
       )}
-      {isComposing && <SuggestionComposer onClose={() => setIsComposing(false)} />}
+      {isComposing && <SuggestionComposer company={company} onClose={() => setIsComposing(false)} />}
     </section>
   );
 }
@@ -290,6 +386,13 @@ function ResourceComposer({ manifest, onClose }: { manifest: StaticDownloadManif
   const [form, setForm] = useState<ResourceFormDraft>(emptyResourceDraft);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const submitLockRef = useRef(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const dialogRef = useDialogFocus(onClose);
+
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
 
   const selectManifestFile = (path: string) => {
     if (!path) {
@@ -301,10 +404,12 @@ function ResourceComposer({ manifest, onClose }: { manifest: StaticDownloadManif
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (submitLockRef.current) return;
     if (!form.title.trim() || !form.description?.trim() || !form.downloadUrl) {
       setError("파일, 제목, 설명을 모두 입력해주세요.");
       return;
     }
+    submitLockRef.current = true;
     setSubmitting(true);
     setError("");
     try {
@@ -317,6 +422,7 @@ function ResourceComposer({ manifest, onClose }: { manifest: StaticDownloadManif
     } catch (submitError) {
       console.error("Resource create failed:", submitError);
       setError("자료를 등록하지 못했습니다.");
+      submitLockRef.current = false;
     } finally {
       setSubmitting(false);
     }
@@ -324,14 +430,14 @@ function ResourceComposer({ manifest, onClose }: { manifest: StaticDownloadManif
 
   return (
     <div className="public-dialog-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="public-dialog" role="dialog" aria-modal="true" aria-labelledby="resource-compose-title">
+      <section ref={dialogRef} className="public-dialog" role="dialog" aria-modal="true" aria-labelledby="resource-compose-title" aria-describedby={error ? "resource-compose-error" : undefined}>
         <header><div><p className="public-kicker">자료실</p><h2 id="resource-compose-title">자료 등록</h2></div><button type="button" className="public-icon-button" onClick={onClose} aria-label="닫기"><X /></button></header>
-        <form className="public-form public-form--dialog" onSubmit={submit}>
+        <form className="public-form public-form--dialog" onSubmit={submit} noValidate aria-busy={submitting}>
           <label><span>GitHub 배포 파일 <b>*</b></span><select value={form.downloadUrl} disabled={manifest.length === 0} onChange={(e) => selectManifestFile(e.target.value)}><option value="">{manifest.length === 0 ? "등록 가능한 배포 파일 없음" : "파일 선택"}</option>{manifest.map((item) => <option key={item.path} value={item.path}>{item.title || item.path}</option>)}</select></label>
-          <label><span>제목 <b>*</b></span><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
-          <label><span>설명 <b>*</b></span><textarea value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={4} /></label>
+          <label><span>제목 <b>*</b></span><input value={form.title} maxLength={200} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
+          <label><span>설명 <b>*</b></span><textarea value={form.description || ""} maxLength={2000} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={4} /></label>
           <div className="public-file-facts"><span>파일 유형 <strong>{form.fileType || "자동 확인"}</strong></span><span>파일 크기 <strong>{form.fileSize || "자동 확인"}</strong></span></div>
-          {error && <p className="public-form__error" role="alert">{error}</p>}
+          {error && <p ref={errorRef} id="resource-compose-error" className="public-form__error" role="alert" tabIndex={-1}>{error}</p>}
           <div className="public-dialog__actions"><button type="button" className="public-button public-button--secondary" onClick={onClose}>취소</button><button type="submit" className="public-button public-button--primary" disabled={submitting || manifest.length === 0}>{submitting ? <LoaderCircle className="animate-spin" /> : <Plus />} {submitting ? "등록 중" : "등록"}</button></div>
         </form>
       </section>
@@ -348,14 +454,32 @@ export function PublicResourceBoard() {
   const [error, setError] = useState("");
   const [isComposing, setIsComposing] = useState(false);
 
-  useEffect(() => onSnapshot(collection(db, "resources"), (snapshot) => {
-    setResources(sortByCreatedAt(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as ResourceItem))));
-    setLoading(false);
-  }, (snapshotError) => {
-    console.error("Resource listener failed:", snapshotError);
-    setError("자료 목록을 불러오지 못했습니다.");
-    setLoading(false);
-  }), []);
+  useEffect(() => {
+    let settled = false;
+    const settle = () => {
+      settled = true;
+      window.clearTimeout(timeoutId);
+      setLoading(false);
+    };
+    const timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      setError("자료 목록을 불러오는 데 시간이 걸리고 있습니다. 잠시 후 다시 시도해주세요.");
+      setLoading(false);
+    }, BOARD_LOAD_TIMEOUT_MS);
+    const unsubscribe = onSnapshot(query(collection(db, "resources"), limit(100)), (snapshot) => {
+      setResources(sortByCreatedAt(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as ResourceItem))));
+      settle();
+    }, (snapshotError) => {
+      console.error("Resource listener failed:", snapshotError);
+      setError("자료 목록을 불러오지 못했습니다.");
+      settle();
+    });
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     fetch("/downloads/manifest.json", { cache: "no-store" })
@@ -389,7 +513,7 @@ export function PublicResourceBoard() {
       {loading ? (
         <div className="public-board__empty"><LoaderCircle className="animate-spin" /><p>자료를 불러오는 중입니다.</p></div>
       ) : filtered.length === 0 ? (
-        <div className="public-board__empty"><FileArchive /><h2>등록된 자료가 없습니다</h2><p>필요한 자료는 031-487-4401로 문의해주세요.</p></div>
+        <div className="public-board__empty"><FileArchive /><h2>등록된 자료가 없습니다</h2><p>필요한 자료는 <a href="tel:0314874401">031-487-4401</a>로 문의해주세요.</p></div>
       ) : (
         <div className="public-resource-list">
           {filtered.map((item) => (

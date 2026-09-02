@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /*?page=admin
+Allow: /
+
+Sitemap: https://topinfo.co.kr/sitemap.xml

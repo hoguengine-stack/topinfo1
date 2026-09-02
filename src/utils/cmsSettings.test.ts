@@ -10,14 +10,19 @@ import {
   HOME_SECTOR_MEDIA_SOURCE_IDS,
   HOME_SECTOR_ITEMS,
   HOME_SERVICE_ITEMS,
-  HOME_SYSTEM_GRAPHICS,
   mergeBlockFields,
   PUBLIC_DESIGN_VERSION,
   restoreStandardCMSPages,
 } from "./cmsSettings";
 import { CMSBlock, CMSPage, NavigationSettings } from "../types";
 import { DEPRECATED_PUBLIC_MEDIA, PUBLIC_MEDIA } from "./publicMedia";
-import { SECTOR_CONTENT_DEFAULTS } from "./sectorContent";
+import { getSectorDetailGroups, SECTOR_CONTENT_DEFAULTS, type SectorKind } from "./sectorContent";
+import {
+  BLOCKED_DEFAULT_SECTOR_MEDIA,
+  BLOCKED_PUBLIC_EVIDENCE_MEDIA,
+  DEFAULT_SECTOR_MEDIA_POLICY,
+  MAX_DEFAULT_SECTOR_PLAYLIST_BYTES,
+} from "./sectorMediaPolicy";
 
 const pages: CMSPage[] = [
   { id: "home", slug: "home", title: "홈", isCustom: false, createdAt: "now", blocks: [] },
@@ -63,7 +68,7 @@ test("default CMS pages provide renderable public homepage content", () => {
   assert.ok(home.blocks.length >= 1);
   assert.equal(home.createdAt, "fixed-date");
   assert.ok(aiPhone);
-  assert.equal(aiPhone.blocks[0].imageUrl, PUBLIC_MEDIA.homeTelecom.aiPhoneHero);
+  assert.equal(aiPhone.blocks[0].imageUrl, PUBLIC_MEDIA.homeTelecom.aiPhoneDevice);
 });
 
 test("default home media excludes retired assets and keeps physical media unique", () => {
@@ -84,7 +89,7 @@ test("default home media excludes retired assets and keeps physical media unique
   const telecom = home.blocks.find((block) => block.id === "home-internet");
   const services = home.blocks.find((block) => block.id === "home-services");
 
-  assert.equal(hero?.imageUrl, undefined);
+  assert.equal(hero?.imageUrl, "/assets/product/posbank-apexa-x-white-official.png");
   assert.equal(offer?.imageUrl, PUBLIC_MEDIA.homePackage.overview);
   assert.equal(telecom?.imageUrl, undefined);
   assert.equal(services, undefined);
@@ -117,25 +122,57 @@ test("default public pages use existing local media without same-page repetition
   });
 });
 
-test("home sectors use unique source content, correct industry media, and motion in every industry", () => {
+test("home sectors use unique, rights-tracked media with valid animation fallbacks", () => {
   const activeSourceIds: string[] = [];
+  let animatedSceneCount = 0;
+  const sectorByTitle: ReadonlyMap<string, SectorKind> = new Map([
+    ["카페·베이커리", "cafe"],
+    ["음식점", "restaurant"],
+    ["술집·바", "bar"],
+    ["도·소매업", "retail"],
+    ["뷰티·서비스", "beauty"],
+  ] as const);
   const allUrls = HOME_SECTOR_ITEMS.flatMap((item) => {
-    assert.ok((item.mediaPlaylist?.length || 0) >= 4, `${item.title} has fewer than four scenes`);
+    assert.ok((item.mediaPlaylist?.length || 0) >= 3, `${item.title} has fewer than three scenes`);
     const playlist = item.mediaPlaylist || [];
-    const hasMotion = playlist.some((media) => {
+    let playlistBytes = 0;
+    playlist.forEach((media) => {
+      assert.equal(Boolean(BLOCKED_DEFAULT_SECTOR_MEDIA[media.imageUrl]), false, `${item.title} uses blocked media: ${media.imageUrl}`);
+      assert.equal(/\.(mp4|webm|mov)(?:$|\?)/i.test(media.imageUrl), false, `${item.title} uses video without explicit autoplay/muted/loop/playsInline support`);
+      const policy = DEFAULT_SECTOR_MEDIA_POLICY[media.imageUrl];
+      assert.ok(policy, `${item.title} has no media policy for ${media.imageUrl}`);
+      assert.equal(policy.sectors.includes(sectorByTitle.get(item.title)!), true, `${media.imageUrl} is not approved for ${item.title}`);
+      assert.equal(policy.firstFrameReviewed, true, `${media.imageUrl} has no reviewed first frame`);
+      assert.equal(policy.rightsStatus, "partner-public-media-redistribution-pending");
+
       const localPath = path.join(process.cwd(), "public", media.imageUrl);
       assert.equal(fs.existsSync(localPath), true, `${item.title} is missing ${media.imageUrl}`);
       const bytes = fs.readFileSync(localPath);
-      return bytes.includes(Buffer.from("ANMF")) || bytes.includes(Buffer.from("fcTL"));
-    });
-    assert.equal(hasMotion, true, `${item.title} has no animated scene`);
-    playlist.forEach((media) => {
+      const isAnimated = bytes.includes(Buffer.from("ANMF")) || bytes.includes(Buffer.from("fcTL"));
+      assert.equal(bytes.byteLength <= policy.maxBytes, true, `${media.imageUrl} exceeds its media budget`);
+      playlistBytes += bytes.byteLength;
+
+      if (policy.kind === "animated-image") {
+        animatedSceneCount += 1;
+        assert.equal(isAnimated, true, `${media.imageUrl} is registered as animated but has one frame`);
+        assert.equal(media.staticImageUrl, policy.staticImageUrl, `${media.imageUrl} does not use its canonical static fallback`);
+        assert.ok(policy.staticImageUrl, `${media.imageUrl} has no static fallback`);
+        const staticPath = path.join(process.cwd(), "public", policy.staticImageUrl);
+        assert.equal(fs.existsSync(staticPath), true, `${media.imageUrl} fallback is missing`);
+        const staticBytes = fs.readFileSync(staticPath);
+        assert.equal(staticBytes.includes(Buffer.from("ANMF")) || staticBytes.includes(Buffer.from("fcTL")), false, `${media.imageUrl} fallback is animated`);
+      } else {
+        assert.equal(isAnimated, false, `${media.imageUrl} is animated but registered as static`);
+      }
+
       const sourceId = HOME_SECTOR_MEDIA_SOURCE_IDS[media.imageUrl];
       assert.ok(sourceId, `${item.title} has no canonical source id for ${media.imageUrl}`);
       activeSourceIds.push(sourceId);
     });
+    assert.equal(playlistBytes <= MAX_DEFAULT_SECTOR_PLAYLIST_BYTES, true, `${item.title} playlist exceeds ${MAX_DEFAULT_SECTOR_PLAYLIST_BYTES} bytes`);
     return playlist.map((media) => media.imageUrl);
   });
+  assert.ok(animatedSceneCount >= 4, "sector playlists lost all meaningful animated product demonstrations");
   assert.equal(new Set(allUrls).size, allUrls.length, "sector playlists repeat the same media");
   assert.equal(new Set(activeSourceIds).size, activeSourceIds.length, "sector playlists reuse the same original content under another file name");
 
@@ -143,15 +180,69 @@ test("home sectors use unique source content, correct industry media, and motion
   assert.equal(cafeUrls.includes("/assets/sector/feature-cafe-kiosk.webp"), false, "cafe repeats the same kiosk source twice");
 
   const restaurantUrls = HOME_SECTOR_ITEMS.find((item) => item.title === "음식점")?.mediaPlaylist?.map((media) => media.imageUrl) || [];
-  assert.equal(restaurantUrls.some((url) => /market-price|retail|barcode|customer-analysis/.test(url)), false, "restaurant contains retail media");
+  assert.equal(restaurantUrls.some((url) => /market-price|retail|barcode|customer-analysis|receipt|review/.test(url)), false, "restaurant contains unrelated or unverified media");
 });
 
-test("sector detail content keeps variable-price media in retail instead of restaurant", () => {
+test("sector detail content excludes blocked receipts and maps every feature to its industry", () => {
   const restaurantUrls = SECTOR_CONTENT_DEFAULTS.restaurant.groups.flatMap((group) => group.features.map((feature) => feature.imageUrl || ""));
   const retailUrls = SECTOR_CONTENT_DEFAULTS.retail.groups.flatMap((group) => group.features.map((feature) => feature.imageUrl || ""));
+  const cafeUrls = SECTOR_CONTENT_DEFAULTS.cafe.groups.flatMap((group) => group.features.map((feature) => feature.imageUrl || ""));
 
   assert.equal(restaurantUrls.includes("/assets/sector/feature-market-price.webp"), false);
+  assert.equal(restaurantUrls.includes("/assets/sector/feature-restaurant-receipt.png"), false);
+  assert.equal(restaurantUrls.includes("/assets/sector/feature-restaurant-review.webp"), false);
+  assert.equal(restaurantUrls.includes("/assets/operations/order-status.webp"), true);
   assert.equal(retailUrls.includes("/assets/sector/feature-market-price.webp"), true);
+  assert.equal(retailUrls.includes("/assets/sector/feature-retail-barcode.webp"), false);
+  assert.equal(retailUrls.includes("/assets/sector/sector-retail-scan.webp"), false);
+  assert.equal(retailUrls.includes("/assets/operations/bulk-register.webp"), true);
+  assert.equal(retailUrls.includes("/assets/operations/sales-calendar.webp"), true);
+  assert.equal(cafeUrls.includes("/assets/sector/feature-cafe-receipt.png"), false);
+  assert.equal(cafeUrls.includes("/assets/operations/receipt-settings.webp"), true);
+
+  Object.entries(SECTOR_CONTENT_DEFAULTS).forEach(([sector, content]) => {
+    const urls = content.groups.flatMap((group) => group.features.map((feature) => feature.imageUrl).filter(Boolean));
+    assert.equal(new Set(urls).size, urls.length, `${sector} detail content repeats media`);
+    urls.forEach((url) => assert.equal(Boolean(BLOCKED_PUBLIC_EVIDENCE_MEDIA[url!]), false, `${sector} detail uses blocked evidence media: ${url}`));
+  });
+});
+
+test("sector detail migration replaces known unsafe defaults but preserves operator media", () => {
+  const unsafeRestaurant = getSectorDetailGroups({
+    title: "음식점",
+    desc: "",
+    icon: "utensils",
+    detailGroups: [{
+      id: "legacy",
+      title: "기존 기본값",
+      features: [{
+        id: "restaurant-receipt",
+        title: "영수증 커스텀",
+        description: "기존 기본 설명",
+        imageUrl: "/assets/sector/feature-restaurant-receipt.png",
+      }],
+    }],
+  }, 1);
+  const customRestaurant = getSectorDetailGroups({
+    title: "음식점",
+    desc: "",
+    icon: "utensils",
+    detailGroups: [{
+      id: "custom",
+      title: "운영자 콘텐츠",
+      features: [{
+        id: "restaurant-receipt",
+        title: "운영자 기능",
+        description: "운영자가 직접 작성",
+        imageUrl: "/assets/operator/restaurant-proof.webp",
+      }],
+    }],
+  }, 1);
+
+  assert.equal(unsafeRestaurant[0].features[0].id, "restaurant-order-status");
+  assert.equal(unsafeRestaurant[0].features[0].imageUrl, "/assets/operations/order-status.webp");
+  assert.equal(customRestaurant[0].features[0].id, "restaurant-receipt");
+  assert.equal(customRestaurant[0].features[0].imageUrl, "/assets/operator/restaurant-proof.webp");
 });
 
 test("restoreStandardCMSPages upgrades only exact legacy sector playlists and preserves operator media", () => {
@@ -183,6 +274,62 @@ test("restoreStandardCMSPages upgrades only exact legacy sector playlists and pr
 
   assert.deepEqual(cafeUrls, HOME_SECTOR_ITEMS[0].mediaPlaylist?.map((media) => media.imageUrl));
   assert.deepEqual(restaurantUrls, ["/assets/operator/restaurant-custom.webp"]);
+});
+
+test("restoreStandardCMSPages removes only known unsafe default playlists", () => {
+  const legacyByTitle = new Map([
+    ["카페·베이커리", [
+      "/assets/sector/sector-cafe.webp",
+      "/assets/sector/feature-coupon.webp",
+      "/assets/sector/feature-cafe-pickup.png",
+      "/assets/sector/feature-cafe-receipt.png",
+    ]],
+    ["음식점", [
+      "/assets/product/toss-delivery-sales.webp",
+      "/assets/sector/feature-table-order.webp",
+      "/assets/sector/feature-order-pos.webp",
+      "/assets/sector/feature-restaurant-review.webp",
+    ]],
+    ["술집·바", [
+      "/assets/sector/sector-bar.webp",
+      "/assets/sector/feature-front-wallpaper.webp",
+      "/assets/sector/feature-bar-store.png",
+      "/assets/operations/auto-discount.webp",
+    ]],
+    ["도·소매업", [
+      "/assets/operations/inventory.webp",
+      "/assets/sector/feature-retail-barcode.webp",
+      "/assets/operations/bulk-register.webp",
+      "/assets/sector/feature-market-price.webp",
+      "/assets/operations/sales-calendar.webp",
+    ]],
+  ]);
+  const customBeauty = [{ imageUrl: "/assets/operator/beauty-custom.webp", caption: "운영자 장면" }];
+  const items = HOME_SECTOR_ITEMS.map((item) => ({
+    ...item,
+    mediaPlaylist: item.title === "뷰티·서비스"
+      ? customBeauty
+      : legacyByTitle.get(item.title)!.map((imageUrl) => ({ imageUrl })),
+  }));
+
+  const restored = restoreStandardCMSPages([{
+    id: "home",
+    slug: "home",
+    title: "홈",
+    isCustom: false,
+    createdAt: "old",
+    designVersion: PUBLIC_DESIGN_VERSION,
+    blocks: [{ id: "home-sector", type: "features", items }],
+  }]);
+  const restoredItems = restored[0].blocks[0].items || [];
+
+  restoredItems.slice(0, 4).forEach((item, index) => {
+    assert.deepEqual(
+      item.mediaPlaylist?.map((media) => media.imageUrl),
+      HOME_SECTOR_ITEMS[index].mediaPlaylist?.map((media) => media.imageUrl),
+    );
+  });
+  assert.deepEqual(restoredItems[4].mediaPlaylist, customBeauty);
 });
 
 test("restoreStandardCMSPages fills missing and empty standard pages", () => {
@@ -353,10 +500,10 @@ test("current home media migration removes retired defaults but preserves custom
   assert.equal(services?.items?.every((item) => !item.imageUrl), true);
 
   const system = restored.find((page) => page.id === "home")?.blocks.find((block) => block.id === "home-internet");
-  assert.equal(system?.items?.[0].imageUrl, HOME_SYSTEM_GRAPHICS.pos);
+  assert.equal(system?.items?.[0].imageUrl, undefined);
   assert.equal(system?.items?.[0].mediaKind, "pos");
   assert.equal(Boolean(system?.items?.[0].imageAlt), true);
-  assert.equal(system?.items?.[1].imageUrl, HOME_SYSTEM_GRAPHICS.ai);
+  assert.equal(system?.items?.[1].imageUrl, undefined);
   assert.equal(system?.items?.[1].mediaKind, "ai");
   assert.equal(system?.items?.[1].buttonLink, "uplus_ai_phone");
   assert.equal(system?.items?.[2].imageUrl, "https://example.com/custom-scene.webp");
@@ -366,7 +513,7 @@ test("current home media migration removes retired defaults but preserves custom
   const sector = restored.find((page) => page.id === "home")?.blocks.find((block) => block.id === "home-sector");
   assert.equal(sector?.items?.[0].imageUrl, "https://example.com/custom-cafe.webp");
   assert.equal(sector?.items?.[1].imageUrl, "/assets/sector/feature-table-order.webp");
-  assert.equal(sector?.items?.[2].imageUrl, "/assets/sector/sector-retail-scan.webp");
+  assert.equal(sector?.items?.[2].imageUrl, "/assets/sector/feature-market-price-static.webp");
   assert.equal(sector?.items?.[3].imageUrl, "/assets/sector/beauty-reservation-register.webp");
   assert.equal(Boolean(sector?.items?.[1].imageAlt), true);
   assert.equal(Boolean(sector?.items?.[2].imageAlt), true);
@@ -410,7 +557,7 @@ test("current Toss page migration removes the baked-background configurator fall
   assert.equal(tossPage?.blocks[0].items?.[0].imageUrl, undefined);
   assert.equal(tossPage?.blocks[1].imageUrl, undefined);
   assert.equal(tossPage?.blocks[1].items?.[0].imageUrl, "/assets/sector/feature-table-order.webp");
-  assert.equal(tossPage?.blocks[1].items?.[1].imageUrl, "/assets/sector/sector-retail-scan.webp");
+  assert.equal(tossPage?.blocks[1].items?.[1].imageUrl, "/assets/sector/feature-market-price-static.webp");
   assert.equal(tossPage?.blocks[1].items?.[2].imageUrl, "/assets/sector/beauty-reservation-register.webp");
   assert.equal(tossPage?.blocks[2].imageUrl, undefined);
   assert.equal(tossPage?.blocks[3].imageUrl, "https://example.com/operator-image.png");
@@ -481,4 +628,43 @@ test("restoreStandardCMSPages upgrades only outdated standard page blocks", () =
 
   assert.notDeepEqual(restored.find((page) => page.id === "home")?.blocks, outdatedBlocks);
   assert.deepEqual(restored.find((page) => page.id === "custom")?.blocks, customBlocks);
+});
+
+test("restoreStandardCMSPages strips blocked media from custom pages and nested fields", () => {
+  const restored = restoreStandardCMSPages([{
+    id: "custom-media",
+    slug: "custom-media",
+    title: "커스텀 미디어",
+    isCustom: true,
+    createdAt: "old",
+    blocks: [{
+      id: "custom-block",
+      type: "features",
+      imageUrl: "/assets/product/toss-customer-coupon.webp",
+      items: [{
+        title: "운영자 항목",
+        desc: "유지",
+        imageUrl: "https://example.com/operator-safe.webp",
+        mediaPlaylist: [
+          { imageUrl: "/assets/sector/feature-cafe-receipt.png" },
+          { imageUrl: "https://example.com/operator-scene.webp" },
+        ],
+        detailGroups: [{
+          id: "detail",
+          title: "상세",
+          features: [{
+            id: "blocked-feature",
+            title: "차단 기능",
+            imageUrl: "/assets/sector/feature-customer-profile.png",
+          }],
+        }],
+      }],
+    }],
+  }]);
+
+  const block = restored.find((page) => page.id === "custom-media")?.blocks[0];
+  assert.equal(block?.imageUrl, undefined);
+  assert.equal(block?.items?.[0].imageUrl, "https://example.com/operator-safe.webp");
+  assert.deepEqual(block?.items?.[0].mediaPlaylist?.map((media) => media.imageUrl), ["https://example.com/operator-scene.webp"]);
+  assert.equal(block?.items?.[0].detailGroups?.[0].features[0].imageUrl, undefined);
 });

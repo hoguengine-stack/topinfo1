@@ -5,15 +5,12 @@ import { BrandLogo } from "./public-v3/BrandLogo";
 export interface WebsiteLoginModalProps {
   showLoginModal: boolean;
   setShowLoginModal: (show: boolean) => void;
-  showGoogleLogin: boolean;
-  setShowGoogleLogin: (show: boolean) => void;
   authFormData: any;
   setAuthFormData: (data: any) => void;
   authError: string | null;
   authLoading: boolean;
   handleAuthSubmit: (event: React.FormEvent) => void;
   handleGoogleLogin: () => void;
-  setGoogleClickTimes: React.Dispatch<React.SetStateAction<number[]>>;
   isSignUpMode: boolean;
   setIsSignUpMode: (mode: boolean) => void;
 }
@@ -21,49 +18,72 @@ export interface WebsiteLoginModalProps {
 export const WebsiteLoginModal: React.FC<WebsiteLoginModalProps> = ({
   showLoginModal,
   setShowLoginModal,
-  showGoogleLogin,
-  setShowGoogleLogin,
   authFormData,
   setAuthFormData,
   authError,
   authLoading,
   handleAuthSubmit,
   handleGoogleLogin,
-  setGoogleClickTimes,
   isSignUpMode,
   setIsSignUpMode,
 }) => {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
 
   const close = () => {
     setShowLoginModal(false);
-    setShowGoogleLogin(false);
   };
 
   useEffect(() => {
     if (!showLoginModal) return;
     const previousOverflow = document.body.style.overflow;
-    const closeOnEscape = (event: KeyboardEvent) => {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
         setShowLoginModal(false);
-        setShowGoogleLogin(false);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) || [],
+      ).filter((element) => !element.hasAttribute("hidden") && element.getClientRects().length > 0);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
     document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("keydown", handleDialogKeyDown);
     const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
     return () => {
       window.cancelAnimationFrame(focusFrame);
-      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("keydown", handleDialogKeyDown);
       document.body.style.overflow = previousOverflow;
+      if (openerRef.current?.isConnected) openerRef.current.focus();
     };
-  }, [setShowGoogleLogin, setShowLoginModal, showLoginModal]);
+  }, [setShowLoginModal, showLoginModal]);
 
   if (!showLoginModal) return null;
 
   return (
     <div className="public-dialog-layer public-auth-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
-      <section className="public-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="public-auth-title">
+      <section ref={dialogRef} className="public-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="public-auth-title">
         <aside>
           <BrandLogo inverse />
           <div>
@@ -83,24 +103,8 @@ export const WebsiteLoginModal: React.FC<WebsiteLoginModalProps> = ({
             {authError && <p className="public-form__error" role="alert">{authError}</p>}
             <button type="submit" className="public-button public-button--primary public-auth-dialog__submit" disabled={authLoading}>{authLoading ? <LoaderCircle className="animate-spin" /> : <ArrowRight />}{authLoading ? "처리 중" : isSignUpMode ? "회원가입" : "로그인"}</button>
             <button type="button" className="public-auth-dialog__switch" onClick={() => setIsSignUpMode(!isSignUpMode)}>{isSignUpMode ? "이미 계정이 있습니다. 로그인" : "계정이 없습니다. 회원가입"}</button>
-            {showGoogleLogin && <button type="button" className="public-auth-dialog__google" onClick={handleGoogleLogin} disabled={authLoading}><img src="/assets/brand/google.svg" alt="" /> Google Workspace 임직원 인증</button>}
+            <button type="button" className="public-auth-dialog__google" onClick={handleGoogleLogin} disabled={authLoading}><img src="/assets/brand/google.svg" alt="" /> Google Workspace 임직원 로그인</button>
           </form>
-          <button
-            type="button"
-            className="public-auth-dialog__employee-trigger"
-            aria-label="임직원 인증 활성화"
-            onClick={() => {
-              const now = Date.now();
-              setGoogleClickTimes((times) => {
-                const current = [...times.filter((time) => now - time < 5000), now];
-                if (current.length >= 4) {
-                  setShowGoogleLogin(true);
-                  return [];
-                }
-                return current;
-              });
-            }}
-          />
         </div>
       </section>
     </div>

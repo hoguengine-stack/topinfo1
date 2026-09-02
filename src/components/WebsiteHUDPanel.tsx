@@ -14,7 +14,7 @@ import {
   Type,
   X,
 } from "lucide-react";
-import { CMSBlock, CMSPage, CMSSectorFeature, NavigationSettings, Product } from "../types";
+import { CMSBlock, CMSMediaPlaylistItem, CMSPage, CMSSectorFeature, NavigationSettings, Product, PublicMediaRightsStatus } from "../types";
 import { cloneSectorDetailGroups, getSectorDetailGroups } from "../utils/sectorContent";
 
 export interface WebsiteHUDPanelProps {
@@ -40,6 +40,23 @@ type InspectorTab = "content" | "style" | "items";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="public-inspector__field"><span>{label}</span>{children}</label>;
+}
+
+function MediaRightsFields({
+  sourceUrl,
+  rightsStatus,
+  onChange,
+}: {
+  sourceUrl?: string;
+  rightsStatus?: PublicMediaRightsStatus;
+  onChange: (fields: { imageSourceUrl?: string; imageRightsStatus?: PublicMediaRightsStatus }) => void;
+}) {
+  return (
+    <>
+      <Field label="이미지 원본 출처"><input value={sourceUrl || ""} onChange={(event) => onChange({ imageSourceUrl: event.target.value })} placeholder="공식 URL 또는 파트너 원본 식별자" /></Field>
+      <Field label="공개 사용권"><select value={rightsStatus || "pending"} onChange={(event) => onChange({ imageRightsStatus: event.target.value as PublicMediaRightsStatus })}><option value="pending">확인 필요</option><option value="verified">확인 완료</option><option value="internal_only">내부 미리보기 전용</option></select></Field>
+    </>
+  );
 }
 
 function ColorField({ label, value, onChange }: { label: string; value?: string; onChange: (value: string) => void }) {
@@ -124,7 +141,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
     setTab("items");
   };
 
-  const updateMediaPlaylistField = (field: "imageUrl" | "staticImageUrl" | "caption", value: string) => {
+  const updateMediaPlaylistField = (field: "imageUrl" | "staticImageUrl" | "caption" | "imageSourceUrl" | "imageRightsStatus", value: string) => {
     if (!currentItem) return;
     const lines = value.split("\n").map((line) => line.trim());
     const values = field === "imageUrl" ? lines.filter(Boolean) : lines;
@@ -135,7 +152,10 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
     const playlist = Array.from({ length }, (_, index) => {
       const previous = existing[index] || { imageUrl: "" };
       const nextValue = values[index] || undefined;
-      return { ...previous, [field]: nextValue };
+      const normalizedValue = field === "imageRightsStatus"
+        ? (["verified", "pending", "internal_only"].includes(nextValue || "") ? nextValue : "pending")
+        : nextValue;
+      return { ...previous, [field]: normalizedValue } as CMSMediaPlaylistItem;
     }).filter((media) => Boolean(media.imageUrl));
     handleHUDCardChange({ mediaPlaylist: playlist });
   };
@@ -160,10 +180,11 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
       ) : activeEditTarget.type === "product" && currentProduct ? (
         <div className="public-inspector__body">
           <Field label="제품명"><input value={currentProduct.name} onChange={(event) => updateProduct({ name: event.target.value })} /></Field>
-          <Field label="분류"><select value={currentProduct.category} onChange={(event) => updateProduct({ category: event.target.value as Product["category"] })}><option>포스</option><option>단말기</option><option>키오스크</option><option>기타</option></select></Field>
+          <Field label="분류"><select value={currentProduct.category} onChange={(event) => updateProduct({ category: event.target.value as Product["category"] })}><option>포스</option><option>단말기</option><option>키오스크</option><option>주변기기</option><option>통신</option><option>보안</option><option>기타</option></select></Field>
           <Field label="설명"><textarea rows={5} value={currentProduct.description} onChange={(event) => updateProduct({ description: event.target.value })} /></Field>
           <Field label="가격 문구"><input value={currentProduct.price || ""} onChange={(event) => updateProduct({ price: event.target.value })} /></Field>
           <Field label="이미지 URL"><input value={currentProduct.imageUrl} onChange={(event) => updateProduct({ imageUrl: event.target.value })} /></Field>
+          <MediaRightsFields sourceUrl={currentProduct.imageSourceUrl} rightsStatus={currentProduct.imageRightsStatus} onChange={updateProduct} />
           <Field label="기능 목록 (줄바꿈)"><textarea rows={6} value={(currentProduct.features || []).join("\n")} onChange={(event) => updateProduct({ features: event.target.value.split("\n").map((item) => item.trim()).filter(Boolean) })} /></Field>
         </div>
       ) : currentBlock ? (
@@ -182,9 +203,12 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                 <Field label="항목 설명"><textarea rows={5} value={currentItem.desc || ""} onChange={(event) => handleHUDCardChange({ desc: event.target.value })} /></Field>
                 <Field label="항목 보조문구"><input value={currentItem.badge || ""} onChange={(event) => handleHUDCardChange({ badge: event.target.value })} /></Field>
                 <Field label="항목 이미지 URL"><input value={currentItem.imageUrl || ""} onChange={(event) => handleHUDCardChange({ imageUrl: event.target.value })} /></Field>
+                <MediaRightsFields sourceUrl={currentItem.imageSourceUrl} rightsStatus={currentItem.imageRightsStatus} onChange={handleHUDCardChange} />
                 {currentBlock.id === "home-sector" && <Field label="자동 순환 이미지 URL (한 줄에 하나)"><textarea rows={6} value={(currentItem.mediaPlaylist || []).map((media) => media.imageUrl).join("\n")} onChange={(event) => updateMediaPlaylistField("imageUrl", event.target.value)} /></Field>}
                 {currentBlock.id === "home-sector" && <Field label="장면 제목 (같은 순서)"><textarea rows={5} value={(currentItem.mediaPlaylist || []).map((media) => media.caption || "").join("\n")} onChange={(event) => updateMediaPlaylistField("caption", event.target.value)} /></Field>}
                 {currentBlock.id === "home-sector" && <Field label="정지 이미지 URL (선택)"><textarea rows={5} value={(currentItem.mediaPlaylist || []).map((media) => media.staticImageUrl || "").join("\n")} onChange={(event) => updateMediaPlaylistField("staticImageUrl", event.target.value)} /></Field>}
+                {currentBlock.id === "home-sector" && <Field label="장면 원본 출처 (같은 순서)"><textarea rows={5} value={(currentItem.mediaPlaylist || []).map((media) => media.imageSourceUrl || "").join("\n")} onChange={(event) => updateMediaPlaylistField("imageSourceUrl", event.target.value)} /></Field>}
+                {currentBlock.id === "home-sector" && <Field label="장면 사용권 상태 (verified / pending / internal_only)"><textarea rows={5} value={(currentItem.mediaPlaylist || []).map((media) => media.imageRightsStatus || "pending").join("\n")} onChange={(event) => updateMediaPlaylistField("imageRightsStatus", event.target.value)} /></Field>}
                 {currentBlock.id === "home-internet" && <Field label="이미지 설명"><input value={currentItem.imageAlt || ""} onChange={(event) => handleHUDCardChange({ imageAlt: event.target.value })} /></Field>}
                 {currentBlock.id === "home-internet" && <Field label="장면 종류"><select value={currentItem.mediaKind || "other"} onChange={(event) => handleHUDCardChange({ mediaKind: event.target.value as NonNullable<CMSBlock["items"]>[number]["mediaKind"] })}><option value="pos">주문·결제</option><option value="internet">매장 인터넷</option><option value="ai">AI전화</option><option value="cctv">CCTV</option><option value="phone">인터넷전화</option><option value="other">기타</option></select></Field>}
                 <Field label="아이콘"><select value={currentItem.icon || "check"} onChange={(event) => handleHUDCardChange({ icon: event.target.value })}><option value="check">체크</option><option value="phone">전화</option><option value="wifi">인터넷</option><option value="monitor">포스</option><option value="credit-card">결제</option><option value="chart">매출</option><option value="shield">안전</option><option value="wrench">AS</option><option value="layers">자료</option><option value="heart">고객지원</option><option value="coffee">카페</option><option value="utensils">음식점</option><option value="bar">술집·바</option><option value="shop">소매점</option><option value="beauty">뷰티</option></select></Field>
@@ -207,6 +231,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                                 <Field label="기능 제목"><input value={feature.title} onChange={(event) => updateSectorFeature(groupIndex, featureIndex, { title: event.target.value })} /></Field>
                                 <Field label="기능 설명"><textarea rows={4} value={feature.description || ""} onChange={(event) => updateSectorFeature(groupIndex, featureIndex, { description: event.target.value })} /></Field>
                                 <Field label="이미지 URL"><input value={feature.imageUrl || ""} onChange={(event) => updateSectorFeature(groupIndex, featureIndex, { imageUrl: event.target.value })} /></Field>
+                                <MediaRightsFields sourceUrl={feature.imageSourceUrl} rightsStatus={feature.imageRightsStatus} onChange={(fields) => updateSectorFeature(groupIndex, featureIndex, fields)} />
                                 <Field label="아이콘"><select value={feature.icon || "check"} onChange={(event) => updateSectorFeature(groupIndex, featureIndex, { icon: event.target.value })}><option value="check">체크</option><option value="delivery">배달</option><option value="smartphone">모바일</option><option value="monitor">화면</option><option value="credit-card">결제</option><option value="package">재고</option><option value="coupon">쿠폰</option><option value="customer">고객</option><option value="chart">분석</option><option value="receipt">영수증</option><option value="layout">배치</option><option value="tablet">태블릿</option><option value="scan">신분증 확인</option><option value="upload">대량 등록</option><option value="barcode">바코드</option><option value="search">검색</option><option value="calendar">일정</option><option value="bell">알림</option></select></Field>
                                 <Field label="카드 색상"><select value={feature.tone || "neutral"} onChange={(event) => updateSectorFeature(groupIndex, featureIndex, { tone: event.target.value as CMSSectorFeature["tone"] })}><option value="neutral">중립</option><option value="blue">파랑</option><option value="mint">민트</option><option value="coral">코랄</option><option value="violet">보라</option><option value="amber">노랑</option></select></Field>
                                 <Field label="카드 크기"><select value={feature.size || "standard"} onChange={(event) => updateSectorFeature(groupIndex, featureIndex, { size: event.target.value as CMSSectorFeature["size"] })}><option value="standard">기본</option><option value="wide">넓게</option></select></Field>
@@ -249,7 +274,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                 <Field label="기본 버튼 연결"><input list="public-link-targets" value={currentBlock.buttonLink || ""} onChange={(event) => handleHUDChange({ buttonLink: event.target.value })} /></Field>
                 <Field label="보조 버튼 문구"><input value={currentBlock.button2Text || ""} onChange={(event) => handleHUDChange({ button2Text: event.target.value })} /></Field>
                 <Field label="보조 버튼 연결"><input list="public-link-targets" value={currentBlock.button2Link || ""} onChange={(event) => handleHUDChange({ button2Link: event.target.value })} /></Field>
-                <datalist id="public-link-targets"><option value="home" /><option value="toss_pos" /><option value="products" /><option value="request_consult" /><option value="request_paper" /><option value="board_resources" /><option value="board_suggestions" /></datalist>
+                <datalist id="public-link-targets"><option value="home" /><option value="products" /><option value="toss_pos" /><option value="industries" /><option value="promotion_pos" /><option value="used_pos" /><option value="support" /><option value="request_consult" /><option value="request_paper" /><option value="board_resources" /><option value="board_suggestions" /></datalist>
               </>
             ) : tab === "style" ? (
               <>
@@ -261,6 +286,7 @@ export const WebsiteHUDPanel: React.FC<WebsiteHUDPanelProps> = ({
                 <ColorField label="제목 색상" value={currentBlock.titleColor} onChange={(titleColor) => handleHUDChange({ titleColor })} />
                 <ColorField label="설명 색상" value={currentBlock.subtitleColor} onChange={(subtitleColor) => handleHUDChange({ subtitleColor })} />
                 <Field label="이미지 URL"><div className="public-inspector__image-field"><Image /><input value={currentBlock.imageUrl || ""} onChange={(event) => handleHUDChange({ imageUrl: event.target.value })} /></div></Field>
+                <MediaRightsFields sourceUrl={currentBlock.imageSourceUrl} rightsStatus={currentBlock.imageRightsStatus} onChange={handleHUDChange} />
               </>
             ) : (
               <>

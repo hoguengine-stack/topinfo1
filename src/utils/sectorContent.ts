@@ -1,4 +1,5 @@
 import { CMSBlock, CMSSectorFeature, CMSSectorFeatureGroup } from "../types";
+import { isBlockedPublicMedia } from "./publicMedia";
 
 export type SectorKind = "cafe" | "restaurant" | "bar" | "retail" | "beauty";
 
@@ -17,8 +18,7 @@ const customerFeatures = (prefix: string): CMSSectorFeature[] => [
     title: "첫 화면 꾸미기",
     description: "가격 안내와 매장 소식, 리뷰 참여 메시지를 결제 화면에 보여줍니다.",
     icon: "monitor",
-    imageUrl: "/assets/sector/feature-front-wallpaper.webp",
-    staticImageUrl: "/assets/sector/feature-front-wallpaper-static.webp",
+    imageUrl: "/assets/sector/feature-front-wallpaper-static.webp",
     tone: "neutral",
     size: "standard",
   },
@@ -28,8 +28,6 @@ const customerFeatures = (prefix: string): CMSSectorFeature[] => [
     title: "고객별 쿠폰 발행",
     description: "첫 방문과 재방문 주기 등 조건에 맞춰 고객별 쿠폰을 운영합니다.",
     icon: "coupon",
-    imageUrl: "/assets/sector/feature-coupon.webp",
-    staticImageUrl: "/assets/sector/feature-coupon-static.webp",
     tone: "blue",
     size: "standard",
   },
@@ -39,7 +37,6 @@ const customerFeatures = (prefix: string): CMSSectorFeature[] => [
     title: "단골 고객 알아보기",
     description: "방문 횟수와 자주 찾는 메뉴를 결제 시점에 확인해 응대에 활용합니다.",
     icon: "customer",
-    imageUrl: "/assets/sector/feature-customer-profile.png",
     tone: "coral",
     size: "standard",
   },
@@ -55,6 +52,39 @@ const customerFeatures = (prefix: string): CMSSectorFeature[] => [
     size: "standard",
   },
 ];
+
+const CAFE_RECEIPT_SETTINGS_FEATURE: CMSSectorFeature = {
+  id: "cafe-receipt",
+  eyebrow: "출력 설정",
+  title: "영수증 구성 설정",
+  description: "공식 제품 화면에서 영수증 글자와 출력 구성을 확인하고 매장에 맞게 설정합니다.",
+  icon: "receipt",
+  imageUrl: "/assets/operations/receipt-settings.webp",
+  tone: "amber",
+  size: "standard",
+};
+
+const RESTAURANT_ORDER_STATUS_FEATURE: CMSSectorFeature = {
+  id: "restaurant-order-status",
+  eyebrow: "주문 흐름",
+  title: "주문 상태를 한눈에 관리",
+  description: "접수된 주문의 진행 상태를 확인하고 홀과 주방의 처리 흐름을 정리합니다.",
+  icon: "monitor",
+  imageUrl: "/assets/operations/order-status.webp",
+  tone: "amber",
+  size: "standard",
+};
+
+const RETAIL_SALES_FEATURE: CMSSectorFeature = {
+  id: "retail-sales",
+  eyebrow: "판매 현황",
+  title: "기간별 매출 흐름 비교",
+  description: "날짜별 판매 흐름을 비교해 상품 운영과 재고 계획에 활용합니다.",
+  icon: "chart",
+  imageUrl: "/assets/operations/sales-calendar.webp",
+  tone: "blue",
+  size: "standard",
+};
 
 export const SECTOR_CONTENT_DEFAULTS: Record<SectorKind, SectorContent> = {
   cafe: {
@@ -101,8 +131,6 @@ export const SECTOR_CONTENT_DEFAULTS: Record<SectorKind, SectorContent> = {
             title: "조건에 맞춘 쿠폰 발행",
             description: "첫 적립 고객과 뜸한 고객을 나눠 필요한 쿠폰을 발송합니다.",
             icon: "coupon",
-            imageUrl: "/assets/sector/feature-coupon.webp",
-            staticImageUrl: "/assets/sector/feature-coupon-static.webp",
             tone: "violet",
             size: "standard",
           },
@@ -124,16 +152,7 @@ export const SECTOR_CONTENT_DEFAULTS: Record<SectorKind, SectorContent> = {
         subtitle: "첫 화면과 영수증을 매장답게 꾸미고 결제 데이터를 고객 관리로 이어갑니다.",
         features: [
           customerFeatures("cafe")[0],
-          {
-            id: "cafe-receipt",
-            eyebrow: "매장 브랜딩",
-            title: "영수증 커스텀",
-            description: "매장 메시지와 안내 문구를 영수증에 담아 결제 이후 경험까지 연결합니다.",
-            icon: "receipt",
-            imageUrl: "/assets/sector/feature-cafe-receipt.png",
-            tone: "amber",
-            size: "standard",
-          },
+          CAFE_RECEIPT_SETTINGS_FEATURE,
           customerFeatures("cafe")[2],
           customerFeatures("cafe")[3],
         ],
@@ -197,25 +216,16 @@ export const SECTOR_CONTENT_DEFAULTS: Record<SectorKind, SectorContent> = {
             tone: "amber",
             size: "standard",
           },
+          RESTAURANT_ORDER_STATUS_FEATURE,
         ],
       },
       {
         id: "restaurant-customers",
         title: "추가 운영과 재방문 고객 관리",
-        subtitle: "첫 화면·쿠폰·영수증·고객 데이터까지 재방문 관리에 필요한 기능을 더 확인합니다.",
+        subtitle: "첫 화면·쿠폰·고객 데이터까지 재방문 관리에 필요한 기능을 더 확인합니다.",
         features: [
           customerFeatures("restaurant")[0],
           customerFeatures("restaurant")[1],
-          {
-            id: "restaurant-receipt",
-            eyebrow: "매장 안내",
-            title: "영수증 커스텀",
-            description: "리뷰 안내와 매장 메시지를 영수증에 함께 담아 전달합니다.",
-            icon: "receipt",
-            imageUrl: "/assets/sector/feature-restaurant-receipt.png",
-            tone: "amber",
-            size: "standard",
-          },
           customerFeatures("restaurant")[2],
           customerFeatures("restaurant")[3],
         ],
@@ -298,27 +308,17 @@ export const SECTOR_CONTENT_DEFAULTS: Record<SectorKind, SectorContent> = {
             title: "대량 상품 한 번에 등록",
             description: "상품 수가 많을 때도 한 번에 등록해 초기 입력 시간을 줄입니다.",
             icon: "upload",
-            imageUrl: "/assets/sector/sector-retail.webp",
+            imageUrl: "/assets/operations/bulk-register.webp",
             tone: "violet",
             size: "standard",
           },
-          {
-            id: "retail-barcode",
-            eyebrow: "빠른 결제",
-            title: "상품 바코드 스캔",
-            description: "바코드를 읽어 상품을 찾고 결제 화면에 바로 담습니다.",
-            icon: "barcode",
-            imageUrl: "/assets/sector/feature-retail-barcode.webp",
-            tone: "blue",
-            size: "standard",
-          },
+          RETAIL_SALES_FEATURE,
           {
             id: "retail-search",
             eyebrow: "초성 검색",
             title: "상품명 빠른 검색",
             description: "상품명 전체를 입력하지 않아도 초성으로 원하는 상품을 찾습니다.",
             icon: "search",
-            imageUrl: "/assets/sector/feature-retail-search.png",
             tone: "neutral",
             size: "wide",
           },
@@ -451,10 +451,13 @@ const LEGACY_FEATURE_MEDIA: Record<string, string[]> = {
   "cafe-pickup": ["/assets/product/toss-mobile-order.webp"],
   "cafe-front": ["/assets/product/toss-front.webp"],
   "cafe-coupon": ["/assets/product/toss-coupon.webp"],
-  "cafe-receipt": ["/assets/product/toss-pos-receipt.webp"],
+  "cafe-receipt": [
+    "/assets/product/toss-pos-receipt.webp",
+    "/assets/sector/feature-cafe-receipt.png",
+  ],
   "restaurant-table-order": ["/assets/product/toss-mobile-order.webp"],
   "restaurant-tablet": ["/assets/sector/sector-restaurant.webp"],
-  "restaurant-receipt": ["/assets/product/toss-pos-receipt.webp"],
+  "retail-bulk": ["/assets/sector/sector-retail.webp"],
   "bar-id": ["/assets/sector/sector-bar-static.webp"],
   "beauty-front": [
     "/assets/product/toss-front.webp",
@@ -465,14 +468,32 @@ const LEGACY_FEATURE_MEDIA: Record<string, string[]> = {
     "/assets/sector/beauty-reservation-register.gif",
   ],
   "beauty-schedule": ["/assets/sector/sector-beauty-schedule.webp"],
-  "beauty-screen": ["/assets/product/toss-front.webp", "/assets/sector/feature-front-wallpaper.webp"],
+  "beauty-screen": [
+    "/assets/product/toss-front.webp",
+    "/assets/sector/feature-front-wallpaper.webp",
+    "/assets/sector/feature-front-wallpaper-static.webp",
+  ],
 };
 
 const COMMON_LEGACY_MEDIA = [
-  { suffix: "-screen", paths: ["/assets/product/toss-front.webp"] },
+  { suffix: "-screen", paths: ["/assets/product/toss-front.webp", "/assets/sector/feature-front-wallpaper.webp"] },
   { suffix: "-coupon", paths: ["/assets/product/toss-coupon.webp"] },
   { suffix: "-analytics", paths: ["/assets/product/toss-sales.webp"] },
 ];
+
+const RETIRED_DEFAULT_FEATURE_REPLACEMENTS: Record<string, { legacy: string[]; replacement: CMSSectorFeature }> = {
+  "restaurant-receipt": {
+    legacy: [
+      "/assets/product/toss-pos-receipt.webp",
+      "/assets/sector/feature-restaurant-receipt.png",
+    ],
+    replacement: RESTAURANT_ORDER_STATUS_FEATURE,
+  },
+  "retail-barcode": {
+    legacy: ["/assets/sector/feature-retail-barcode.webp"],
+    replacement: RETAIL_SALES_FEATURE,
+  },
+};
 
 const SECTOR_FEATURE_MEDIA = Object.values(SECTOR_CONTENT_DEFAULTS)
   .flatMap((content) => content.groups)
@@ -495,15 +516,24 @@ function normalizeSectorFeatureMedia(groups: CMSSectorFeatureGroup[]) {
   return groups.map((group) => ({
     ...group,
     features: group.features.map((feature) => {
-      const media = SECTOR_FEATURE_MEDIA[feature.id];
-      if (!media) return feature;
-      const usesLegacyMedia = Boolean(feature.imageUrl && media.legacy.includes(feature.imageUrl));
-      const usesCurrentMedia = feature.imageUrl === media.current;
-      if (feature.imageUrl && !usesLegacyMedia && !usesCurrentMedia) return feature;
+      const retired = RETIRED_DEFAULT_FEATURE_REPLACEMENTS[feature.id];
+      if (retired && feature.imageUrl && retired.legacy.includes(feature.imageUrl)) {
+        return { ...retired.replacement };
+      }
+
+      const sanitizedFeature = { ...feature };
+      if (isBlockedPublicMedia(sanitizedFeature.imageUrl)) delete sanitizedFeature.imageUrl;
+      if (isBlockedPublicMedia(sanitizedFeature.staticImageUrl)) delete sanitizedFeature.staticImageUrl;
+
+      const media = SECTOR_FEATURE_MEDIA[sanitizedFeature.id];
+      if (!media) return sanitizedFeature;
+      const usesLegacyMedia = Boolean(sanitizedFeature.imageUrl && media.legacy.includes(sanitizedFeature.imageUrl));
+      const usesCurrentMedia = sanitizedFeature.imageUrl === media.current;
+      if (sanitizedFeature.imageUrl && !usesLegacyMedia && !usesCurrentMedia) return sanitizedFeature;
       return {
-        ...feature,
+        ...sanitizedFeature,
         imageUrl: media.current,
-        staticImageUrl: feature.staticImageUrl || media.staticImageUrl,
+        staticImageUrl: sanitizedFeature.staticImageUrl || media.staticImageUrl,
       };
     }),
   }));

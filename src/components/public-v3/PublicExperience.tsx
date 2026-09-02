@@ -18,7 +18,7 @@ interface PublicActionDockProps {
 export function PublicActionDock({ currentUrl, phone, isEditModeActive, onNavigate }: PublicActionDockProps) {
   const [visible, setVisible] = React.useState(false);
   const shouldReduceMotion = useReducedMotion();
-  const enabled = ["home", "toss_pos", "products"].includes(currentUrl) && !isEditModeActive;
+  const enabled = ["toss_pos", "products"].includes(currentUrl) && !isEditModeActive;
 
   React.useEffect(() => {
     if (!enabled) {
@@ -45,13 +45,16 @@ export function PublicActionDock({ currentUrl, phone, isEditModeActive, onNaviga
   return (
     <AnimatePresence>
       {visible && (
-        <motion.div className="public-action-dock-shell" initial={shouldReduceMotion ? false : { opacity: 0, y: 24, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={shouldReduceMotion ? undefined : { opacity: 0, y: 18, scale: 0.98 }} transition={{ duration: 0.24 }}>
-          <aside className="public-action-dock" aria-label="빠른 상담">
-            <div className="public-action-dock__status"><Sparkles /><span><small>탑정보통신</small><strong>매장 오픈 상담 가능</strong></span></div>
-            <a href={`tel:${cleanPhone}`}><PhoneCall /> <span>{phone}</span></a>
-            <button type="button" onClick={() => onNavigate("request_consult")}>무료 상담 <ArrowRight /></button>
-          </aside>
-        </motion.div>
+        <>
+          <div className="public-action-dock-spacer" aria-hidden="true" />
+          <motion.div className="public-action-dock-shell" initial={shouldReduceMotion ? false : { opacity: 0, y: 24, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={shouldReduceMotion ? undefined : { opacity: 0, y: 18, scale: 0.98 }} transition={{ duration: 0.24 }}>
+            <aside className="public-action-dock" aria-label="빠른 상담">
+              <div className="public-action-dock__status"><Sparkles /><span><small>탑정보통신</small><strong>매장 구성 상담</strong></span></div>
+              <a href={`tel:${cleanPhone}`}><PhoneCall /> <span>{phone}</span></a>
+              <button type="button" onClick={() => onNavigate("request_consult")}>구성 상담 <ArrowRight /></button>
+            </aside>
+          </motion.div>
+        </>
       )}
     </AnimatePresence>
   );

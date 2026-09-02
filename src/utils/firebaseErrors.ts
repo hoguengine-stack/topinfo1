@@ -29,11 +29,3 @@ export function getBoardLoadErrorMessage(error: unknown) {
 
   return "게시판 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
-
-export function getAccessCodeFailureMessage(error: unknown) {
-  if (isFirestoreQuotaError(error)) {
-    return "Firestore 일일 사용량 한도 초과로 접속 코드를 검증하지 못했습니다. Firebase 사용량이 리셋된 뒤 다시 시도해 주세요.";
-  }
-
-  return "접속 코드 검증 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
-}

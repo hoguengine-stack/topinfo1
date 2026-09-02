@@ -8,11 +8,13 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCT = ROOT / "public" / "assets" / "product"
-GENERATED = ROOT / "public" / "assets" / "generated"
 RESEARCH = ROOT / ".asset-research"
+RIGHTS_PENDING = RESEARCH / "rights-pending"
+PUBLIC_BLOCKED_PRODUCT = RIGHTS_PENDING / "public-blocked" / "product"
+PUBLIC_BLOCKED_PRODUCT.mkdir(parents=True, exist_ok=True)
 
 APEXA_SOURCE = RESEARCH / "posbank-in" / "official-05.png"
-POS_SCREEN = PRODUCT / "toss-pos-screen-verified.png"
+POS_SCREEN = PUBLIC_BLOCKED_PRODUCT / "toss-pos-screen-verified.png"
 TOSS_FRONT = PRODUCT / "toss-front.webp"
 ROUTER_SOURCE = ROOT / "public" / "assets" / "uplus" / "uplus-internet-router.png"
 PRINTER_SOURCE = RESEARCH / "ahapos" / "source-03.jpg"
@@ -213,7 +215,8 @@ def build_cash_drawer_cutout() -> Image.Image:
 
 
 def save_transparent_products(apexa_canvas: Image.Image, printer: Image.Image, drawer: Image.Image) -> None:
-    apexa_canvas.save(PRODUCT / "posbank-apexa-x-white-toss.png", optimize=True)
+    # The reconstructed screen is retained for audit only and must never return to public assets.
+    apexa_canvas.save(PUBLIC_BLOCKED_PRODUCT / "posbank-apexa-x-white-toss.png", optimize=True)
     printer.save(PRODUCT / "ahapos-white-printer.png", optimize=True)
     drawer.save(PRODUCT / "white-cash-drawer.png", optimize=True)
 
@@ -224,7 +227,7 @@ def save_apexa_product(apexa: Image.Image) -> None:
     x = (CANVAS_SIZE[0] - product.width) // 2
     y = 105
     add_drop_shadow(canvas, product, (x, y), blur=24, offset=(0, 20), opacity=62)
-    canvas.convert("RGB").save(PRODUCT / "posbank-apexa-x-toss-pos.webp", "WEBP", quality=94, method=6)
+    canvas.convert("RGB").save(RIGHTS_PENDING / "posbank-apexa-x-toss-pos.webp", "WEBP", quality=94, method=6)
 
 
 def save_counter_set(apexa: Image.Image, printer: Image.Image, drawer: Image.Image) -> None:
@@ -251,7 +254,7 @@ def save_counter_set(apexa: Image.Image, printer: Image.Image, drawer: Image.Ima
     add_drop_shadow(canvas, printer_render, printer_position, blur=16, offset=(0, 13), opacity=48)
     add_drop_shadow(canvas, front_render, front_position, blur=17, offset=(0, 14), opacity=50)
 
-    canvas.convert("RGB").save(GENERATED / "system-pos-apexa-x-toss.webp", "WEBP", quality=94, method=6)
+    canvas.convert("RGB").save(RIGHTS_PENDING / "system-pos-apexa-x-toss.webp", "WEBP", quality=94, method=6)
 
 
 def save_internet_counter_set(apexa: Image.Image, printer: Image.Image, drawer: Image.Image) -> None:
@@ -291,13 +294,13 @@ def save_internet_counter_set(apexa: Image.Image, printer: Image.Image, drawer: 
     add_drop_shadow(canvas, printer_render, (1016, 573), blur=16, offset=(0, 13), opacity=48)
     add_drop_shadow(canvas, front_render, (1220, 500), blur=17, offset=(0, 14), opacity=50)
 
-    canvas.convert("RGB").save(GENERATED / "system-internet-apexa-x.webp", "WEBP", quality=94, method=6)
+    canvas.convert("RGB").save(RIGHTS_PENDING / "system-internet-apexa-x.webp", "WEBP", quality=94, method=6)
 
 
 def save_customer_payment_scene() -> None:
-    source = Image.open(PRODUCT / "toss-front-customer-payment.png").convert("RGB")
+    source = Image.open(RIGHTS_PENDING / "toss-front-customer-payment.png").convert("RGB")
     image = ImageOps.fit(source, CANVAS_SIZE, method=Image.Resampling.LANCZOS, centering=(0.53, 0.5))
-    image.save(GENERATED / "system-pos-order-payment.webp", "WEBP", quality=93, method=6)
+    image.save(RIGHTS_PENDING / "system-pos-order-payment.webp", "WEBP", quality=93, method=6)
 
 
 def draw_centered(draw: ImageDraw.ImageDraw, box_width: int, y: int, text: str, font: ImageFont.FreeTypeFont, fill: str) -> None:
@@ -378,10 +381,10 @@ def composite_receipt_feature(background_path: Path, kind: str, angle: float, po
 
 def save_sector_features() -> None:
     cafe = composite_receipt_feature(CAFE_BACKGROUND, "cafe", -6.0, (250, 132))
-    cafe.save(ROOT / "public" / "assets" / "sector" / "feature-cafe-receipt.png", optimize=True)
+    cafe.save(RIGHTS_PENDING / "feature-cafe-receipt.png", optimize=True)
 
     restaurant = composite_receipt_feature(RESTAURANT_BACKGROUND, "restaurant", 5.5, (300, 132))
-    restaurant.save(ROOT / "public" / "assets" / "sector" / "feature-restaurant-receipt.png", optimize=True)
+    restaurant.save(RIGHTS_PENDING / "feature-restaurant-receipt.png", optimize=True)
 
     source = Image.open(ORDER_POS_SOURCE).convert("RGB")
     backdrop = ImageOps.fit(source, CANVAS_SIZE, method=Image.Resampling.LANCZOS)
@@ -393,6 +396,7 @@ def save_sector_features() -> None:
 
 
 def main() -> None:
+    RIGHTS_PENDING.mkdir(parents=True, exist_ok=True)
     apexa_canvas = build_apexa_with_toss_screen()
     apexa = trim_alpha(apexa_canvas, 8)
     printer = build_printer_cutout()

@@ -1,0 +1,5 @@
+interface:
+  display_name: "탑정보통신 시각 세부 품질 감사"
+  short_description: "TOPINFO 공개 사이트의 제품 사실성, 이미지 품질, 반응형, 접근성을 강제 검수합니다."
+  default_prompt: "TOPINFO 공개 화면 변경을 실제 제품과 매장 맥락, 반응형, 접근성 기준으로 검수하고 결함을 수정하세요."
+

@@ -239,6 +239,7 @@ interface TaskModalProps {
   onDelete?: (id: string) => Promise<boolean>;
   task?: Task | null;
   assignees: string[];
+  assigneeIds: Record<string, string>;
 }
 
 export function TaskModal({
@@ -248,16 +249,22 @@ export function TaskModal({
   onDelete,
   task,
   assignees,
+  assigneeIds,
 }: TaskModalProps) {
-  const { profile, taskTypes, taskTypeColors, priorities, isAdmin } = useAuth();
+  const { user, profile, taskTypes, taskTypeColors, priorities, isAdmin } = useAuth();
   const { showToast } = useToast();
   const displayTaskTypes = React.useMemo(() => taskTypes.length > 0 ? taskTypes : ["설치"], [taskTypes]);
   const isSiljang = isAdmin;
   
+  const initialAssignee = profile?.nickname || assignees[0];
+  const initialAssigneeId = initialAssignee
+    ? assigneeIds[initialAssignee] || (initialAssignee === profile?.nickname ? user?.sub : undefined)
+    : undefined;
   const [formData, setFormData] = useState<Partial<Task>>({
     title: "",
     status: "예정",
     assignee: profile?.nickname || assignees[0],
+    ...(initialAssigneeId ? { assigneeId: initialAssigneeId } : {}),
     dueDate: format(new Date(), "yyyy-MM-dd"),
     priority: (priorities[2] || "보통") as Priority,
     taskType: (displayTaskTypes[0] || "설치") as TaskType,
@@ -277,21 +284,73 @@ export function TaskModal({
   const assigneeRef = React.useRef<HTMLSelectElement>(null);
   const dateRef = React.useRef<HTMLInputElement>(null);
   const timeRef = React.useRef<HTMLInputElement>(null);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusableSelector = [
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(",");
+    const focusFirst = () => {
+      const first = dialogRef.current?.querySelector<HTMLElement>(focusableSelector);
+      first?.focus();
+    };
+    const animationFrame = window.requestAnimationFrame(focusFirst);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) || []);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     setDeleteConfirmationActive(false);
     if (task) {
+      const mappedAssigneeId = task.assigneeId || assigneeIds[task.assignee];
       setFormData({ 
         ...task, 
+        ...(mappedAssigneeId ? { assigneeId: mappedAssigneeId } : {}),
         showOnCalendar: task.showOnCalendar ?? (isSiljang ? false : true),
         attachments: task.attachments || []
       });
     } else {
       const today = format(new Date(), "yyyy-MM-dd");
+      const defaultAssignee = profile?.nickname || assignees[0];
+      const defaultAssigneeId = defaultAssignee
+        ? assigneeIds[defaultAssignee] || (defaultAssignee === profile?.nickname ? user?.sub : undefined)
+        : undefined;
       setFormData({
         title: "",
         status: "예정",
-        assignee: profile?.nickname || assignees[0],
+        assignee: defaultAssignee,
+        ...(defaultAssigneeId ? { assigneeId: defaultAssigneeId } : {}),
         dueDate: today,
         priority: (priorities[2] || "보통") as Priority,
         taskType: (displayTaskTypes[0] || "설치") as TaskType,
@@ -301,7 +360,7 @@ export function TaskModal({
         attachments: [],
       });
     }
-  }, [task, isOpen, assignees, isSiljang, priorities, taskTypes, displayTaskTypes]);
+  }, [task, isOpen, assignees, assigneeIds, isSiljang, priorities, taskTypes, displayTaskTypes, profile?.nickname, user?.sub]);
 
   if (!isOpen) return null;
 
@@ -448,16 +507,17 @@ export function TaskModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4">
-      <div className="bg-[#1e1e1e] rounded-t-3xl sm:rounded-2xl w-full max-w-lg shadow-2xl border-t sm:border border-white/10 overflow-hidden flex flex-col h-[92vh] sm:h-auto sm:max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4" role="presentation">
+      <div ref={dialogRef} className="bg-[#1e1e1e] rounded-t-3xl sm:rounded-2xl w-full max-w-lg shadow-2xl border-t sm:border border-white/10 overflow-hidden flex flex-col h-[92vh] sm:h-auto sm:max-h-[90vh]" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
         <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mt-3 sm:hidden shrink-0" />
         <div className="flex items-center justify-between p-6 border-b border-white/10">
-          <h2 className="text-xl font-bold text-white">
+          <h2 id="task-modal-title" className="text-xl font-bold text-white">
             {task ? "작업 편집" : "새 작업"}
           </h2>
           <div className="flex gap-2">
-            {task && onDelete && (
+            {task && onDelete && !task.sourceId && (
               <button
+                type="button"
                 disabled={isSaving}
                 onClick={async () => {
                   if (!deleteConfirmationActive) {
@@ -472,13 +532,16 @@ export function TaskModal({
                 }}
                 className={`p-2 rounded-xl transition-colors ${deleteConfirmationActive ? "bg-red-600 text-white" : "text-red-400 hover:bg-red-400/10"}`}
                 title={deleteConfirmationActive ? "한 번 더 눌러 삭제" : "작업 삭제"}
+                aria-label={deleteConfirmationActive ? "작업 삭제 확정" : "작업 삭제"}
               >
                 <Trash2 className="w-5 h-5" />
               </button>
             )}
             <button
+              type="button"
               onClick={onClose}
               className="p-2 text-gray-400 hover:bg-white/5 rounded-xl transition-colors"
+              aria-label="작업 창 닫기"
             >
               <X className="w-6 h-6" />
             </button>
@@ -578,7 +641,14 @@ export function TaskModal({
                   <select
                     ref={assigneeRef}
                     value={formData.assignee || assignees[0]}
-                    onChange={(e) => setFormData({ ...formData, assignee: e.target.value })}
+                    onChange={(e) => {
+                      const assignee = e.target.value;
+                      const next = { ...formData, assignee };
+                      const assigneeId = assigneeIds[assignee];
+                      if (assigneeId) next.assigneeId = assigneeId;
+                      else delete next.assigneeId;
+                      setFormData(next);
+                    }}
                     className="w-full bg-[#2d2d2d] border border-white/5 rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 appearance-none font-bold"
                   >
                     {assignees.map((a) => (
@@ -717,11 +787,12 @@ export function TaskModal({
               <div className="flex flex-wrap gap-3">
                 {formData.attachments?.map((base64, idx) => (
                   <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-white/10 group">
-                    <img src={base64} className="w-full h-full object-cover" alt="Attachment" />
+                    <img src={base64} className="w-full h-full object-cover" alt={`작업 첨부 이미지 ${idx + 1}`} />
                     <button 
                       type="button"
                       onClick={() => removeAttachment(idx)}
                       className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label={`첨부 이미지 ${idx + 1} 삭제`}
                     >
                       <X className="w-3 h-3" />
                     </button>

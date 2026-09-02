@@ -21,8 +21,17 @@ npm run dev
 Firestore Rules 배포:
 
 ```powershell
-npx firebase-tools deploy --only firestore --project imagebuilder-485006
+npx --yes firebase-tools@14.23.0 deploy --only firestore:ai-studio-07e7f11b-9034-4c94-8392-c28f5c842f62 --project imagebuilder-485006
 ```
+
+공개 폼의 App Check 준비:
+
+1. Google Cloud에서 웹사이트용 reCAPTCHA Enterprise 점수 기반 키를 생성합니다.
+2. Firebase 콘솔 `App Check`에 웹 앱과 키를 등록합니다.
+3. 운영 빌드 환경에 `VITE_FIREBASE_APP_CHECK_SITE_KEY`를 설정합니다.
+4. 배포 후 App Check 요청 지표를 확인한 다음 Cloud Firestore enforcement를 활성화합니다.
+
+키가 없는 로컬 개발에서는 App Check를 초기화하지 않습니다. 콘솔 enforcement는 정상 요청 지표와 운영 도메인을 확인한 뒤 켜야 하며, 코드 배포만으로 활성화되지 않습니다.
 
 ## 자료실 파일 등록
 

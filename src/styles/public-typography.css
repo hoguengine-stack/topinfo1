@@ -1,0 +1,273 @@
+/* Public typography contract. Keep this import after every page-specific public stylesheet. */
+.public-site.public-v3 {
+  --topinfo-type-display: 72px;
+  --topinfo-type-section: 52px;
+  --topinfo-type-subsection: 32px;
+  --topinfo-type-card-title: 24px;
+  --topinfo-type-body-large: 18px;
+  --topinfo-type-body: 16px;
+  --topinfo-type-small: 14px;
+  --topinfo-type-meta: 13px;
+  --topinfo-type-control: 15px;
+  font-size: var(--topinfo-type-body);
+  line-height: 1.65;
+}
+
+.public-site.public-v3 :where(h1, h2, h3, h4, p, li, dt, dd, summary, label, a, button) {
+  writing-mode: horizontal-tb;
+  letter-spacing: 0;
+}
+
+.public-site.public-v3 :where(h1, h2, h3, h4, p, li, dt, dd) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  hyphens: none;
+}
+
+.public-site.public-v3 :where(h1, h2, h3, h4) {
+  text-wrap: balance;
+}
+
+.public-site.public-v3 :where(p, li, dt, dd) {
+  text-wrap: pretty;
+}
+
+.public-site.public-v3 :is(
+  .top-home-hero__copy h1,
+  .public-toss-hero__copy h1,
+  .public-clean-hero__copy h1,
+  .public-page-intro h1,
+  .uplus-ai-hero__copy h1,
+  .public-not-found h1
+) {
+  font-size: var(--topinfo-type-display);
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.public-site.public-v3 :is(
+  .top-home-heading h2,
+  .top-home-system-v2__heading .top-home-heading h2,
+  .top-home-system .top-home-heading h2,
+  .top-home-flow header h2,
+  .top-home-responsibility header h2,
+  .top-home-package__copy h2,
+  .top-home-faq__inner .top-home-heading h2,
+  .top-home-cta__inner h2,
+  .public-section-heading h2,
+  .public-toss-flow__head h2,
+  .public-toss-ready__head h2,
+  .public-toss-final-cta h2,
+  .public-callout h2,
+  .public-offer h2,
+  .public-form-aside h2,
+  .uplus-ai-app__copy h2
+) {
+  font-size: var(--topinfo-type-section);
+  font-weight: 780;
+  line-height: 1.16;
+}
+
+.public-site.public-v3 :is(
+  .top-home-sector__summary h3,
+  .top-home-system-v2__copy h3,
+  .top-home-system__copy h3,
+  .public-toss-flow__copy h3,
+  .public-toss-sector__copy h3,
+  .uplus-ai-app__narrative h3
+) {
+  font-size: var(--topinfo-type-subsection);
+  font-weight: 760;
+  line-height: 1.24;
+}
+
+.public-site.public-v3 :is(
+  .public-product-grid h3,
+  .public-telecom-showcase__copy h3,
+  .public-resource-row h2
+) {
+  font-size: var(--topinfo-type-card-title);
+  font-weight: 740;
+  line-height: 1.3;
+}
+
+.public-site.public-v3 :is(
+  .top-home-hero__lead,
+  .top-home-heading > p:last-child,
+  .top-home-flow header p,
+  .top-home-responsibility header > p,
+  .top-home-package__copy > p,
+  .top-home-cta__inner > p,
+  .public-section-heading > p:last-child,
+  .public-toss-hero__lead,
+  .public-toss-flow__head > p:last-child,
+  .public-toss-ready__head > p:last-child,
+  .public-toss-final-cta > .public-container > p:last-child,
+  .public-clean-hero__lead,
+  .public-page-intro__copy > p:not(.public-kicker),
+  .public-page-intro .public-container > p:not(.public-kicker),
+  .uplus-ai-hero__lead,
+  .uplus-ai-app__intro > p
+) {
+  font-size: var(--topinfo-type-body-large);
+  font-weight: 450;
+  line-height: 1.65;
+}
+
+.public-site.public-v3 :is(
+  .public-product-grid article p,
+  .public-telecom-showcase__copy p,
+  .public-toss-sector__copy > p,
+  .public-toss-sector__proof p,
+  .public-toss-flow__copy > p,
+  .public-toss-ready__checklist p,
+  .top-home-sector__summary > p,
+  .top-home-system-v2__copy > p,
+  .top-home-system__copy > p
+) {
+  font-size: var(--topinfo-type-body);
+  line-height: 1.65;
+}
+
+.public-site.public-v3 :is(
+  .public-kicker,
+  .top-home-eyebrow,
+  .uplus-ai-hero__badge,
+  .public-clean-hero__badge,
+  .public-page-intro .public-kicker
+) {
+  font-size: var(--topinfo-type-small);
+  line-height: 1.4;
+}
+
+.public-site.public-v3 :is(
+  .public-header__utility span,
+  .public-header__utility a,
+  .public-header__utility button
+) {
+  font-size: var(--topinfo-type-meta);
+  line-height: 1.4;
+}
+
+.public-site.public-v3 :is(
+  .public-header__nav-item > button,
+  .public-header__direct-link,
+  .public-header__consult,
+  .public-header__login,
+  .public-account__trigger,
+  .public-action-dock > a,
+  .public-action-dock > button,
+  .public-button,
+  .top-home-button,
+  .uplus-ai-button
+) {
+  font-size: var(--topinfo-type-control);
+}
+
+.public-site.public-v3 .public-header__phone small {
+  font-size: var(--topinfo-type-meta);
+}
+
+.public-site.public-v3 .public-header__phone strong {
+  font-size: var(--topinfo-type-control);
+}
+
+.public-site.public-v3 .public-footer__brand > p {
+  font-size: var(--topinfo-type-body);
+}
+
+.public-site.public-v3 .public-footer__brand a,
+.public-site.public-v3 .public-footer__nav button,
+.public-site.public-v3 .public-footer__nav strong,
+.public-site.public-v3 .public-footer__company p {
+  font-size: var(--topinfo-type-small);
+}
+
+.public-site.public-v3 .public-footer__bottom {
+  font-size: var(--topinfo-type-meta);
+}
+
+.public-site.public-v3 :where(
+  a[href^="tel:"],
+  a[href^="mailto:"],
+  .public-data-token,
+  .public-header__phone,
+  .public-header__consult,
+  .public-action-dock > a,
+  .public-action-dock > button,
+  .public-button
+) {
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
+}
+
+.public-site.public-v3 :where(a[href^="tel:"], .public-data-token) {
+  font-variant-numeric: tabular-nums;
+}
+
+.public-site.public-v3 .public-footer__company p {
+  flex-wrap: wrap;
+  column-gap: 8px;
+  row-gap: 4px;
+}
+
+.public-site.public-v3 .public-footer__company-item {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.public-site.public-v3 .public-footer__company-item + .public-footer__company-item::before {
+  margin-right: 8px;
+  color: #657286;
+  content: "·";
+}
+
+.public-site.public-v3 .public-footer__address {
+  flex-wrap: nowrap;
+}
+
+.public-site.public-v3 .public-footer__address svg {
+  flex: 0 0 auto;
+}
+
+.public-site.public-v3 .public-footer__address span {
+  min-width: 0;
+}
+
+@media (max-width: 1440px) {
+  .public-site.public-v3 {
+    --topinfo-type-display: 64px;
+    --topinfo-type-section: 48px;
+    --topinfo-type-subsection: 30px;
+  }
+}
+
+@media (max-width: 900px) {
+  .public-site.public-v3 {
+    --topinfo-type-display: 48px;
+    --topinfo-type-section: 40px;
+    --topinfo-type-subsection: 28px;
+    --topinfo-type-card-title: 22px;
+    --topinfo-type-body-large: 17px;
+  }
+}
+
+@media (max-width: 640px) {
+  .public-site.public-v3 {
+    --topinfo-type-display: 42px;
+    --topinfo-type-section: 34px;
+    --topinfo-type-subsection: 26px;
+    --topinfo-type-card-title: 21px;
+  }
+
+  .public-site.public-v3 .public-footer__company-item {
+    width: fit-content;
+  }
+
+  .public-site.public-v3 .public-footer__company-item + .public-footer__company-item::before {
+    display: none;
+  }
+}

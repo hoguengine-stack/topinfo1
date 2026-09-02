@@ -2,19 +2,31 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { createVerifiedPublicProducts, normalizeKnownSeedProducts } from "./publicProducts";
+import { createDefaultPublicProducts, normalizeKnownSeedProducts } from "./publicProducts";
 import { Product } from "../types";
 
-test("verified product defaults use the supplied POS model and local media", () => {
-  const products = createVerifiedPublicProducts("fixed");
-  assert.deepEqual(products.map((product) => product.name), ["포스뱅크 APEXA X + 토스포스", "토스프론트", "토스 키오스크 구성"]);
+test("default products use sourced facts while partner media remains pending", () => {
+  const products = createDefaultPublicProducts("fixed");
+  assert.deepEqual(products.map((product) => product.name), [
+    "포스뱅크 APEXA X + 토스포스",
+    "토스프론트",
+    "토스 키오스크 구성",
+    "AHAPOS 화이트 영수증 프린터",
+    "화이트 금전함",
+    "LG U+ 소상공인 인터넷 500M",
+    "U+ AI전화 상담 · IP-520GA",
+    "U+ 지능형 CCTV",
+  ]);
   assert.equal(products[0].specs["POS 본체"], "POSBANK APEXA X-1500");
-  assert.equal(products[0].imageUrl, "/assets/product/posbank-apexa-x-white-toss.png");
+  assert.equal(products[0].imageUrl, "/assets/product/posbank-apexa-x-white-official.png");
   assert.equal(products[1].imageUrl, "/assets/product/toss-front.webp");
-  assert.equal(products.every((product) => product.imageUrl.startsWith("/assets/product/")), true);
+  assert.equal(products.every((product) => /^\/assets\/(product|uplus)\//.test(product.imageUrl)), true);
   assert.equal(products.every((product) => !product.imageUrl.includes("unsplash")), true);
   assert.equal(products.every((product) => fs.existsSync(path.join(process.cwd(), "public", product.imageUrl))), true);
-  assert.equal(products.every((product) => product.price === "설치·구성 상담"), true);
+  assert.equal(products.every((product) => product.price?.includes("상담")), true);
+  assert.equal(products.every((product) => Boolean(product.imageSourceUrl)), true);
+  assert.equal(products.every((product) => product.imageRightsStatus === "pending"), true);
+  assert.equal(products[1].specs["크기"], "L120 × W145.5 × H192.5 mm");
 });
 
 test("known seeded placeholders are normalized without touching custom products", () => {
@@ -84,17 +96,34 @@ test("the previous verified POS seed is upgraded without replacing an operator-c
   const customized = { ...previousSeed, description: "운영자가 직접 수정한 설명" };
 
   const migrated = normalizeKnownSeedProducts([previousSeed]);
-  assert.deepEqual(migrated.migratedIds, ["pos-t8"]);
+  assert.deepEqual(migrated.migratedIds, [
+    "pos-t8",
+    "term-k3",
+    "kiosk-s5",
+    "peripheral-ahapos-printer",
+    "peripheral-white-cash-drawer",
+    "uplus-internet-500m",
+    "uplus-ai-phone-ip520ga",
+    "uplus-intelligent-cctv",
+  ]);
   assert.equal(migrated.products[0].name, "포스뱅크 APEXA X + 토스포스");
-  assert.equal(migrated.products[0].imageUrl, "/assets/product/posbank-apexa-x-white-toss.png");
+  assert.equal(migrated.products[0].imageUrl, "/assets/product/posbank-apexa-x-white-official.png");
 
   const preserved = normalizeKnownSeedProducts([customized]);
-  assert.deepEqual(preserved.migratedIds, []);
+  assert.deepEqual(preserved.migratedIds, [
+    "term-k3",
+    "kiosk-s5",
+    "peripheral-ahapos-printer",
+    "peripheral-white-cash-drawer",
+    "uplus-internet-500m",
+    "uplus-ai-phone-ip520ga",
+    "uplus-intelligent-cctv",
+  ]);
   assert.equal(preserved.products[0], customized);
 });
 
 test("the previous APEXA X and Toss Front default photos migrate to exact hardware assets", () => {
-  const previousProducts = createVerifiedPublicProducts("old").map((product) => {
+  const previousProducts = createDefaultPublicProducts("old").map((product) => {
     if (product.id === "pos-t8") return { ...product, imageUrl: "/assets/product/posbank-apexa-x-toss-pos.webp" };
     if (product.id === "term-k3") return { ...product, imageUrl: "/assets/product/toss-front.webp" };
     return product;
@@ -102,6 +131,27 @@ test("the previous APEXA X and Toss Front default photos migrate to exact hardwa
 
   const migrated = normalizeKnownSeedProducts(previousProducts);
   assert.deepEqual(migrated.migratedIds, ["pos-t8", "term-k3"]);
-  assert.equal(migrated.products[0].imageUrl, "/assets/product/posbank-apexa-x-white-toss.png");
+  assert.equal(migrated.products[0].imageUrl, "/assets/product/posbank-apexa-x-white-official.png");
   assert.equal(migrated.products[1].imageUrl, "/assets/product/toss-front.webp");
+});
+
+test("operator products cannot restore a blocked public asset", () => {
+  const blockedProduct: Product = {
+    id: "custom-blocked",
+    name: "차단 이미지 제품",
+    category: "기타",
+    description: "설명",
+    features: [],
+    specs: {},
+    imageUrl: "/assets/sector/feature-customer-profile.png",
+    imageSourceUrl: "legacy",
+    imageRightsStatus: "verified",
+    createdAt: "old",
+  };
+
+  const normalized = normalizeKnownSeedProducts([blockedProduct]);
+  assert.deepEqual(normalized.migratedIds, ["custom-blocked"]);
+  assert.equal(normalized.products[0].imageUrl, "");
+  assert.equal(normalized.products[0].imageSourceUrl, undefined);
+  assert.equal(normalized.products[0].imageRightsStatus, undefined);
 });

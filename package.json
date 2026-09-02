@@ -5,19 +5,28 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "vite build && tsx scripts/generate-static-route-shells.ts",
     "start": "tsx server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "downloads:manifest": "node scripts/generate-download-manifest.mjs",
+    "release:check": "tsx scripts/check-release-readiness.ts",
     "test:cms": "tsx --test src/utils/cmsSettings.test.ts",
     "test:requests": "tsx --test src/utils/requestTasks.test.ts",
     "test:resources": "tsx --test src/utils/resourceFiles.test.ts",
     "test:public": "tsx --test src/utils/publicRequests.test.ts",
     "test:firebase-errors": "tsx --test src/utils/firebaseErrors.test.ts",
     "test:products": "tsx --test src/utils/publicProducts.test.ts",
+    "test:media": "tsx --test src/utils/cmsMediaAudit.test.ts",
     "test:home": "tsx --test src/components/public-v3/PublicHomeExperience.test.tsx",
-    "test": "npm run test:cms && npm run test:requests && npm run test:resources && npm run test:public && npm run test:firebase-errors && npm run test:products && npm run test:home",
+    "test:typography": "node --test tests/public-typography-static.test.mjs",
+    "test:forms": "tsx --test src/components/public-v3/PublicForms.accessibility.test.ts",
+    "test:routes": "tsx --test src/utils/publicRoutes.test.ts",
+    "test:rules-static": "node --test tests/firestore-rules-static.test.mjs",
+    "test:rules-emulator": "npx --yes firebase-tools@14.23.0 emulators:exec --config firebase.emulator.json --project demo-topinfo-rules --only firestore \"node --test tests/firestore-rules-emulator.test.mjs\"",
+    "qa:sector-media": "node tests/public-sector-media-audit.mjs",
+    "qa:zoom": "node tests/public-zoom-audit.mjs",
+    "test": "npm run test:cms && npm run test:requests && npm run test:resources && npm run test:public && npm run test:firebase-errors && npm run test:products && npm run test:media && npm run test:home && npm run test:typography && npm run test:forms && npm run test:routes && npm run test:rules-static",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -49,11 +58,15 @@
     "vite": "^6.2.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.23.0",
     "typescript": "~5.8.2"
+  },
+  "overrides": {
+    "websocket-driver": "0.7.5"
   }
 }

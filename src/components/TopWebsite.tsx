@@ -5,12 +5,39 @@ import { useAuth } from "../contexts/AuthContext";
 import { CMSPage, Product, CMSBlock, NavigationSettings } from "../types";
 import { DEFAULT_NAVIGATION_SETTINGS, PUBLIC_DESIGN_VERSION, createDefaultCMSPages, mergeNavigationSettings, restoreStandardCMSPages } from "../utils/cmsSettings";
 import { DEFAULT_FOOTER_INFO, footerInfoNeedsMigration, mergeFooterInfo } from "../utils/footerSettings";
-import { createVerifiedPublicProducts, normalizeKnownSeedProducts } from "../utils/publicProducts";
+import { createDefaultPublicProducts, normalizeKnownSeedProducts } from "../utils/publicProducts";
+import { getPublicPageMeta } from "../utils/publicPageMeta";
+import { buildPublicLocation, getPublicCanonicalUrl, getPublicSlugFromLocation, getStandardPublicRoute, PUBLIC_NOT_FOUND_SLUG } from "../utils/publicRoutes";
+import { auditCMSMediaForPublication, auditProductMediaForPublication } from "../utils/cmsMediaAudit";
 import { TopWebsiteView } from "./TopWebsiteView";
 import { Trash2, Sparkles } from "lucide-react";
 
 interface TopWebsiteProps {
   onEnterInternalDashboard: () => void;
+}
+
+interface CMSPageDraftRecord {
+  blocks: CMSPage["blocks"];
+  designVersion?: number;
+  customBoardInitialized?: boolean;
+  updatedAt?: string;
+}
+
+function saveCMSPageDraft(
+  pageId: string,
+  blocks: CMSPage["blocks"],
+  extra: Partial<CMSPageDraftRecord> = {},
+) {
+  return setDoc(
+    doc(db, "cms_page_drafts", pageId),
+    {
+      blocks,
+      designVersion: PUBLIC_DESIGN_VERSION,
+      updatedAt: new Date().toISOString(),
+      ...extra,
+    },
+    { merge: true },
+  );
 }
 
 function getFirebaseErrorCode(error: unknown) {
@@ -47,20 +74,39 @@ function getGoogleLoginErrorMessage(error: unknown) {
   return `Google Workspace 연동인증에 실패했습니다.${code ? ` (${code})` : ""}`;
 }
 
+function setMetaContent(selector: string, attribute: "name" | "property", key: string, content: string) {
+  let element = document.querySelector<HTMLMetaElement>(selector);
+  if (!element) {
+    element = document.createElement("meta");
+    element.setAttribute(attribute, key);
+    document.head.appendChild(element);
+  }
+  element.content = content;
+}
+
+function setCanonicalUrl(url?: string) {
+  const current = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  if (!url) {
+    current?.remove();
+    return;
+  }
+
+  const canonical = current || document.createElement("link");
+  canonical.rel = "canonical";
+  canonical.href = url;
+  if (!current) document.head.appendChild(canonical);
+}
+
 export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
-  const { user, profile, logout, emailLogin, emailSignUp, login, setIsAccessCodeVerified, isAdmin, isEmployee } = useAuth();
+  const { user, profile, logout, emailLogin, emailSignUp, login, isAdmin, isEmployee, isStaffAccessLoading } = useAuth();
 
   // Navigation states
   const [currentUrl, setCurrentUrl] = useState<string>(() => {
     if (typeof window === "undefined") return "home";
-    return new URLSearchParams(window.location.search).get("page") || "home";
+    return getPublicSlugFromLocation(window.location.pathname, window.location.search);
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
-
-  // Easter Egg tracking states
-  const [googleClickTimes, setGoogleClickTimes] = useState<number[]>([]);
-  const [showGoogleLogin, setShowGoogleLogin] = useState(false);
 
   // Real-time inline CMS editor states
   const [isEditModeActive, setIsEditModeActive] = useState(false);
@@ -81,19 +127,62 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
   // Db states
   const defaultCmsPages = React.useMemo(() => createDefaultCMSPages(), []);
   const [pages, setPages] = useState<CMSPage[]>(defaultCmsPages);
+  const [cmsPagesReady, setCmsPagesReady] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const productsRef = React.useRef<Product[]>([]);
   const [navigationSettings, setNavigationSettings] = useState<NavigationSettings>(DEFAULT_NAVIGATION_SETTINGS);
+  const [mainFocusRequest, setMainFocusRequest] = useState(0);
 
   // Local active product tab
   const [productFilter, setProductFilter] = useState<string>("전체");
 
   useEffect(() => {
-    if (!isEmployee && currentUrl === "admin") {
+    productsRef.current = products;
+  }, [products]);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const requestedPage = searchParams.get("page");
+    if (!requestedPage || !getStandardPublicRoute(requestedPage)) return;
+
+    const canonicalLocation = buildPublicLocation(requestedPage, window.location.search, window.location.hash);
+    const currentLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (currentLocation === canonicalLocation) return;
+
+    const currentHistoryState = typeof window.history.state === "object" && window.history.state !== null
+      ? window.history.state
+      : {};
+    window.history.replaceState(
+      { ...currentHistoryState, page: requestedPage },
+      "",
+      canonicalLocation,
+    );
+  }, []);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const requestedPage = searchParams.get("page");
+    const hasUnknownPageParameter = cmsPagesReady && searchParams.has("page")
+      && (!requestedPage || (requestedPage !== "admin" && !pages.some((page) => page.slug === requestedPage)));
+
+    if (hasUnknownPageParameter) {
+      setCurrentUrl(PUBLIC_NOT_FOUND_SLUG);
+      setMobileMenuOpen(false);
+      return;
+    }
+
+    if (!isStaffAccessLoading && !isEmployee && currentUrl === "admin") {
+      const currentHistoryState = typeof window.history.state === "object" && window.history.state !== null
+        ? window.history.state
+        : {};
+      window.history.replaceState({ ...currentHistoryState, page: "home" }, "", buildPublicLocation("home"));
       setCurrentUrl("home");
       setMobileMenuOpen(false);
+      return;
     }
-    if (currentUrl !== "admin" && pages.length > 0 && !pages.some((page) => page.slug === currentUrl)) {
-      setCurrentUrl("home");
+    if (cmsPagesReady && currentUrl !== "admin" && currentUrl !== PUBLIC_NOT_FOUND_SLUG
+      && pages.length > 0 && !pages.some((page) => page.slug === currentUrl)) {
+      setCurrentUrl(PUBLIC_NOT_FOUND_SLUG);
       setMobileMenuOpen(false);
     }
     if (!isAdmin && isEditModeActive) {
@@ -101,11 +190,57 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       setActiveEditTarget(null);
       setShowAddBlockMenuAtIndex(null);
     }
-  }, [currentUrl, isAdmin, isEditModeActive, isEmployee, pages]);
+  }, [cmsPagesReady, currentUrl, isAdmin, isEditModeActive, isEmployee, isStaffAccessLoading, pages]);
+
+  useEffect(() => {
+    if (currentUrl === PUBLIC_NOT_FOUND_SLUG) {
+      const title = "페이지를 찾을 수 없습니다 | 탑정보통신";
+      const description = "요청한 페이지가 없거나 주소가 변경되었습니다. 탑정보통신 주요 메뉴에서 필요한 정보를 다시 확인해 주세요.";
+      document.title = title;
+      setMetaContent('meta[name="robots"]', "name", "robots", "noindex,nofollow");
+      setMetaContent('meta[name="description"]', "name", "description", description);
+      setMetaContent('meta[property="og:title"]', "property", "og:title", title);
+      setMetaContent('meta[property="og:description"]', "property", "og:description", description);
+      setMetaContent('meta[property="og:url"]', "property", "og:url", window.location.href);
+      setMetaContent('meta[name="twitter:title"]', "name", "twitter:title", title);
+      setMetaContent('meta[name="twitter:description"]', "name", "twitter:description", description);
+      setCanonicalUrl();
+      return;
+    }
+    if (currentUrl === "admin") {
+      document.title = "홈페이지 관리 | 탑정보통신";
+      setMetaContent('meta[name="robots"]', "name", "robots", "noindex,nofollow");
+      setCanonicalUrl();
+      return;
+    }
+    const activePage = pages.find((page) => page.slug === currentUrl);
+    if (!activePage) return;
+
+    const metadata = getPublicPageMeta(currentUrl, activePage);
+    document.title = metadata.title;
+    setMetaContent('meta[name="robots"]', "name", "robots", "index,follow");
+    setMetaContent('meta[name="description"]', "name", "description", metadata.description);
+    setMetaContent('meta[property="og:title"]', "property", "og:title", metadata.title);
+    setMetaContent('meta[property="og:description"]', "property", "og:description", metadata.description);
+    setMetaContent('meta[name="twitter:title"]', "name", "twitter:title", metadata.title);
+    setMetaContent('meta[name="twitter:description"]', "name", "twitter:description", metadata.description);
+
+    const canonicalUrl = getPublicCanonicalUrl(currentUrl);
+    setCanonicalUrl(canonicalUrl);
+    setMetaContent('meta[property="og:url"]', "property", "og:url", canonicalUrl);
+  }, [currentUrl, pages]);
+
+  useEffect(() => {
+    if (mainFocusRequest === 0) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("public-main-content")?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mainFocusRequest]);
 
   useEffect(() => {
     const syncPageFromHistory = () => {
-      const page = new URLSearchParams(window.location.search).get("page") || "home";
+      const page = getPublicSlugFromLocation(window.location.pathname, window.location.search);
       setCurrentUrl(page);
       setMobileMenuOpen(false);
     };
@@ -119,8 +254,6 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     email: "",
     password: "",
     nickname: "",
-    jobTitle: "현장 관리자",
-    accessCode: "",
   });
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -164,7 +297,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       for (const pId in pending) {
         const { blocks: blocksToWrite } = pending[pId];
         try {
-          await updateDoc(doc(db, "cms_pages", pId), { draftBlocks: blocksToWrite, designVersion: PUBLIC_DESIGN_VERSION });
+          await saveCMSPageDraft(pId, blocksToWrite);
           console.log(`[CMS] Debounced write success for page ${pId}`);
         } catch (e) {
           console.error(`[CMS] Debounced write failed for page ${pId}:`, e);
@@ -215,6 +348,21 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
 
       for (const prodId in pending) {
         const dataToWrite = pending[prodId];
+        const currentProduct = productsRef.current.find((product) => product.id === prodId);
+        const mediaIssues = currentProduct
+          ? auditProductMediaForPublication([{ ...currentProduct, ...dataToWrite }])
+          : [];
+
+        if (mediaIssues.length > 0) {
+          pendingProductWritesRef.current[prodId] = dataToWrite;
+          setCustomAlert({
+            show: true,
+            title: "제품 이미지 저장 차단",
+            message: mediaIssues[0].reason,
+          });
+          continue;
+        }
+
         try {
           await updateDoc(doc(db, "products", prodId), dataToWrite);
           console.log(`[CMS] Debounced write success for product ${prodId}`);
@@ -243,20 +391,49 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
 
   // Check and initialize default pages/products if Firestore is blank
   useEffect(() => {
-    const handleCmsPagesData = async (snap: any) => {
+    const handleCmsPagesData = async (snap: any, draftSnap?: any) => {
       const items: CMSPage[] = [];
       let hasDrafts = false;
+      const draftsById = new Map<string, CMSPageDraftRecord>();
+      const legacyDrafts: Array<{ id: string; blocks: CMSPage["blocks"] }> = [];
+      draftSnap?.forEach((draftDoc: any) => {
+        const draft = draftDoc.data() as CMSPageDraftRecord;
+        if (Array.isArray(draft.blocks)) draftsById.set(draftDoc.id, draft);
+      });
       snap.forEach((d: any) => {
         const data = d.data() as CMSPage;
-        const draftBlocks = Array.isArray(data.draftBlocks) ? data.draftBlocks : null;
+        const separateDraft = draftsById.get(d.id);
+        const embeddedDraftBlocks = Array.isArray(data.draftBlocks) ? data.draftBlocks : null;
+        const draftBlocks = isEmployee ? (separateDraft?.blocks || embeddedDraftBlocks) : null;
         if (isEmployee && draftBlocks) hasDrafts = true;
+        if (isEmployee && embeddedDraftBlocks && !separateDraft) {
+          legacyDrafts.push({ id: d.id, blocks: embeddedDraftBlocks });
+        }
+        const publishedData = { ...data };
+        delete publishedData.draftBlocks;
         items.push({
           id: d.id,
-          ...data,
-          blocks: isEmployee && draftBlocks ? draftBlocks : data.blocks,
+          ...publishedData,
+          blocks: draftBlocks || data.blocks,
+          ...(separateDraft?.customBoardInitialized ? { customBoardInitialized: true } : {}),
         } as CMSPage);
       });
       if (isEmployee) setHasUnpublishedChanges(hasDrafts);
+
+      if (isEmployee && legacyDrafts.length > 0) {
+        const migrationBatch = writeBatch(db);
+        legacyDrafts.forEach((legacyDraft) => {
+          migrationBatch.set(doc(db, "cms_page_drafts", legacyDraft.id), {
+            blocks: legacyDraft.blocks,
+            designVersion: PUBLIC_DESIGN_VERSION,
+            updatedAt: new Date().toISOString(),
+          }, { merge: true });
+          migrationBatch.update(doc(db, "cms_pages", legacyDraft.id), { draftBlocks: deleteField() });
+        });
+        migrationBatch.commit().catch((error) => {
+          console.warn("Legacy CMS draft migration failed:", error);
+        });
+      }
 
       const renderableItems = restoreStandardCMSPages(items, defaultCmsPages);
 
@@ -349,12 +526,11 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
 
         if (pageModified) {
           if (isEmployee) {
-            const payload: Partial<CMSPage> = { draftBlocks: nextBlocks, designVersion: PUBLIC_DESIGN_VERSION };
-            if (markCustomBoardInitialized) {
-              payload.customBoardInitialized = true;
-            }
-
-            updateDoc(doc(db, "cms_pages", page.id), payload).catch(err => {
+            saveCMSPageDraft(
+              page.id,
+              nextBlocks,
+              markCustomBoardInitialized ? { customBoardInitialized: true } : {},
+            ).catch(err => {
               console.warn(`[CMS AutoCorrect] Quiet sync failed for page ${page.id}:`, err);
             });
           }
@@ -384,6 +560,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       }
 
       setPages(sanitizedItems);
+      setCmsPagesReady(true);
     };
 
     const handleProductsData = async (snap: any) => {
@@ -396,7 +573,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         const initSnap = await getDoc(initDocRef);
 
         if (storedProducts.length === 0 && !initSnap.exists()) {
-          const defaultProducts = createVerifiedPublicProducts();
+          const defaultProducts = createDefaultPublicProducts();
           if (!isEmployee) {
             setProducts(defaultProducts);
             return;
@@ -426,7 +603,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         }
       } catch (err) {
         console.error("Initialization state check failed: ", err);
-        setProducts(normalized.products.length > 0 ? normalized.products : createVerifiedPublicProducts());
+        setProducts(normalized.products.length > 0 ? normalized.products : createDefaultPublicProducts());
       }
     };
 
@@ -464,15 +641,33 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     };
 
     let unsubPages: (() => void) | null = null;
+    let unsubDrafts: (() => void) | null = null;
     let unsubProducts: (() => void) | null = null;
     let unsub_nav: (() => void) | null = null;
     let unsub_footer: (() => void) | null = null;
 
     if (isEmployee) {
       console.log("[CMS] Subscribing to real-time Firestore updates for employee...");
-      unsubPages = onSnapshot(collection(db, "cms_pages"), handleCmsPagesData, (err) => {
+      let latestPagesSnapshot: any = null;
+      let latestDraftsSnapshot: any = null;
+      const renderEmployeePages = () => {
+        if (latestPagesSnapshot) void handleCmsPagesData(latestPagesSnapshot, latestDraftsSnapshot);
+      };
+      unsubPages = onSnapshot(collection(db, "cms_pages"), (snapshot) => {
+        latestPagesSnapshot = snapshot;
+        renderEmployeePages();
+      }, (err) => {
         console.error("CMS pages listener failed. Rendering local default pages instead:", err);
         setPages(defaultCmsPages);
+        setCmsPagesReady(true);
+      });
+      unsubDrafts = onSnapshot(collection(db, "cms_page_drafts"), (snapshot) => {
+        latestDraftsSnapshot = snapshot;
+        renderEmployeePages();
+      }, (err) => {
+        console.error("CMS draft listener failed. Rendering published pages only:", err);
+        latestDraftsSnapshot = null;
+        renderEmployeePages();
       });
 
       unsubProducts = onSnapshot(collection(db, "products"), handleProductsData, (err) => {
@@ -491,10 +686,11 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     } else {
       console.log("[CMS] Performing one-time Firestore get fetches for public visitor...");
       getDocs(collection(db, "cms_pages"))
-        .then(handleCmsPagesData)
+        .then((snapshot) => handleCmsPagesData(snapshot))
         .catch((err) => {
           console.error("One-time CMS pages fetch failed. Rendering local default pages instead:", err);
           setPages(defaultCmsPages);
+          setCmsPagesReady(true);
         });
 
       getDocs(collection(db, "products"))
@@ -520,6 +716,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
 
     return () => {
       if (unsubPages) unsubPages();
+      if (unsubDrafts) unsubDrafts();
       if (unsubProducts) unsubProducts();
       if (unsub_nav) unsub_nav();
       if (unsub_footer) unsub_footer();
@@ -542,15 +739,13 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         await emailSignUp(
           authFormData.email,
           authFormData.password,
-          authFormData.nickname,
-          "현장 관리자",
-          ""
+          authFormData.nickname
         );
       } else {
         await emailLogin(authFormData.email, authFormData.password);
       }
       setShowLoginModal(false);
-      setAuthFormData({ email: "", password: "", nickname: "", jobTitle: "현장 관리자", accessCode: "" });
+      setAuthFormData({ email: "", password: "", nickname: "" });
     } catch (err: any) {
       console.error(err);
       if (err.code === "auth/invalid-credential") {
@@ -587,7 +782,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     updatedBlocks[index] = updatedBlocks[index - 1];
     updatedBlocks[index - 1] = temp;
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+      await saveCMSPageDraft(page.id, updatedBlocks);
       setHasUnpublishedChanges(true);
     } catch (e) {
       console.error("Block move up fails: ", e);
@@ -601,7 +796,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
     updatedBlocks[index] = updatedBlocks[index + 1];
     updatedBlocks[index + 1] = temp;
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+      await saveCMSPageDraft(page.id, updatedBlocks);
       setHasUnpublishedChanges(true);
     } catch (e) {
       console.error("Block move down fails: ", e);
@@ -625,7 +820,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       onConfirm: async () => {
         const updatedBlocks = page.blocks.filter((_, idx) => idx !== index);
         try {
-          await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+          await saveCMSPageDraft(page.id, updatedBlocks);
           setHasUnpublishedChanges(true);
         } catch (e) {
           console.error("Block remove fails: ", e);
@@ -651,22 +846,22 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       newBlock = {
         id: newBlockId,
         type: "hero",
-        title: "새로운 헤드라인 문구",
-        subtitle: "여기에 메인 서브설명을 직접 수정해 보세요.",
-        badge: "탑정보통신 2026 비즈니스 패밀리쉽",
+        title: "매장 운영에 필요한 내용을 입력하세요",
+        subtitle: "제공하는 제품과 서비스 범위를 사실에 맞게 설명해 주세요.",
+        badge: "탑정보통신 · 매장 운영",
         align: "center",
-        buttonText: "가맹가입 신청",
+        buttonText: "구성 상담",
         buttonLink: "request_consult"
       };
     } else if (type === "features") {
       newBlock = {
         id: newBlockId,
         type: "features",
-        title: "새로운 핵심 메리트 타이틀",
-        subtitle: "여기에 메리트에 대해 간략히 설명해 주세요.",
+        title: "확인할 기능을 입력하세요",
+        subtitle: "고객이 이해할 수 있도록 실제 제공 범위를 간결하게 설명해 주세요.",
         items: [
-          { title: "첫 번째 우대혜택", desc: "이 혜택에 대한 매력적인 내용을 서술해 주세요." },
-          { title: "두 번째 우대혜택", desc: "이 혜택에 대한 매력적인 내용을 서술해 주세요." }
+          { title: "기능 제목", desc: "확인 가능한 기능과 적용 조건을 입력하세요." },
+          { title: "설치·연동 조건", desc: "현장 확인이 필요한 내용을 입력하세요." }
         ]
       };
     } else if (type === "banner") {
@@ -674,7 +869,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         id: newBlockId,
         type: "banner",
         title: "지금 즉시 가입 상담 신청하기",
-        subtitle: "탑정보통신 특별 24시간 실시간 배송 연동 지원",
+        subtitle: "상담 접수 후 담당자가 가능한 구성과 일정을 확인해 안내합니다.",
         buttonText: "전화 신청",
         buttonLink: "request_consult"
       };
@@ -682,24 +877,24 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
       newBlock = {
         id: newBlockId,
         type: "image",
-        title: "신규 명품 제휴 단말 라인업",
+        title: "제품 이미지",
         imageUrl: "/assets/product/toss-front.webp",
-        buttonText: "가맹 우대 혜택 알아보기",
+        buttonText: "제품 구성 상담",
         buttonLink: "request_consult"
       };
     } else {
       newBlock = {
         id: newBlockId,
         type: "text",
-        title: "일반 텍스트 섹션",
-        content: "여기에 긴 설명글이나 약관 또는 회사 연혁 등의 영수증 단말기 제휴 안내글을 마음껏 서술할 수 있습니다."
+        title: "안내 제목",
+        content: "고객이 알아야 할 제품, 설치, 연동 또는 운영 안내를 사실에 맞게 입력하세요."
       };
     }
 
     const updatedBlocks = [...page.blocks];
     updatedBlocks.splice(index + 1, 0, newBlock);
     try {
-      await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+      await saveCMSPageDraft(page.id, updatedBlocks);
       setHasUnpublishedChanges(true);
       setShowAddBlockMenuAtIndex(null);
     } catch (e) {
@@ -794,7 +989,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         setActiveEditTarget(null);
 
         try {
-          await updateDoc(doc(db, "cms_pages", page.id), { draftBlocks: updatedBlocks, designVersion: PUBLIC_DESIGN_VERSION });
+          await saveCMSPageDraft(page.id, updatedBlocks);
           setHasUnpublishedChanges(true);
         } catch (err) {
           console.error("Real-time HUD card deletion failed: ", err);
@@ -865,19 +1060,30 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
 
     const [pageTarget, rawQuery = ""] = target.split("?", 2);
     const nextPage = pageTarget || "home";
-    const nextLocation = new URL(window.location.href);
-    nextLocation.search = "";
-    nextLocation.hash = "";
-    if (nextPage !== "home") nextLocation.searchParams.set("page", nextPage);
-    new URLSearchParams(rawQuery).forEach((value, key) => nextLocation.searchParams.set(key, value));
-    window.history.pushState({ page: nextPage }, "", `${nextLocation.pathname}${nextLocation.search}`);
+    const nextLocation = buildPublicLocation(nextPage, rawQuery);
+    window.history.pushState({ page: nextPage }, "", nextLocation);
     setCurrentUrl(nextPage);
     setMobileMenuOpen(false);
+    if (nextPage !== "admin") setMainFocusRequest((request) => request + 1);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handlePublishWebsite = async () => {
     if (!isEmployee || isCmsPublishing) return;
+
+    const mediaIssues = auditCMSMediaForPublication(pages, products);
+    if (mediaIssues.length > 0) {
+      const issueSummary = mediaIssues
+        .slice(0, 3)
+        .map((issue) => `${issue.location}: ${issue.reason}`)
+        .join("\n");
+      setCustomAlert({
+        show: true,
+        title: "이미지 공개 조건 확인 필요",
+        message: `${issueSummary}${mediaIssues.length > 3 ? `\n외 ${mediaIssues.length - 3}건` : ""}`,
+      });
+      return;
+    }
 
     setIsCmsPublishing(true);
     try {
@@ -889,9 +1095,11 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
             blocks: page.blocks,
             draftBlocks: deleteField(),
             designVersion: PUBLIC_DESIGN_VERSION,
+            customBoardInitialized: Boolean(page.customBoardInitialized),
           },
           { merge: true }
         );
+        batch.delete(doc(db, "cms_page_drafts", page.id));
       });
       await batch.commit();
       setHasUnpublishedChanges(false);
@@ -943,11 +1151,7 @@ export function TopWebsite({ onEnterInternalDashboard }: TopWebsiteProps) {
         authError={authError}
         authLoading={authLoading}
         handleAuthSubmit={handleAuthSubmit}
-        showGoogleLogin={showGoogleLogin}
-        setShowGoogleLogin={setShowGoogleLogin}
         handleGoogleLogin={handleGoogleLogin}
-        googleClickTimes={googleClickTimes}
-        setGoogleClickTimes={setGoogleClickTimes}
         mobileMenuOpen={mobileMenuOpen}
         setMobileMenuOpen={setMobileMenuOpen}
         isSignUpMode={isSignUpMode}
